@@ -9,6 +9,14 @@ jobs:
   run-linter-skeleton:
     runs-on: ubuntu-latest
     steps:
+      - name: Get token
+        id: get_token
+        uses: actions/create-github-app-token@v3.0.0
+        with:
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          app-id: ${{ secrets.APP_ID }}
+          owner: ${{ github.repository_owner }}
+
       - name: Print dispatch metadata
         env:
           CLIENT_PAYLOAD: ${{ toJson(github.event.client_payload) }}
