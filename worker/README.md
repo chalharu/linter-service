@@ -69,6 +69,8 @@ wrangler secret put GITHUB_DISPATCH_INSTALLATION_ID
 
 Worker は `client_payload` に以下のような構造を載せます。
 
+ルート側の `repository_dispatch` workflow では、この metadata の `repository.owner.login` を使って GitHub App token を取得します。
+
 ```json
 {
   "event_name": "pull_request",
@@ -77,7 +79,11 @@ Worker は `client_payload` に以下のような構造を載せます。
   "source_installation_id": 12345,
   "dispatch_installation_id": 12345,
   "repository": {
-    "full_name": "octo-org/source-repo"
+    "full_name": "octo-org/source-repo",
+    "owner": {
+      "login": "octo-org",
+      "type": "Organization"
+    }
   },
   "pull_request": {
     "number": 42,

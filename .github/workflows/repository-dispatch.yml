@@ -8,14 +8,23 @@ permissions: {}
 jobs:
   run-linter-skeleton:
     runs-on: ubuntu-latest
+    env:
+      SOURCE_REPOSITORY_OWNER: ${{ github.event.client_payload.repository.owner.login }}
     steps:
+      - name: Validate dispatch metadata
+        run: |
+          test -n "$SOURCE_REPOSITORY_OWNER" || {
+            echo "client_payload.repository.owner.login is required" >&2
+            exit 1
+          }
+
       - name: Get token
         id: get_token
         uses: actions/create-github-app-token@v3.0.0
         with:
           private-key: ${{ secrets.PRIVATE_KEY }}
           app-id: ${{ secrets.APP_ID }}
-          owner: ${{ github.repository_owner }}
+          owner: ${{ env.SOURCE_REPOSITORY_OWNER }}
 
       - name: Print dispatch metadata
         env:
