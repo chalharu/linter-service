@@ -1,6 +1,12 @@
 name: Repository Dispatch
 
 on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
   repository_dispatch:
     types:
       - github_app_webhook
@@ -12,16 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       actionlint-selected: ${{ steps.collect.outputs.actionlint-selected }}
-      changed-files-json: ${{ steps.collect.outputs.changed-files-json }}
-      pr-owner: ${{ steps.collect.outputs.pr-owner }}
-      pr-repo: ${{ steps.collect.outputs.pr-repo }}
-      processing-check-external-id: ${{ steps.collect.outputs.processing-check-external-id }}
-      processing-check-name: ${{ steps.collect.outputs.processing-check-name }}
       pull-request-number: ${{ steps.collect.outputs.pull-request-number }}
       selected-linters-json: ${{ steps.collect.outputs.selected-linters-json }}
-      source-head-sha: ${{ steps.collect.outputs.source-head-sha }}
-      source-owner: ${{ steps.collect.outputs.source-owner }}
-      source-repo: ${{ steps.collect.outputs.source-repo }}
+      skip-reason: ${{ steps.collect.outputs.skip-reason }}
       yamllint-selected: ${{ steps.collect.outputs.yamllint-selected }}
     env:
       LINTER_DEFINITIONS_JSON: >-
@@ -35,29 +34,29 @@ jobs:
             "patterns": ["\\.(?:yaml|yml)$"]
           }
         ]
-      PR_REPOSITORY_NAME: ${{ github.event.client_payload.repository.name }}
-      PR_REPOSITORY_OWNER: ${{ github.event.client_payload.repository.owner.login }}
-      PULL_REQUEST_NUMBER: ${{ github.event.client_payload.pull_request.number }}
-      SOURCE_HEAD_SHA: ${{ github.event.client_payload.pull_request.head.sha || github.event.client_payload.check_run.head_sha }}
+      PR_REPOSITORY_NAME: ${{ github.event_name == 'pull_request' && github.event.repository.name || github.event.client_payload.repository.name }}
+      PR_REPOSITORY_OWNER: ${{ github.event_name == 'pull_request' && github.event.repository.owner.login || github.event.client_payload.repository.owner.login }}
+      PULL_REQUEST_NUMBER: ${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.event.client_payload.pull_request.number }}
+      SOURCE_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.event.client_payload.pull_request.head.sha || github.event.client_payload.check_run.head_sha }}
     steps:
-      - name: Validate dispatch metadata
+      - name: Validate pull request metadata
         run: |
           test -n "$PR_REPOSITORY_OWNER" || {
-            echo "client_payload.repository.owner.login is required" >&2
+            echo "PR_REPOSITORY_OWNER is required" >&2
             exit 1
           }
           test -n "$PR_REPOSITORY_NAME" || {
-            echo "client_payload.repository.name is required" >&2
+            echo "PR_REPOSITORY_NAME is required" >&2
             exit 1
           }
           case "$PULL_REQUEST_NUMBER" in
             ''|*[!0-9]*)
-              echo "client_payload.pull_request.number must be a positive integer" >&2
+              echo "PULL_REQUEST_NUMBER must be a positive integer" >&2
               exit 1
               ;;
           esac
           test "$PULL_REQUEST_NUMBER" -gt 0 || {
-            echo "client_payload.pull_request.number must be a positive integer" >&2
+            echo "PULL_REQUEST_NUMBER must be a positive integer" >&2
             exit 1
           }
 
@@ -91,15 +90,69 @@ jobs:
         with:
           github-token: ${{ steps.get_checker_token.outputs.token }}
           script: |
+            const fs = require("node:fs");
+            const path = require("node:path");
             const owner = process.env.PR_REPOSITORY_OWNER;
             const repo = process.env.PR_REPOSITORY_NAME;
             const pullNumber = Number(process.env.PULL_REQUEST_NUMBER);
-            const runAttempt = process.env.GITHUB_RUN_ATTEMPT || "1";
             const sourceHeadShaFromPayload = process.env.SOURCE_HEAD_SHA || "";
             const definitions = JSON.parse(process.env.LINTER_DEFINITIONS_JSON ?? "[]");
+            const contextPath = path.join(
+              process.env.RUNNER_TEMP,
+              "detect-targets-context.json",
+            );
+            const writeContext = (contextValues) => {
+              fs.writeFileSync(
+                contextPath,
+                JSON.stringify(contextValues),
+                "utf8",
+              );
+              core.setOutput("context-path", contextPath);
+            };
+            const isSelfRepositoryDispatch =
+              context.eventName === "repository_dispatch" &&
+              owner.toLowerCase() === context.repo.owner.toLowerCase() &&
+              repo.toLowerCase() === context.repo.repo.toLowerCase();
 
             if (!Array.isArray(definitions)) {
               throw new Error("LINTER_DEFINITIONS_JSON must be a JSON array");
+            }
+
+            if (isSelfRepositoryDispatch) {
+              const skipReason =
+                "Skipping repository_dispatch for this repository because local pull requests are handled by the direct pull_request trigger.";
+
+              const contextValues = {
+                changed_files: [],
+                pr_owner: owner,
+                pr_repo: repo,
+                processing_check_external_id: "",
+                processing_check_name: "linter-service",
+                selected_linters: [],
+                skip_reason: skipReason,
+                source_head_sha: sourceHeadShaFromPayload,
+                source_owner: owner,
+                source_repo: repo,
+              };
+
+              for (const definition of definitions) {
+                if (
+                  !definition ||
+                  typeof definition !== "object" ||
+                  typeof definition.name !== "string" ||
+                  !Array.isArray(definition.patterns)
+                ) {
+                  throw new Error("Each linter definition must include name and patterns");
+                }
+              }
+
+              writeContext(contextValues);
+              core.setOutput("actionlint-selected", "false");
+              core.setOutput("pull-request-number", String(pullNumber));
+              core.setOutput("selected-linters-json", JSON.stringify([]));
+              core.setOutput("skip-reason", skipReason);
+              core.setOutput("yamllint-selected", "false");
+              return;
             }
 
             const pull = (
@@ -129,14 +182,6 @@ jobs:
               throw new Error("pull request head SHA is required");
             }
 
-            core.setSecret(owner);
-            core.setSecret(repo);
-            core.setSecret(`${owner}/${repo}`);
-            core.setSecret(sourceOwner);
-            core.setSecret(sourceRepo);
-            core.setSecret(`${sourceOwner}/${sourceRepo}`);
-            core.setSecret(sourceHeadSha);
-
             const selectedLinters = [];
 
             for (const definition of definitions) {
@@ -160,26 +205,34 @@ jobs:
                 patterns.some((pattern) => pattern.test(path)),
               );
 
-              core.setOutput(`${definition.name}-selected`, String(selected));
-
               if (selected) {
                 selectedLinters.push(definition.name);
               }
             }
 
-            core.setOutput("changed-files-json", JSON.stringify(currentFiles));
-            core.setOutput("pr-owner", owner);
-            core.setOutput("pr-repo", repo);
+            writeContext({
+              changed_files: currentFiles,
+              pr_owner: owner,
+              pr_repo: repo,
+              processing_check_external_id: `linter-service:${pullNumber}:${sourceHeadSha}`,
+              processing_check_name: "linter-service",
+              selected_linters: selectedLinters,
+              skip_reason: "",
+              source_head_sha: sourceHeadSha,
+              source_owner: sourceOwner,
+              source_repo: sourceRepo,
+            });
             core.setOutput(
-              "processing-check-external-id",
-              `linter-service:${context.runId}:${runAttempt}:${pullNumber}`,
+              "actionlint-selected",
+              String(selectedLinters.includes("actionlint")),
             );
-            core.setOutput("processing-check-name", "linter-service");
             core.setOutput("pull-request-number", String(pullNumber));
             core.setOutput("selected-linters-json", JSON.stringify(selectedLinters));
-            core.setOutput("source-head-sha", sourceHeadSha);
-            core.setOutput("source-owner", sourceOwner);
-            core.setOutput("source-repo", sourceRepo);
+            core.setOutput("skip-reason", "");
+            core.setOutput(
+              "yamllint-selected",
+              String(selectedLinters.includes("yamllint")),
+            );
 
       - name: Report routing status
         env:
@@ -188,42 +241,105 @@ jobs:
           echo "Routing targets resolved."
           echo "Selected linters: ${SELECTED_LINTERS_JSON}"
 
+      - name: Upload dispatch context artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: detect-targets-context
+          path: ${{ steps.collect.outputs.context-path }}
+          if-no-files-found: error
+          retention-days: 1
+
   notify-processing-started:
     needs: detect-targets
     if: ${{ needs.detect-targets.outputs.selected-linters-json != '[]' }}
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
     steps:
+      - name: Download dispatch context artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: detect-targets-context
+          path: ${{ runner.temp }}/detect-targets-context
+
       - name: Mask repository metadata
         env:
-          SOURCE_HEAD_SHA: ${{ needs.detect-targets.outputs.source-head-sha }}
-          SOURCE_OWNER: ${{ needs.detect-targets.outputs.source-owner }}
-          SOURCE_REPO: ${{ needs.detect-targets.outputs.source-repo }}
+          CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
         run: |
-          echo "::add-mask::$SOURCE_OWNER"
-          echo "::add-mask::$SOURCE_REPO"
-          echo "::add-mask::$SOURCE_OWNER/$SOURCE_REPO"
-          echo "::add-mask::$SOURCE_HEAD_SHA"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
+          source_owner = context["source_owner"]
+          source_repo = context["source_repo"]
+          source_head_sha = context["source_head_sha"]
+
+          for value in (source_owner, source_repo, source_head_sha):
+              if value:
+                  print(f"::add-mask::{value}")
+
+          if source_owner and source_repo:
+              print(f"::add-mask::{source_owner}/{source_repo}")
+          PY
+
+      - name: Decode source repository context
+        id: decode_source_context
+        env:
+          CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
+          CURRENT_REPO: ${{ github.event.repository.name }}
+          CURRENT_OWNER: ${{ github.repository_owner }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
+          current_owner = os.environ["CURRENT_OWNER"]
+          current_repo = os.environ["CURRENT_REPO"]
+          source_owner = context["source_owner"]
+          source_repo = context["source_repo"]
+          values = {
+              "processing-check-external-id": context["processing_check_external_id"],
+              "processing-check-name": context["processing_check_name"],
+              "source-head-sha": context["source_head_sha"],
+              "source-is-current-repo": str(
+                  source_owner.lower() == current_owner.lower()
+                  and source_repo.lower() == current_repo.lower()
+              ).lower(),
+              "source-owner": source_owner,
+              "source-repo": source_repo,
+          }
+
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          with output_path.open("a", encoding="utf-8") as fh:
+              for key, value in values.items():
+                  fh.write(f"{key}={value}\n")
+          PY
 
       - name: Get source repository checker token
         id: get_source_token
+        if: ${{ steps.decode_source_context.outputs.source-is-current-repo != 'true' }}
         uses: actions/create-github-app-token@v3.0.0
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
-          owner: ${{ needs.detect-targets.outputs.source-owner }}
+          owner: ${{ steps.decode_source_context.outputs.source-owner }}
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
-          repositories: ${{ needs.detect-targets.outputs.source-repo }}
+          repositories: ${{ steps.decode_source_context.outputs.source-repo }}
 
       - name: Notify processing start
         uses: actions/github-script@v7
         env:
-          PROCESSING_CHECK_EXTERNAL_ID: ${{ needs.detect-targets.outputs.processing-check-external-id }}
-          PROCESSING_CHECK_NAME: ${{ needs.detect-targets.outputs.processing-check-name }}
+          PROCESSING_CHECK_EXTERNAL_ID: ${{ steps.decode_source_context.outputs.processing-check-external-id }}
+          PROCESSING_CHECK_NAME: ${{ steps.decode_source_context.outputs.processing-check-name }}
           SELECTED_LINTERS_JSON: ${{ needs.detect-targets.outputs.selected-linters-json }}
-          SOURCE_HEAD_SHA: ${{ needs.detect-targets.outputs.source-head-sha }}
-          SOURCE_OWNER: ${{ needs.detect-targets.outputs.source-owner }}
-          SOURCE_REPO: ${{ needs.detect-targets.outputs.source-repo }}
+          SOURCE_HEAD_SHA: ${{ steps.decode_source_context.outputs.source-head-sha }}
+          SOURCE_OWNER: ${{ steps.decode_source_context.outputs.source-owner }}
+          SOURCE_REPO: ${{ steps.decode_source_context.outputs.source-repo }}
         with:
-          github-token: ${{ steps.get_source_token.outputs.token }}
+          github-token: ${{ steps.decode_source_context.outputs.source-is-current-repo == 'true' && github.token || steps.get_source_token.outputs.token }}
           script: |
             const owner = process.env.SOURCE_OWNER;
             const repo = process.env.SOURCE_REPO;
@@ -251,7 +367,7 @@ jobs:
               (response) => response.data.check_runs,
             );
             const existing = checkRuns.find(
-              (checkRun) => checkRun.external_id === externalId,
+              (checkRun) => checkRun && checkRun.external_id === externalId,
             );
 
             if (existing) {
@@ -286,11 +402,6 @@ jobs:
     if: ${{ needs.detect-targets.outputs.actionlint-selected == 'true' }}
     uses: ./.github/workflows/lint-actionlint.yml
     secrets: inherit
-    with:
-      changed-files-json: ${{ needs.detect-targets.outputs.changed-files-json }}
-      source-head-sha: ${{ needs.detect-targets.outputs.source-head-sha }}
-      source-owner: ${{ needs.detect-targets.outputs.source-owner }}
-      source-repo: ${{ needs.detect-targets.outputs.source-repo }}
 
   yamllint:
     needs:
@@ -299,11 +410,6 @@ jobs:
     if: ${{ needs.detect-targets.outputs.yamllint-selected == 'true' }}
     uses: ./.github/workflows/lint-yamllint.yml
     secrets: inherit
-    with:
-      changed-files-json: ${{ needs.detect-targets.outputs.changed-files-json }}
-      source-head-sha: ${{ needs.detect-targets.outputs.source-head-sha }}
-      source-owner: ${{ needs.detect-targets.outputs.source-owner }}
-      source-repo: ${{ needs.detect-targets.outputs.source-repo }}
 
   publish-results:
     needs:
@@ -313,40 +419,107 @@ jobs:
       - yamllint
     if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      issues: write
+      pull-requests: write
     steps:
+      - name: Download dispatch context artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: detect-targets-context
+          path: ${{ runner.temp }}/detect-targets-context
+
       - name: Mask repository metadata
         env:
-          PR_OWNER: ${{ needs.detect-targets.outputs.pr-owner }}
-          PR_REPO: ${{ needs.detect-targets.outputs.pr-repo }}
-          SOURCE_HEAD_SHA: ${{ needs.detect-targets.outputs.source-head-sha }}
-          SOURCE_OWNER: ${{ needs.detect-targets.outputs.source-owner }}
-          SOURCE_REPO: ${{ needs.detect-targets.outputs.source-repo }}
+          CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
         run: |
-          echo "::add-mask::$PR_OWNER"
-          echo "::add-mask::$PR_REPO"
-          echo "::add-mask::$PR_OWNER/$PR_REPO"
-          echo "::add-mask::$SOURCE_OWNER"
-          echo "::add-mask::$SOURCE_REPO"
-          echo "::add-mask::$SOURCE_OWNER/$SOURCE_REPO"
-          echo "::add-mask::$SOURCE_HEAD_SHA"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
+          decoded = {
+              "pr_owner": context["pr_owner"],
+              "pr_repo": context["pr_repo"],
+              "source_head_sha": context["source_head_sha"],
+              "source_owner": context["source_owner"],
+              "source_repo": context["source_repo"],
+          }
+
+          for key in ("pr_owner", "pr_repo", "source_head_sha", "source_owner", "source_repo"):
+              if decoded[key]:
+                  print(f"::add-mask::{decoded[key]}")
+
+          if decoded["pr_owner"] and decoded["pr_repo"]:
+              print(f"::add-mask::{decoded['pr_owner']}/{decoded['pr_repo']}")
+          if decoded["source_owner"] and decoded["source_repo"]:
+              print(f"::add-mask::{decoded['source_owner']}/{decoded['source_repo']}")
+          PY
+
+      - name: Decode repository context
+        id: decode_repository_context
+        env:
+          CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
+          CURRENT_REPO: ${{ github.event.repository.name }}
+          CURRENT_OWNER: ${{ github.repository_owner }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
+          current_owner = os.environ["CURRENT_OWNER"]
+          current_repo = os.environ["CURRENT_REPO"]
+          pr_owner = context["pr_owner"]
+          pr_repo = context["pr_repo"]
+          source_owner = context["source_owner"]
+          source_repo = context["source_repo"]
+          values = {
+              "pr-is-current-repo": str(
+                  pr_owner.lower() == current_owner.lower()
+                  and pr_repo.lower() == current_repo.lower()
+              ).lower(),
+              "pr-owner": pr_owner,
+              "pr-repo": pr_repo,
+              "processing-check-external-id": context["processing_check_external_id"],
+              "processing-check-name": context["processing_check_name"],
+              "source-head-sha": context["source_head_sha"],
+              "source-is-current-repo": str(
+                  source_owner.lower() == current_owner.lower()
+                  and source_repo.lower() == current_repo.lower()
+              ).lower(),
+              "source-owner": source_owner,
+              "source-repo": source_repo,
+          }
+
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          with output_path.open("a", encoding="utf-8") as fh:
+              for key, value in values.items():
+                  fh.write(f"{key}={value}\n")
+          PY
 
       - name: Get PR repository checker token
         id: get_pr_token
+        if: ${{ steps.decode_repository_context.outputs.pr-is-current-repo != 'true' }}
         uses: actions/create-github-app-token@v3.0.0
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
-          owner: ${{ needs.detect-targets.outputs.pr-owner }}
+          owner: ${{ steps.decode_repository_context.outputs.pr-owner }}
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
-          repositories: ${{ needs.detect-targets.outputs.pr-repo }}
+          repositories: ${{ steps.decode_repository_context.outputs.pr-repo }}
 
       - name: Get source repository checker token
         id: get_source_token
+        if: ${{ steps.decode_repository_context.outputs.source-is-current-repo != 'true' }}
         uses: actions/create-github-app-token@v3.0.0
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
-          owner: ${{ needs.detect-targets.outputs.source-owner }}
+          owner: ${{ steps.decode_repository_context.outputs.source-owner }}
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
-          repositories: ${{ needs.detect-targets.outputs.source-repo }}
+          repositories: ${{ steps.decode_repository_context.outputs.source-repo }}
 
       - name: Prepare combined report
         id: prepare_report
@@ -453,10 +626,10 @@ jobs:
           COMMENT_FILE: ${{ runner.temp }}/combined-linter-comment.md
           COMMENT_MARKER: '<!-- linter-service:results -->'
           PR_NUMBER: ${{ needs.detect-targets.outputs.pull-request-number }}
-          PR_OWNER: ${{ needs.detect-targets.outputs.pr-owner }}
-          PR_REPO: ${{ needs.detect-targets.outputs.pr-repo }}
+          PR_OWNER: ${{ steps.decode_repository_context.outputs.pr-owner }}
+          PR_REPO: ${{ steps.decode_repository_context.outputs.pr-repo }}
         with:
-          github-token: ${{ steps.get_pr_token.outputs.token }}
+          github-token: ${{ steps.decode_repository_context.outputs.pr-is-current-repo == 'true' && github.token || steps.get_pr_token.outputs.token }}
           script: |
             const fs = require("node:fs");
 
@@ -506,13 +679,13 @@ jobs:
         env:
           OVERALL_CONCLUSION: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_conclusion || 'failure' }}
           OVERALL_SUMMARY: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_summary || 'The linter-service workflow failed to generate a combined report.' }}
-          PROCESSING_CHECK_EXTERNAL_ID: ${{ needs.detect-targets.outputs.processing-check-external-id }}
-          PROCESSING_CHECK_NAME: ${{ needs.detect-targets.outputs.processing-check-name }}
-          SOURCE_HEAD_SHA: ${{ needs.detect-targets.outputs.source-head-sha }}
-          SOURCE_OWNER: ${{ needs.detect-targets.outputs.source-owner }}
-          SOURCE_REPO: ${{ needs.detect-targets.outputs.source-repo }}
+          PROCESSING_CHECK_EXTERNAL_ID: ${{ steps.decode_repository_context.outputs.processing-check-external-id }}
+          PROCESSING_CHECK_NAME: ${{ steps.decode_repository_context.outputs.processing-check-name }}
+          SOURCE_HEAD_SHA: ${{ steps.decode_repository_context.outputs.source-head-sha }}
+          SOURCE_OWNER: ${{ steps.decode_repository_context.outputs.source-owner }}
+          SOURCE_REPO: ${{ steps.decode_repository_context.outputs.source-repo }}
         with:
-          github-token: ${{ steps.get_source_token.outputs.token }}
+          github-token: ${{ steps.decode_repository_context.outputs.source-is-current-repo == 'true' && github.token || steps.get_source_token.outputs.token }}
           script: |
             const owner = process.env.SOURCE_OWNER;
             const repo = process.env.SOURCE_REPO;
@@ -537,7 +710,7 @@ jobs:
               (response) => response.data.check_runs,
             );
             const existing = checkRuns.find(
-              (checkRun) => checkRun.external_id === externalId,
+              (checkRun) => checkRun && checkRun.external_id === externalId,
             );
 
             if (existing) {
@@ -581,4 +754,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Report skipped lint execution
-        run: echo "No configured linters matched the pull request changes."
+        env:
+          SKIP_REASON: ${{ needs.detect-targets.outputs.skip-reason }}
+        run: |
+          if [ -n "$SKIP_REASON" ]; then
+            echo "$SKIP_REASON"
+          else
+            echo "No configured linters matched the pull request changes."
+          fi

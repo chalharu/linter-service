@@ -3,19 +3,7 @@ name: Lint Common
 on:
   workflow_call:
     inputs:
-      changed-files-json:
-        required: true
-        type: string
       linter-name:
-        required: true
-        type: string
-      source-head-sha:
-        required: true
-        type: string
-      source-owner:
-        required: true
-        type: string
-      source-repo:
         required: true
         type: string
     outputs:
@@ -42,32 +30,72 @@ jobs:
     env:
       LINTER_NAME: ${{ inputs.linter-name }}
     steps:
+      - name: Download dispatch context artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: detect-targets-context
+          path: ${{ runner.temp }}/detect-targets-context
+
       - name: Mask repository metadata
         env:
-          SOURCE_HEAD_SHA: ${{ inputs.source-head-sha }}
-          SOURCE_OWNER: ${{ inputs.source-owner }}
-          SOURCE_REPO: ${{ inputs.source-repo }}
+          CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
         run: |
-          echo "::add-mask::$SOURCE_OWNER"
-          echo "::add-mask::$SOURCE_REPO"
-          echo "::add-mask::$SOURCE_OWNER/$SOURCE_REPO"
-          echo "::add-mask::$SOURCE_HEAD_SHA"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
+          source_owner = context["source_owner"]
+          source_repo = context["source_repo"]
+          source_head_sha = context["source_head_sha"]
+
+          for value in (source_owner, source_repo, source_head_sha):
+              if value:
+                  print(f"::add-mask::{value}")
+
+          if source_owner and source_repo:
+              print(f"::add-mask::{source_owner}/{source_repo}")
+          PY
+
+      - name: Decode repository metadata
+        id: decode_context
+        env:
+          CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
+          values = {
+              "source-head-sha": context["source_head_sha"],
+              "source-owner": context["source_owner"],
+              "source-repo": context["source_repo"],
+          }
+
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          with output_path.open("a", encoding="utf-8") as fh:
+              for key, value in values.items():
+                  fh.write(f"{key}={value}\n")
+          PY
 
       - name: Get source repository checker token
         id: get_source_token
         uses: actions/create-github-app-token@v3.0.0
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
-          owner: ${{ inputs.source-owner }}
+          owner: ${{ steps.decode_context.outputs.source-owner }}
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
-          repositories: ${{ inputs.source-repo }}
+          repositories: ${{ steps.decode_context.outputs.source-repo }}
 
       - name: Check out source repository
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-          ref: ${{ inputs.source-head-sha }}
-          repository: ${{ inputs.source-owner }}/${{ inputs.source-repo }}
+          ref: ${{ steps.decode_context.outputs.source-head-sha }}
+          repository: ${{ steps.decode_context.outputs.source-owner }}/${{ steps.decode_context.outputs.source-repo }}
           token: ${{ steps.get_source_token.outputs.token }}
 
       - name: Set up Python
@@ -79,15 +107,17 @@ jobs:
       - name: Select lint target files
         id: select_files
         env:
-          CHANGED_FILES_JSON: ${{ inputs.changed-files-json }}
+          CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
           LINTER_NAME: ${{ inputs.linter-name }}
         run: |
           python3 - <<'PY' > "$RUNNER_TEMP/selected-files.txt"
           import json
           import os
+          from pathlib import Path
 
           linter_name = os.environ["LINTER_NAME"]
-          files = json.loads(os.environ["CHANGED_FILES_JSON"])
+          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
+          files = context["changed_files"]
 
           for path in files:
               lower_path = path.lower()
@@ -135,25 +165,25 @@ jobs:
           mapfile -t files < "$RUNNER_TEMP/selected-files.txt"
 
           case "$LINTER_NAME" in
-            actionlint)
-              ./actionlint "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
-              ;;
-            yamllint)
-              cat > "$RUNNER_TEMP/yamllint.yaml" <<'EOF'
-              extends: default
-              rules:
-                comments-indentation: disable
-                document-start: disable
-                line-length: disable
-                truthy:
-                  check-keys: false
-              EOF
-              yamllint -c "$RUNNER_TEMP/yamllint.yaml" "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
-              ;;
-            *)
-              echo "unsupported linter: $LINTER_NAME" >&2
-              exit 1
-              ;;
+          actionlint)
+            ./actionlint "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
+            ;;
+          yamllint)
+            cat > "$RUNNER_TEMP/yamllint.yaml" <<'EOF'
+          extends: default
+          rules:
+            comments-indentation: disable
+            document-start: disable
+            line-length: disable
+            truthy:
+              check-keys: false
+          EOF
+            yamllint -c "$RUNNER_TEMP/yamllint.yaml" "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
+            ;;
+          *)
+            echo "unsupported linter: $LINTER_NAME" >&2
+            exit 1
+            ;;
           esac
 
           status=$?
