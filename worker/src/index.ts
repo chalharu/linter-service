@@ -712,10 +712,14 @@ function parseJson(input: string): unknown {
 }
 
 function getGitHubApiBaseUrl(env: Env): string {
-	return (env.GITHUB_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL).replace(
-		/\/+$/,
-		"",
-	);
+	const baseUrl = env.GITHUB_API_BASE_URL?.trim() || DEFAULT_API_BASE_URL;
+	let end = baseUrl.length;
+
+	while (end > 0 && baseUrl[end - 1] === "/") {
+		end--;
+	}
+
+	return baseUrl.slice(0, end);
 }
 
 function normalizeMultilineSecret(secret: string): string {
