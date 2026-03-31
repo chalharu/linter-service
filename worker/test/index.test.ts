@@ -155,6 +155,100 @@ describe("github webhook proxy worker", () => {
 		expect(dispatchBody.client_payload.repository.owner.login).toBe("acme");
 	});
 
+	it("normalizes custom GitHub API base URLs before calling upstream APIs", async () => {
+		const fetchMock = vi.mocked(fetch);
+
+		fetchMock
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify({ id: 456 }), {
+					headers: { "content-type": "application/json" },
+					status: 200,
+				}),
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({ token: "dispatcher-installation-token" }),
+					{
+						headers: { "content-type": "application/json" },
+						status: 201,
+					},
+				),
+			)
+			.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+		const request = createWebhookRequest(
+			"pull_request",
+			{
+				action: "opened",
+				installation: { id: 987 },
+				pull_request: {
+					base: {
+						label: "acme:main",
+						ref: "main",
+						repo: {
+							full_name: "acme/source-repo",
+							html_url: "https://github.com/acme/source-repo",
+							id: 10,
+							name: "source-repo",
+							owner: { id: 1, login: "acme", type: "Organization" },
+							private: false,
+						},
+						sha: "def456",
+					},
+					draft: false,
+					head: {
+						label: "octocat:feature/example",
+						ref: "feature/example",
+						repo: {
+							clone_url: "https://github.com/octocat/forked-repo.git",
+							full_name: "octocat/forked-repo",
+							html_url: "https://github.com/octocat/forked-repo",
+							id: 11,
+							name: "forked-repo",
+							owner: { id: 2, login: "octocat", type: "User" },
+							private: false,
+						},
+						sha: "abc123",
+					},
+					html_url: "https://github.com/acme/source-repo/pull/42",
+					id: 42,
+					merged: false,
+					number: 42,
+					state: "open",
+					title: "Add feature",
+					user: { id: 2, login: "octocat", type: "User" },
+				},
+				repository: {
+					full_name: "acme/source-repo",
+					html_url: "https://github.com/acme/source-repo",
+					id: 10,
+					name: "source-repo",
+					owner: { id: 1, login: "acme", type: "Organization" },
+					private: false,
+				},
+				sender: { id: 2, login: "octocat", type: "User" },
+			},
+			baseEnv.GITHUB_CHECKER_WEBHOOK_SECRET,
+		);
+
+		const response = await worker.fetch(request, {
+			...baseEnv,
+			GITHUB_API_BASE_URL: "https://api.github.example.test/// \n",
+		});
+
+		expect(response.status).toBe(200);
+		expect(fetchMock).toHaveBeenCalledTimes(3);
+		expect(fetchMock.mock.calls[0]?.[0]).toBe(
+			"https://api.github.example.test/repos/chalharu/linter-service/installation",
+		);
+		expect(fetchMock.mock.calls[1]?.[0]).toBe(
+			"https://api.github.example.test/app/installations/456/access_tokens",
+		);
+		expect(fetchMock.mock.calls[2]?.[0]).toBe(
+			"https://api.github.example.test/repos/chalharu/linter-service/dispatches",
+		);
+	});
+
 	it("skips pull_request events for the dispatch target repository", async () => {
 		const fetchMock = vi.mocked(fetch);
 
