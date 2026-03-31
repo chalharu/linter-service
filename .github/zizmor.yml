@@ -1,5 +1,8 @@
 rules:
   secrets-outside-env:
+    # `config.allow` is configurable in zizmor v1.24.0 and later.
+    # Keep the temporary line-level ignores below until this repository
+    # upgrades, then remove them as tracked in issue #23.
     config:
       allow:
         - CHECKER_APP_ID
