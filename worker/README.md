@@ -31,7 +31,7 @@ Worker はこの App の credentials を使って、このリポジトリへ `re
   - `Pull requests: read`
   - `Metadata: read`
 
-Cloudflare Worker はこの App の webhook secret で署名検証を行います。`repository_dispatch.yml` ではこの App の credentials を使って、PR metadata の取得、対象ソース repository の checkout、PR comment の更新を行います。
+Cloudflare Worker はこの App の webhook secret で署名検証を行います。`repository_dispatch.yml` ではこの App の credentials を使って、PR metadata の取得、対象ソース repository の checkout、PR comment の更新、linter ごとの check run 更新を行います。
 
 ## 役割
 
@@ -105,7 +105,7 @@ wrangler secret put GITHUB_DISPATCH_REPO
 
 workflow は `client_payload.repository.owner.login` と `client_payload.repository.name` を使って PR repository 用 token を取得し、PR details から head/source repository を解決します。
 
-また `repository_dispatch.yml` は changed files を見て reusable linter workflow を並列実行し、各 workflow は結果を対象 PR comment に upsert します。private repository を前提に、workflow logs には repository 名や changed file 一覧、lint diagnostics を極力出さず、詳細は PR comment に寄せます。
+また `repository_dispatch.yml` は declarative な linter 定義から changed files を評価し、対象 linter の in-progress check run を先に作成してから reusable linter workflow を並列実行します。各 workflow は結果を対象 PR comment に upsert し、対応する check run も success/failure へ更新します。private repository を前提に、workflow logs には repository 名や changed file 一覧、lint diagnostics を極力出さず、詳細は PR comment に寄せます。
 
 ## `repository_dispatch` payload
 
@@ -181,7 +181,7 @@ Worker は `client_payload` に以下のような構造を載せます。
 
 `pull_request` event では `pull_request` に head/base を含む詳細を入れます。
 
-`check_run` event では Worker は source repository への追加 API call を行わないため、`pull_request` には関連 PR の `number` を最低限載せ、必要な詳細は `repository_dispatch.yml` 側で checker App token を使って取得する想定です。
+`check_run` event では Worker は source repository への追加 API call を行わないため、`pull_request` には関連 PR の `number` を最低限載せ、必要な詳細は `repository_dispatch.yml` 側で checker App token を使って取得する想定です。なお `linter-service:` で始まる `external_id` を持つ self-generated な check run は Worker 側で無視し、通知用 check run が再び `repository_dispatch` を起動しないようにしています。
 
 ## 関連ファイル
 

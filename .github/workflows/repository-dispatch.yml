@@ -11,16 +11,35 @@ jobs:
   detect-targets:
     runs-on: ubuntu-latest
     outputs:
+      actionlint-check-external-id: ${{ steps.collect.outputs.actionlint-check-external-id }}
+      actionlint-check-name: ${{ steps.collect.outputs.actionlint-check-name }}
+      actionlint-selected: ${{ steps.collect.outputs.actionlint-selected }}
       changed-files-json: ${{ steps.collect.outputs.changed-files-json }}
       pr-owner: ${{ steps.collect.outputs.pr-owner }}
       pr-repo: ${{ steps.collect.outputs.pr-repo }}
       pull-request-number: ${{ steps.collect.outputs.pull-request-number }}
-      run-actionlint: ${{ steps.collect.outputs.run-actionlint }}
-      run-yamllint: ${{ steps.collect.outputs.run-yamllint }}
+      selected-linter-names-json: ${{ steps.collect.outputs.selected-linter-names-json }}
+      selected-linters-json: ${{ steps.collect.outputs.selected-linters-json }}
       source-head-sha: ${{ steps.collect.outputs.source-head-sha }}
       source-owner: ${{ steps.collect.outputs.source-owner }}
       source-repo: ${{ steps.collect.outputs.source-repo }}
+      yamllint-check-external-id: ${{ steps.collect.outputs.yamllint-check-external-id }}
+      yamllint-check-name: ${{ steps.collect.outputs.yamllint-check-name }}
+      yamllint-selected: ${{ steps.collect.outputs.yamllint-selected }}
     env:
+      LINTER_DEFINITIONS_JSON: >-
+        [
+          {
+            "name": "actionlint",
+            "check_name": "linter-service / actionlint",
+            "patterns": ["^\\.github\\/workflows\\/.+\\.(?:yaml|yml)$"]
+          },
+          {
+            "name": "yamllint",
+            "check_name": "linter-service / yamllint",
+            "patterns": ["\\.(?:yaml|yml)$"]
+          }
+        ]
       PR_REPOSITORY_NAME: ${{ github.event.client_payload.repository.name }}
       PR_REPOSITORY_OWNER: ${{ github.event.client_payload.repository.owner.login }}
       PULL_REQUEST_NUMBER: ${{ github.event.client_payload.pull_request.number }}
@@ -69,6 +88,7 @@ jobs:
         id: collect
         uses: actions/github-script@v7
         env:
+          LINTER_DEFINITIONS_JSON: ${{ env.LINTER_DEFINITIONS_JSON }}
           PR_REPOSITORY_NAME: ${{ env.PR_REPOSITORY_NAME }}
           PR_REPOSITORY_OWNER: ${{ env.PR_REPOSITORY_OWNER }}
           PULL_REQUEST_NUMBER: ${{ env.PULL_REQUEST_NUMBER }}
@@ -79,7 +99,13 @@ jobs:
             const owner = process.env.PR_REPOSITORY_OWNER;
             const repo = process.env.PR_REPOSITORY_NAME;
             const pullNumber = Number(process.env.PULL_REQUEST_NUMBER);
+            const runAttempt = process.env.GITHUB_RUN_ATTEMPT || "1";
             const sourceHeadShaFromPayload = process.env.SOURCE_HEAD_SHA || "";
+            const definitions = JSON.parse(process.env.LINTER_DEFINITIONS_JSON ?? "[]");
+
+            if (!Array.isArray(definitions)) {
+              throw new Error("LINTER_DEFINITIONS_JSON must be a JSON array");
+            }
 
             const pull = (
               await github.rest.pulls.get({
@@ -100,12 +126,6 @@ jobs:
               .filter((file) => file.status !== "removed")
               .map((file) => file.filename);
 
-            const selectors = {
-              actionlint: (path) =>
-                /^\.github\/workflows\/.+\.(?:yaml|yml)$/i.test(path),
-              yamllint: (path) => /\.(?:yaml|yml)$/i.test(path),
-            };
-
             const sourceOwner = pull.head.repo?.owner?.login ?? owner;
             const sourceRepo = pull.head.repo?.name ?? repo;
             const sourceHeadSha = sourceHeadShaFromPayload || pull.head.sha;
@@ -122,37 +142,165 @@ jobs:
             core.setSecret(`${sourceOwner}/${sourceRepo}`);
             core.setSecret(sourceHeadSha);
 
-            for (const [name, matches] of Object.entries(selectors)) {
-              core.setOutput(
-                `run-${name}`,
-                String(currentFiles.some((path) => matches(path))),
+            const selectedLinters = [];
+
+            for (const definition of definitions) {
+              if (
+                !definition ||
+                typeof definition !== "object" ||
+                typeof definition.name !== "string" ||
+                typeof definition.check_name !== "string" ||
+                !Array.isArray(definition.patterns)
+              ) {
+                throw new Error("Each linter definition must include name, check_name, and patterns");
+              }
+
+              const patterns = definition.patterns.map((pattern) => {
+                if (typeof pattern !== "string") {
+                  throw new Error("Linter patterns must be strings");
+                }
+
+                return new RegExp(pattern, "i");
+              });
+              const selected = currentFiles.some((path) =>
+                patterns.some((pattern) => pattern.test(path)),
               );
+              const checkExternalId = `linter-service:${context.runId}:${runAttempt}:${pullNumber}:${definition.name}`;
+
+              core.setOutput(`${definition.name}-selected`, String(selected));
+              core.setOutput(`${definition.name}-check-name`, definition.check_name);
+              core.setOutput(`${definition.name}-check-external-id`, checkExternalId);
+
+              if (selected) {
+                selectedLinters.push({
+                  check_external_id: checkExternalId,
+                  check_name: definition.check_name,
+                  name: definition.name,
+                });
+              }
             }
 
             core.setOutput("changed-files-json", JSON.stringify(currentFiles));
             core.setOutput("pr-owner", owner);
             core.setOutput("pr-repo", repo);
             core.setOutput("pull-request-number", String(pullNumber));
+            core.setOutput(
+              "selected-linter-names-json",
+              JSON.stringify(selectedLinters.map((linter) => linter.name)),
+            );
+            core.setOutput("selected-linters-json", JSON.stringify(selectedLinters));
             core.setOutput("source-head-sha", sourceHeadSha);
             core.setOutput("source-owner", sourceOwner);
             core.setOutput("source-repo", sourceRepo);
 
       - name: Report routing status
         env:
-          RUN_ACTIONLINT: ${{ steps.collect.outputs.run-actionlint }}
-          RUN_YAMLLINT: ${{ steps.collect.outputs.run-yamllint }}
+          SELECTED_LINTERS_JSON: ${{ steps.collect.outputs.selected-linter-names-json }}
         run: |
           echo "Routing targets resolved."
-          echo "actionlint selected: ${RUN_ACTIONLINT}"
-          echo "yamllint selected: ${RUN_YAMLLINT}"
+          echo "Selected linters: ${SELECTED_LINTERS_JSON}"
+
+  notify-linters-started:
+    needs: detect-targets
+    if: ${{ needs.detect-targets.outputs.selected-linters-json != '[]' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        linter: ${{ fromJson(needs.detect-targets.outputs.selected-linters-json) }}
+    steps:
+      - name: Mask repository metadata
+        env:
+          SOURCE_HEAD_SHA: ${{ needs.detect-targets.outputs.source-head-sha }}
+          SOURCE_OWNER: ${{ needs.detect-targets.outputs.source-owner }}
+          SOURCE_REPO: ${{ needs.detect-targets.outputs.source-repo }}
+        run: |
+          echo "::add-mask::$SOURCE_OWNER"
+          echo "::add-mask::$SOURCE_REPO"
+          echo "::add-mask::$SOURCE_OWNER/$SOURCE_REPO"
+          echo "::add-mask::$SOURCE_HEAD_SHA"
+
+      - name: Get source repository checker token
+        id: get_source_token
+        uses: actions/create-github-app-token@v3.0.0
+        with:
+          app-id: ${{ secrets.CHECKER_APP_ID }}
+          owner: ${{ needs.detect-targets.outputs.source-owner }}
+          private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
+          repositories: ${{ needs.detect-targets.outputs.source-repo }}
+
+      - name: Notify linter start
+        uses: actions/github-script@v7
+        env:
+          CHECK_EXTERNAL_ID: ${{ matrix.linter.check_external_id }}
+          CHECK_NAME: ${{ matrix.linter.check_name }}
+          SOURCE_HEAD_SHA: ${{ needs.detect-targets.outputs.source-head-sha }}
+          SOURCE_OWNER: ${{ needs.detect-targets.outputs.source-owner }}
+          SOURCE_REPO: ${{ needs.detect-targets.outputs.source-repo }}
+        with:
+          github-token: ${{ steps.get_source_token.outputs.token }}
+          script: |
+            const owner = process.env.SOURCE_OWNER;
+            const repo = process.env.SOURCE_REPO;
+            const headSha = process.env.SOURCE_HEAD_SHA;
+            const externalId = process.env.CHECK_EXTERNAL_ID;
+            const name = process.env.CHECK_NAME;
+            const detailsUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            const output = {
+              title: `${name} is running`,
+              summary: "Linter is running. Detailed results will be posted as a pull request comment.",
+            };
+
+            const checkRuns = await github.paginate(
+              github.rest.checks.listForRef,
+              {
+                owner,
+                repo,
+                ref: headSha,
+                per_page: 100,
+              },
+              (response) => response.data.check_runs,
+            );
+            const existing = checkRuns.find(
+              (checkRun) => checkRun.external_id === externalId,
+            );
+
+            if (existing) {
+              await github.rest.checks.update({
+                owner,
+                repo,
+                check_run_id: existing.id,
+                details_url: detailsUrl,
+                external_id: externalId,
+                output,
+                status: "in_progress",
+              });
+              return;
+            }
+
+            await github.rest.checks.create({
+              owner,
+              repo,
+              name,
+              head_sha: headSha,
+              status: "in_progress",
+              details_url: detailsUrl,
+              external_id: externalId,
+              started_at: new Date().toISOString(),
+              output,
+            });
 
   actionlint:
-    needs: detect-targets
-    if: ${{ needs.detect-targets.outputs.run-actionlint == 'true' }}
+    needs:
+      - detect-targets
+      - notify-linters-started
+    if: ${{ needs.detect-targets.outputs.actionlint-selected == 'true' }}
     uses: ./.github/workflows/lint-actionlint.yml
     secrets: inherit
     with:
       changed-files-json: ${{ needs.detect-targets.outputs.changed-files-json }}
+      check-run-external-id: ${{ needs.detect-targets.outputs.actionlint-check-external-id }}
+      check-run-name: ${{ needs.detect-targets.outputs.actionlint-check-name }}
       pr-owner: ${{ needs.detect-targets.outputs.pr-owner }}
       pr-repo: ${{ needs.detect-targets.outputs.pr-repo }}
       pull-request-number: ${{ needs.detect-targets.outputs.pull-request-number }}
@@ -161,12 +309,16 @@ jobs:
       source-repo: ${{ needs.detect-targets.outputs.source-repo }}
 
   yamllint:
-    needs: detect-targets
-    if: ${{ needs.detect-targets.outputs.run-yamllint == 'true' }}
+    needs:
+      - detect-targets
+      - notify-linters-started
+    if: ${{ needs.detect-targets.outputs.yamllint-selected == 'true' }}
     uses: ./.github/workflows/lint-yamllint.yml
     secrets: inherit
     with:
       changed-files-json: ${{ needs.detect-targets.outputs.changed-files-json }}
+      check-run-external-id: ${{ needs.detect-targets.outputs.yamllint-check-external-id }}
+      check-run-name: ${{ needs.detect-targets.outputs.yamllint-check-name }}
       pr-owner: ${{ needs.detect-targets.outputs.pr-owner }}
       pr-repo: ${{ needs.detect-targets.outputs.pr-repo }}
       pull-request-number: ${{ needs.detect-targets.outputs.pull-request-number }}
@@ -176,7 +328,7 @@ jobs:
 
   no-linters-needed:
     needs: detect-targets
-    if: ${{ needs.detect-targets.outputs.run-actionlint != 'true' && needs.detect-targets.outputs.run-yamllint != 'true' }}
+    if: ${{ needs.detect-targets.outputs.selected-linters-json == '[]' }}
     runs-on: ubuntu-latest
     steps:
       - name: Report skipped lint execution
