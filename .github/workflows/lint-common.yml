@@ -3,19 +3,7 @@ name: Lint Common
 on:
   workflow_call:
     inputs:
-      changed-files-json:
-        required: true
-        type: string
       linter-name:
-        required: true
-        type: string
-      source-head-sha:
-        required: true
-        type: string
-      source-owner:
-        required: true
-        type: string
-      source-repo:
         required: true
         type: string
     outputs:
@@ -42,31 +30,25 @@ jobs:
     env:
       LINTER_NAME: ${{ inputs.linter-name }}
     steps:
+      - name: Download dispatch context artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: detect-targets-context
+          path: ${{ runner.temp }}/detect-targets-context
+
       - name: Mask repository metadata
         env:
-          SOURCE_HEAD_SHA_BASE64: ${{ inputs.source-head-sha }}
-          SOURCE_OWNER_BASE64: ${{ inputs.source-owner }}
-          SOURCE_REPO_BASE64: ${{ inputs.source-repo }}
+          CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
         run: |
           python3 - <<'PY'
-          import base64
+          import json
           import os
+          from pathlib import Path
 
-          source_owner = (
-              base64.b64decode(os.environ["SOURCE_OWNER_BASE64"]).decode("utf-8")
-              if os.environ.get("SOURCE_OWNER_BASE64")
-              else ""
-          )
-          source_repo = (
-              base64.b64decode(os.environ["SOURCE_REPO_BASE64"]).decode("utf-8")
-              if os.environ.get("SOURCE_REPO_BASE64")
-              else ""
-          )
-          source_head_sha = (
-              base64.b64decode(os.environ["SOURCE_HEAD_SHA_BASE64"]).decode("utf-8")
-              if os.environ.get("SOURCE_HEAD_SHA_BASE64")
-              else ""
-          )
+          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
+          source_owner = context["source_owner"]
+          source_repo = context["source_repo"]
+          source_head_sha = context["source_head_sha"]
 
           for value in (source_owner, source_repo, source_head_sha):
               if value:
@@ -79,26 +61,24 @@ jobs:
       - name: Decode repository metadata
         id: decode_context
         env:
-          SOURCE_HEAD_SHA_BASE64: ${{ inputs.source-head-sha }}
-          SOURCE_OWNER_BASE64: ${{ inputs.source-owner }}
-          SOURCE_REPO_BASE64: ${{ inputs.source-repo }}
+          CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
         run: |
           python3 - <<'PY'
-          import base64
+          import json
           import os
           from pathlib import Path
 
+          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
           values = {
-              "source-head-sha": os.environ.get("SOURCE_HEAD_SHA_BASE64", ""),
-              "source-owner": os.environ.get("SOURCE_OWNER_BASE64", ""),
-              "source-repo": os.environ.get("SOURCE_REPO_BASE64", ""),
+              "source-head-sha": context["source_head_sha"],
+              "source-owner": context["source_owner"],
+              "source-repo": context["source_repo"],
           }
 
           output_path = Path(os.environ["GITHUB_OUTPUT"])
           with output_path.open("a", encoding="utf-8") as fh:
-              for key, encoded in values.items():
-                  decoded = base64.b64decode(encoded).decode("utf-8") if encoded else ""
-                  fh.write(f"{key}={decoded}\n")
+              for key, value in values.items():
+                  fh.write(f"{key}={value}\n")
           PY
 
       - name: Get source repository checker token
@@ -127,18 +107,17 @@ jobs:
       - name: Select lint target files
         id: select_files
         env:
-          CHANGED_FILES_JSON_BASE64: ${{ inputs.changed-files-json }}
+          CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
           LINTER_NAME: ${{ inputs.linter-name }}
         run: |
           python3 - <<'PY' > "$RUNNER_TEMP/selected-files.txt"
-          import base64
           import json
           import os
+          from pathlib import Path
 
           linter_name = os.environ["LINTER_NAME"]
-          files = json.loads(
-              base64.b64decode(os.environ["CHANGED_FILES_JSON_BASE64"]).decode("utf-8")
-          )
+          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
+          files = context["changed_files"]
 
           for path in files:
               lower_path = path.lower()

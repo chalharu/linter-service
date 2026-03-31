@@ -2,19 +2,6 @@ name: Yamllint
 
 on:
   workflow_call:
-    inputs:
-      changed-files-json:
-        required: true
-        type: string
-      source-head-sha:
-        required: true
-        type: string
-      source-owner:
-        required: true
-        type: string
-      source-repo:
-        required: true
-        type: string
     outputs:
       comment_body_base64:
         description: Base64-encoded markdown section for yamllint
@@ -35,8 +22,4 @@ jobs:
     uses: ./.github/workflows/lint-common.yml
     secrets: inherit
     with:
-      changed-files-json: ${{ inputs.changed-files-json }}
       linter-name: yamllint
-      source-head-sha: ${{ inputs.source-head-sha }}
-      source-owner: ${{ inputs.source-owner }}
-      source-repo: ${{ inputs.source-repo }}

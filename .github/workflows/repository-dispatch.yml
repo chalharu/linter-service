@@ -17,19 +17,11 @@ jobs:
   detect-targets:
     runs-on: ubuntu-latest
     outputs:
-      actionlint-selected: ${{ steps.publish_job_outputs.outputs.actionlint-selected }}
-      changed-files-json: ${{ steps.publish_job_outputs.outputs.changed-files-json }}
-      pr-owner: ${{ steps.publish_job_outputs.outputs.pr-owner }}
-      pr-repo: ${{ steps.publish_job_outputs.outputs.pr-repo }}
-      processing-check-external-id: ${{ steps.publish_job_outputs.outputs.processing-check-external-id }}
-      processing-check-name: ${{ steps.publish_job_outputs.outputs.processing-check-name }}
-      pull-request-number: ${{ steps.publish_job_outputs.outputs.pull-request-number }}
-      selected-linters-json: ${{ steps.publish_job_outputs.outputs.selected-linters-json }}
-      skip-reason: ${{ steps.publish_job_outputs.outputs.skip-reason }}
-      source-head-sha: ${{ steps.publish_job_outputs.outputs.source-head-sha }}
-      source-owner: ${{ steps.publish_job_outputs.outputs.source-owner }}
-      source-repo: ${{ steps.publish_job_outputs.outputs.source-repo }}
-      yamllint-selected: ${{ steps.publish_job_outputs.outputs.yamllint-selected }}
+      actionlint-selected: ${{ steps.collect.outputs.actionlint-selected }}
+      pull-request-number: ${{ steps.collect.outputs.pull-request-number }}
+      selected-linters-json: ${{ steps.collect.outputs.selected-linters-json }}
+      skip-reason: ${{ steps.collect.outputs.skip-reason }}
+      yamllint-selected: ${{ steps.collect.outputs.yamllint-selected }}
     env:
       LINTER_DEFINITIONS_JSON: >-
         [
@@ -105,7 +97,6 @@ jobs:
             const pullNumber = Number(process.env.PULL_REQUEST_NUMBER);
             const sourceHeadShaFromPayload = process.env.SOURCE_HEAD_SHA || "";
             const definitions = JSON.parse(process.env.LINTER_DEFINITIONS_JSON ?? "[]");
-            const encode = (value) => Buffer.from(value, "utf8").toString("base64");
             const contextPath = path.join(
               process.env.RUNNER_TEMP,
               "detect-targets-context.json",
@@ -132,19 +123,16 @@ jobs:
                 "Skipping repository_dispatch for this repository because local pull requests are handled by the direct pull_request trigger.";
 
               const contextValues = {
-                "actionlint-selected": "false",
-                "changed-files-json": encode(JSON.stringify([])),
-                "pr-owner": encode(owner),
-                "pr-repo": encode(repo),
-                "processing-check-external-id": encode(""),
-                "processing-check-name": encode("linter-service"),
-                "pull-request-number": String(pullNumber),
-                "selected-linters-json": JSON.stringify([]),
-                "skip-reason": skipReason,
-                "source-head-sha": encode(sourceHeadShaFromPayload),
-                "source-owner": encode(owner),
-                "source-repo": encode(repo),
-                "yamllint-selected": "false",
+                changed_files: [],
+                pr_owner: owner,
+                pr_repo: repo,
+                processing_check_external_id: "",
+                processing_check_name: "linter-service",
+                selected_linters: [],
+                skip_reason: skipReason,
+                source_head_sha: sourceHeadShaFromPayload,
+                source_owner: owner,
+                source_repo: repo,
               };
 
               for (const definition of definitions) {
@@ -159,6 +147,11 @@ jobs:
               }
 
               writeContext(contextValues);
+              core.setOutput("actionlint-selected", "false");
+              core.setOutput("pull-request-number", String(pullNumber));
+              core.setOutput("selected-linters-json", JSON.stringify([]));
+              core.setOutput("skip-reason", skipReason);
+              core.setOutput("yamllint-selected", "false");
               return;
             }
 
@@ -218,109 +211,68 @@ jobs:
             }
 
             writeContext({
-              "actionlint-selected": String(selectedLinters.includes("actionlint")),
-              "changed-files-json": encode(JSON.stringify(currentFiles)),
-              "pr-owner": encode(owner),
-              "pr-repo": encode(repo),
-              "processing-check-external-id": encode(
-                `linter-service:${pullNumber}:${sourceHeadSha}`,
-              ),
-              "processing-check-name": encode("linter-service"),
-              "pull-request-number": String(pullNumber),
-              "selected-linters-json": JSON.stringify(selectedLinters),
-              "skip-reason": "",
-              "source-head-sha": encode(sourceHeadSha),
-              "source-owner": encode(sourceOwner),
-              "source-repo": encode(sourceRepo),
-              "yamllint-selected": String(selectedLinters.includes("yamllint")),
+              changed_files: currentFiles,
+              pr_owner: owner,
+              pr_repo: repo,
+              processing_check_external_id: `linter-service:${pullNumber}:${sourceHeadSha}`,
+              processing_check_name: "linter-service",
+              selected_linters: selectedLinters,
+              skip_reason: "",
+              source_head_sha: sourceHeadSha,
+              source_owner: sourceOwner,
+              source_repo: sourceRepo,
             });
+            core.setOutput(
+              "actionlint-selected",
+              String(selectedLinters.includes("actionlint")),
+            );
+            core.setOutput("pull-request-number", String(pullNumber));
+            core.setOutput("selected-linters-json", JSON.stringify(selectedLinters));
+            core.setOutput("skip-reason", "");
+            core.setOutput(
+              "yamllint-selected",
+              String(selectedLinters.includes("yamllint")),
+            );
 
       - name: Report routing status
         env:
-          CONTEXT_PATH: ${{ steps.collect.outputs.context-path }}
+          SELECTED_LINTERS_JSON: ${{ steps.collect.outputs.selected-linters-json }}
         run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
+          echo "Routing targets resolved."
+          echo "Selected linters: ${SELECTED_LINTERS_JSON}"
 
-          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
-          print("Routing targets resolved.")
-          print(f"Selected linters: {context['selected-linters-json']}")
-          PY
-
-      - name: Publish safe job outputs
-        id: publish_job_outputs
-        env:
-          CONTEXT_PATH: ${{ steps.collect.outputs.context-path }}
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
-          output_path = Path(os.environ["GITHUB_OUTPUT"])
-          multiline_delimiters = {
-              "selected-linters-json": "__LINTER_SERVICE_SELECTED_LINTERS__",
-              "skip-reason": "__LINTER_SERVICE_SKIP_REASON__",
-          }
-          ordered_keys = [
-              "actionlint-selected",
-              "changed-files-json",
-              "pr-owner",
-              "pr-repo",
-              "processing-check-external-id",
-              "processing-check-name",
-              "pull-request-number",
-              "selected-linters-json",
-              "skip-reason",
-              "source-head-sha",
-              "source-owner",
-              "source-repo",
-              "yamllint-selected",
-          ]
-
-          with output_path.open("a", encoding="utf-8") as fh:
-              for key in ordered_keys:
-                  value = str(context.get(key, ""))
-                  delimiter = multiline_delimiters.get(key)
-                  if delimiter:
-                      fh.write(f"{key}<<{delimiter}\n{value}\n{delimiter}\n")
-                  else:
-                      fh.write(f"{key}={value}\n")
-          PY
+      - name: Upload dispatch context artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: detect-targets-context
+          path: ${{ steps.collect.outputs.context-path }}
+          if-no-files-found: error
+          retention-days: 1
 
   notify-processing-started:
     needs: detect-targets
     if: ${{ needs.detect-targets.outputs.selected-linters-json != '[]' }}
     runs-on: ubuntu-latest
     steps:
+      - name: Download dispatch context artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: detect-targets-context
+          path: ${{ runner.temp }}/detect-targets-context
+
       - name: Mask repository metadata
         env:
-          SOURCE_HEAD_SHA_BASE64: ${{ needs.detect-targets.outputs.source-head-sha }}
-          SOURCE_OWNER_BASE64: ${{ needs.detect-targets.outputs.source-owner }}
-          SOURCE_REPO_BASE64: ${{ needs.detect-targets.outputs.source-repo }}
+          CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
         run: |
           python3 - <<'PY'
-          import base64
+          import json
           import os
+          from pathlib import Path
 
-          source_owner = (
-              base64.b64decode(os.environ["SOURCE_OWNER_BASE64"]).decode("utf-8")
-              if os.environ.get("SOURCE_OWNER_BASE64")
-              else ""
-          )
-          source_repo = (
-              base64.b64decode(os.environ["SOURCE_REPO_BASE64"]).decode("utf-8")
-              if os.environ.get("SOURCE_REPO_BASE64")
-              else ""
-          )
-          source_head_sha = (
-              base64.b64decode(os.environ["SOURCE_HEAD_SHA_BASE64"]).decode("utf-8")
-              if os.environ.get("SOURCE_HEAD_SHA_BASE64")
-              else ""
-          )
+          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
+          source_owner = context["source_owner"]
+          source_repo = context["source_repo"]
+          source_head_sha = context["source_head_sha"]
 
           for value in (source_owner, source_repo, source_head_sha):
               if value:
@@ -333,30 +285,26 @@ jobs:
       - name: Decode source repository context
         id: decode_source_context
         env:
-          PROCESSING_CHECK_EXTERNAL_ID_BASE64: ${{ needs.detect-targets.outputs.processing-check-external-id }}
-          PROCESSING_CHECK_NAME_BASE64: ${{ needs.detect-targets.outputs.processing-check-name }}
-          SOURCE_HEAD_SHA_BASE64: ${{ needs.detect-targets.outputs.source-head-sha }}
-          SOURCE_OWNER_BASE64: ${{ needs.detect-targets.outputs.source-owner }}
-          SOURCE_REPO_BASE64: ${{ needs.detect-targets.outputs.source-repo }}
+          CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
         run: |
           python3 - <<'PY'
-          import base64
+          import json
           import os
           from pathlib import Path
 
+          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
           values = {
-              "processing-check-external-id": os.environ.get("PROCESSING_CHECK_EXTERNAL_ID_BASE64", ""),
-              "processing-check-name": os.environ.get("PROCESSING_CHECK_NAME_BASE64", ""),
-              "source-head-sha": os.environ.get("SOURCE_HEAD_SHA_BASE64", ""),
-              "source-owner": os.environ.get("SOURCE_OWNER_BASE64", ""),
-              "source-repo": os.environ.get("SOURCE_REPO_BASE64", ""),
+              "processing-check-external-id": context["processing_check_external_id"],
+              "processing-check-name": context["processing_check_name"],
+              "source-head-sha": context["source_head_sha"],
+              "source-owner": context["source_owner"],
+              "source-repo": context["source_repo"],
           }
 
           output_path = Path(os.environ["GITHUB_OUTPUT"])
           with output_path.open("a", encoding="utf-8") as fh:
-              for key, encoded in values.items():
-                  decoded = base64.b64decode(encoded).decode("utf-8") if encoded else ""
-                  fh.write(f"{key}={decoded}\n")
+              for key, value in values.items():
+                  fh.write(f"{key}={value}\n")
           PY
 
       - name: Get source repository checker token
@@ -441,11 +389,6 @@ jobs:
     if: ${{ needs.detect-targets.outputs.actionlint-selected == 'true' }}
     uses: ./.github/workflows/lint-actionlint.yml
     secrets: inherit
-    with:
-      changed-files-json: ${{ needs.detect-targets.outputs.changed-files-json }}
-      source-head-sha: ${{ needs.detect-targets.outputs.source-head-sha }}
-      source-owner: ${{ needs.detect-targets.outputs.source-owner }}
-      source-repo: ${{ needs.detect-targets.outputs.source-repo }}
 
   yamllint:
     needs:
@@ -454,11 +397,6 @@ jobs:
     if: ${{ needs.detect-targets.outputs.yamllint-selected == 'true' }}
     uses: ./.github/workflows/lint-yamllint.yml
     secrets: inherit
-    with:
-      changed-files-json: ${{ needs.detect-targets.outputs.changed-files-json }}
-      source-head-sha: ${{ needs.detect-targets.outputs.source-head-sha }}
-      source-owner: ${{ needs.detect-targets.outputs.source-owner }}
-      source-repo: ${{ needs.detect-targets.outputs.source-repo }}
 
   publish-results:
     needs:
@@ -469,28 +407,28 @@ jobs:
     if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
     runs-on: ubuntu-latest
     steps:
+      - name: Download dispatch context artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: detect-targets-context
+          path: ${{ runner.temp }}/detect-targets-context
+
       - name: Mask repository metadata
         env:
-          PR_OWNER_BASE64: ${{ needs.detect-targets.outputs.pr-owner }}
-          PR_REPO_BASE64: ${{ needs.detect-targets.outputs.pr-repo }}
-          SOURCE_HEAD_SHA_BASE64: ${{ needs.detect-targets.outputs.source-head-sha }}
-          SOURCE_OWNER_BASE64: ${{ needs.detect-targets.outputs.source-owner }}
-          SOURCE_REPO_BASE64: ${{ needs.detect-targets.outputs.source-repo }}
+          CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
         run: |
           python3 - <<'PY'
-          import base64
+          import json
           import os
+          from pathlib import Path
 
-          values = {
-              "pr_owner": os.environ.get("PR_OWNER_BASE64", ""),
-              "pr_repo": os.environ.get("PR_REPO_BASE64", ""),
-              "source_head_sha": os.environ.get("SOURCE_HEAD_SHA_BASE64", ""),
-              "source_owner": os.environ.get("SOURCE_OWNER_BASE64", ""),
-              "source_repo": os.environ.get("SOURCE_REPO_BASE64", ""),
-          }
+          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
           decoded = {
-              key: base64.b64decode(value).decode("utf-8") if value else ""
-              for key, value in values.items()
+              "pr_owner": context["pr_owner"],
+              "pr_repo": context["pr_repo"],
+              "source_head_sha": context["source_head_sha"],
+              "source_owner": context["source_owner"],
+              "source_repo": context["source_repo"],
           }
 
           for key in ("pr_owner", "pr_repo", "source_head_sha", "source_owner", "source_repo"):
@@ -506,34 +444,28 @@ jobs:
       - name: Decode repository context
         id: decode_repository_context
         env:
-          PR_OWNER_BASE64: ${{ needs.detect-targets.outputs.pr-owner }}
-          PR_REPO_BASE64: ${{ needs.detect-targets.outputs.pr-repo }}
-          PROCESSING_CHECK_EXTERNAL_ID_BASE64: ${{ needs.detect-targets.outputs.processing-check-external-id }}
-          PROCESSING_CHECK_NAME_BASE64: ${{ needs.detect-targets.outputs.processing-check-name }}
-          SOURCE_HEAD_SHA_BASE64: ${{ needs.detect-targets.outputs.source-head-sha }}
-          SOURCE_OWNER_BASE64: ${{ needs.detect-targets.outputs.source-owner }}
-          SOURCE_REPO_BASE64: ${{ needs.detect-targets.outputs.source-repo }}
+          CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
         run: |
           python3 - <<'PY'
-          import base64
+          import json
           import os
           from pathlib import Path
 
+          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
           values = {
-              "pr-owner": os.environ.get("PR_OWNER_BASE64", ""),
-              "pr-repo": os.environ.get("PR_REPO_BASE64", ""),
-              "processing-check-external-id": os.environ.get("PROCESSING_CHECK_EXTERNAL_ID_BASE64", ""),
-              "processing-check-name": os.environ.get("PROCESSING_CHECK_NAME_BASE64", ""),
-              "source-head-sha": os.environ.get("SOURCE_HEAD_SHA_BASE64", ""),
-              "source-owner": os.environ.get("SOURCE_OWNER_BASE64", ""),
-              "source-repo": os.environ.get("SOURCE_REPO_BASE64", ""),
+              "pr-owner": context["pr_owner"],
+              "pr-repo": context["pr_repo"],
+              "processing-check-external-id": context["processing_check_external_id"],
+              "processing-check-name": context["processing_check_name"],
+              "source-head-sha": context["source_head_sha"],
+              "source-owner": context["source_owner"],
+              "source-repo": context["source_repo"],
           }
 
           output_path = Path(os.environ["GITHUB_OUTPUT"])
           with output_path.open("a", encoding="utf-8") as fh:
-              for key, encoded in values.items():
-                  decoded = base64.b64decode(encoded).decode("utf-8") if encoded else ""
-                  fh.write(f"{key}={decoded}\n")
+              for key, value in values.items():
+                  fh.write(f"{key}={value}\n")
           PY
 
       - name: Get PR repository checker token
