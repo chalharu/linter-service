@@ -1,14 +1,14 @@
-name: Yamllint
+name: Zizmor
 
 on:
   workflow_call:
     outputs:
       comment_body_base64:
-        description: Base64-encoded markdown section for yamllint
-        value: ${{ jobs.yamllint.outputs.comment_body_base64 }}
+        description: Base64-encoded markdown section for zizmor
+        value: ${{ jobs.zizmor.outputs.comment_body_base64 }}
       conclusion:
         description: success or failure
-        value: ${{ jobs.yamllint.outputs.conclusion }}
+        value: ${{ jobs.zizmor.outputs.conclusion }}
     secrets:
       CHECKER_APP_ID:
         required: true
@@ -18,10 +18,10 @@ on:
 permissions: {}
 
 jobs:
-  yamllint:
+  zizmor:
     uses: ./.github/workflows/lint-common.yml
     secrets:
       CHECKER_APP_ID: ${{ secrets.CHECKER_APP_ID }}
       CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
     with:
-      linter-name: yamllint
+      linter-name: zizmor

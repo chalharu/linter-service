@@ -1,48 +1,56 @@
 # Cloudflare Worker Webhook Proxy
 
-このディレクトリには、GitHub App の Webhook を受けて `repository_dispatch` を送る Cloudflare Worker の実装を置いています。
+この Worker は webhook の受け口です。
+GitHub App の通知を安全に検証します。
+必要な PR 情報を payload に整えます。
+このリポジトリへ dispatch を送り lint を起動します。
 
-GitHub App からこのリポジトリへ直接 Webhook できない前提のため、Worker が Proxy として動作します。
+## 全体図
 
-## GitHub Apps の役割分担
+```text
+checker App Webhook
+        |
+        v
+ Cloudflare Worker
+   | 署名検証
+   | payload 整形
+   v
+ repository_dispatch
+        |
+        v
+ repository-dispatch.yml
+        |
+        v
+ reusable workflows
+        |
+        v
+ PR comment / check run 更新
+```
 
-### `linter-service-dispatcher`
+外部リポジトリの PR は Worker 経由で流れます。
+このリポジトリ自身の PR は direct trigger で流れます。
+Worker は self-dispatch と self-webhook を捨てます。
+これで二重起動と再帰起動を防ぎます。
 
-- 利用場所: Cloudflare Worker
-- Install 先: このリポジトリ
-- Webhook: なし
-- 権限:
-  - `Contents: write`
-  - `Metadata: read`
+## GitHub Apps
 
-Worker はこの App の credentials を使って、このリポジトリへ `repository_dispatch` を送信します。
+| App | Install 先 | 主な用途 |
+|-----|------------|----------|
+| `linter-service-dispatcher` | このリポジトリ | Worker から `repository_dispatch` を送る |
+| `linter-service-checker` | 各利用リポジトリ + このリポジトリ | PR 情報取得、checkout、comment、check run 更新 |
 
-### `linter-service-checker`
+- `dispatcher` の権限: `Contents: write`, `Metadata: read`
+- `checker` の権限: `Checks: write`, `Contents: read`, `Pull requests: write`, `Metadata: read`
+- `checker` の webhook は `Pull request` と `Check run` を受けます。
 
-- 利用場所: `.github/workflows/repository-dispatch.yml`
-- Install 先: 各利用リポジトリ（このリポジトリ自身を含む）
-- Webhook: Cloudflare Worker
-  - `Pull request`
-  - `Check run`
-- 権限:
-  - `Checks: write`
-  - `Contents: read`
-  - `Pull requests: write`
-  - `Metadata: read`
+Worker は checker App の secret で署名を見ます。
+dispatch の送信は dispatcher App token で行います。
+workflow の書き込みは checker App token で行います。
+workflow `permissions` は `{}` のまま保ちます。
 
-Cloudflare Worker はこの App の webhook secret で署名検証を行います。`repository_dispatch.yml` ではこの App の credentials を使って、PR metadata の取得、対象ソース repository の checkout、集約 PR comment の更新、共通 processing check run の更新を行います。workflow 側の `permissions` は `{}` のままにし、GitHub への書き込みは checker App token を使います。
+## セットアップ
 
-## 役割
-
-- `linter-service-checker` の `pull_request` / `check_run` Webhook を受信する
-- `X-Hub-Signature-256` を使って webhook 署名を検証する
-- `pull_request` は payload から PR 情報をそのまま取り出す
-- `check_run` は関連 PR 番号と check_run metadata を取り出す
-- `linter-service-dispatcher` の installation token を取得する
-- このリポジトリへ `repository_dispatch` を送信する
-- downstream workflow が changed files に応じて linter を選び、結果を対象 PR comment に返せるようにする
-
-## ローカル開発
+### 1. ローカル起動
 
 ```bash
 cd worker
@@ -51,7 +59,7 @@ cp .dev.vars.example .dev.vars
 npm run dev
 ```
 
-検証は以下で行えます。
+### 2. ローカル確認
 
 ```bash
 cd worker
@@ -59,35 +67,7 @@ npm run lint
 npm run check
 ```
 
-`npm run check` には TypeScript の型検査、Biome lint、Vitest が含まれます。
-
-## デプロイ
-
-```bash
-cd worker
-npm run deploy
-```
-
-`wrangler.toml` はこのディレクトリにあります。
-
-## Worker の環境変数
-
-Cloudflare Workers には Secret として、ローカル開発時には `worker/.dev.vars` として設定します。
-
-- `GITHUB_DISPATCHER_APP_ID`
-- `GITHUB_DISPATCHER_APP_PRIVATE_KEY`
-- `GITHUB_CHECKER_WEBHOOK_SECRET`
-- `GITHUB_DISPATCH_OWNER`
-- `GITHUB_DISPATCH_REPO`
-- `GITHUB_API_BASE_URL` 任意。既定値は `https://api.github.com`
-
-`repository_dispatch` の `event_type` は固定で `github_app_webhook` を使います。
-
-dispatcher App は install 先がこのリポジトリに固定されている前提なので、Worker は `GITHUB_DISPATCH_OWNER` / `GITHUB_DISPATCH_REPO` から installation を解決します。そのため `GITHUB_DISPATCH_INSTALLATION_ID` のような追加設定は不要です。
-
-`GITHUB_DISPATCHER_APP_PRIVATE_KEY` には GitHub App からダウンロードした PEM をそのまま使えます。`-----BEGIN RSA PRIVATE KEY-----` と `-----BEGIN PRIVATE KEY-----` のどちらも対応します。
-
-デプロイ前には Cloudflare 側へ Secret を登録します。
+### 3. Cloudflare Secret 登録
 
 ```bash
 cd worker
@@ -98,20 +78,68 @@ wrangler secret put GITHUB_DISPATCH_OWNER
 wrangler secret put GITHUB_DISPATCH_REPO
 ```
 
-## `repository_dispatch.yml` 側の secrets
+### 4. デプロイ
 
-このリポジトリの GitHub Actions では、checker App 用に以下の secrets を使います。
+```bash
+cd worker
+npm run deploy
+```
+
+ローカルでは `.dev.vars` に値を入れて使います。
+Cloudflare では同じ値を Secret として入れます。
+dispatcher App の installation は owner/repo から引きます。
+追加の installation ID 設定は不要です。
+
+## Worker の環境変数
+
+| 変数名 | 必須 | 用途 |
+|--------|------|------|
+| `GITHUB_DISPATCHER_APP_ID` | ✅ | dispatcher App の ID |
+| `GITHUB_DISPATCHER_APP_PRIVATE_KEY` | ✅ | dispatcher App の PEM 秘密鍵 |
+| `GITHUB_CHECKER_WEBHOOK_SECRET` | ✅ | checker App の webhook secret |
+| `GITHUB_DISPATCH_OWNER` | ✅ | dispatch 先 owner |
+| `GITHUB_DISPATCH_REPO` | ✅ | dispatch 先 repository 名 |
+| `GITHUB_API_BASE_URL` | 任意 | 既定値は `https://api.github.com` |
+
+- `event_type` は `github_app_webhook` で固定です。
+- PEM は RSA 形式と PKCS#8 形式の両方に対応します。
+- `wrangler.toml` はこのディレクトリ直下にあります。
+
+## Workflow 側の前提
+
+`repository_dispatch.yml` では次の secrets を使います。
 
 - `CHECKER_APP_ID`
 - `CHECKER_PRIVATE_KEY`
 
-`repository_dispatch` 経由では workflow は `client_payload.repository.owner.login` と `client_payload.repository.name` を使って PR repository 用 token を取得し、PR details から head/source repository を解決します。このリポジトリ自身の `pull_request` event でも同じ workflow を直接実行でき、その場合も checker App がこのリポジトリに install されている前提で同じ token 解決を行います。Worker は dispatch 先と同じ repository から来た webhook を送信せず、このリポジトリの PR が `pull_request` trigger と `repository_dispatch` trigger の両方で二重実行されることを避けます。
+workflow は `repository_dispatch` と `pull_request` を処理します。
+前者では payload から PR repository を特定します。
+後者では、この repo に install 済みの checker App を使います。
+Worker は self-webhook を落として二重起動を防ぎます。
 
-また `repository_dispatch.yml` は declarative な linter 定義から changed files を評価し、共通の in-progress check run を作成してから reusable linter workflow を並列実行します。個別 workflow は lint 実行結果だけを返し、最終的な PR comment の upsert と processing check run の success/failure 更新は `repository_dispatch.yml` 側で一括して行います。このリポジトリの PR では `pull_request` trigger、外部リポジトリでは Worker からの `repository_dispatch` trigger を使います。`yamllint` は checkout した target repository の `.yamllint`、`.yamllint.yaml`、`.yamllint.yml` をこの順で探索し、見つからない場合だけ共有デフォルト設定に fallback します。`actionlint` はデフォルトの探索挙動に従い、target repository に `.github/actionlint.yaml` または `.github/actionlint.yml` があれば自動的に読み込みます。private repository を前提に、workflow logs には repository 名や changed file 一覧、lint diagnostics を極力出さず、詳細は PR comment に寄せます。
+### router workflow の流れ
+
+1. changed files と linter 定義を評価する
+2. 共通の in-progress check run を作る
+3. reusable linter workflow を並列実行する
+4. 結果を PR comment と check run に集約する
+
+### linter ごとの扱い
+
+| linter | 設定ファイル / 挙動 |
+|--------|---------------------|
+| `actionlint` | `.github/actionlint.yaml` / `.yml` を自動で読みます。 |
+| `yamllint` | `.yamllint` 系 3 形式を順に探します。 |
+| `zizmor` | このリポジトリでは `zizmor.yml` / `zizmor.yaml` / `.github/zizmor.yml` / `.github/zizmor.yaml` を配置先として案内します。 |
+
+- 詳細ログは抑え、結果は PR comment へ集約します。
 
 ## `repository_dispatch` payload
 
-Worker は `client_payload` に以下のような構造を載せます。
+Worker は `client_payload` を固定形式で送ります。
+`pull_request` では head/base の詳細まで含めます。
+`check_run` では PR 番号だけを最小で含めます。
+不足する詳細は workflow 側で取り直します。
 
 ### `pull_request` event
 
@@ -122,12 +150,9 @@ Worker は `client_payload` に以下のような構造を載せます。
   "delivery_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
   "source_installation_id": 12345,
   "repository": {
-    "full_name": "octo-org/pr-repo",
+    "owner": { "login": "octo-org", "type": "Organization" },
     "name": "pr-repo",
-    "owner": {
-      "login": "octo-org",
-      "type": "Organization"
-    }
+    "full_name": "octo-org/pr-repo"
   },
   "pull_request": {
     "number": 42,
@@ -135,18 +160,12 @@ Worker は `client_payload` に以下のような構造を載せます。
       "ref": "feature/example",
       "sha": "abc123",
       "repo": {
-        "full_name": "octocat/forked-repo",
+        "owner": { "login": "octocat", "type": "User" },
         "name": "forked-repo",
-        "owner": {
-          "login": "octocat",
-          "type": "User"
-        }
+        "full_name": "octocat/forked-repo"
       }
     },
-    "base": {
-      "ref": "main",
-      "sha": "def456"
-    }
+    "base": { "ref": "main", "sha": "def456" }
   }
 }
 ```
@@ -160,16 +179,11 @@ Worker は `client_payload` に以下のような構造を載せます。
   "delivery_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
   "source_installation_id": 12345,
   "repository": {
-    "full_name": "octo-org/pr-repo",
+    "owner": { "login": "octo-org", "type": "Organization" },
     "name": "pr-repo",
-    "owner": {
-      "login": "octo-org",
-      "type": "Organization"
-    }
+    "full_name": "octo-org/pr-repo"
   },
-  "pull_request": {
-    "number": 42
-  },
+  "pull_request": { "number": 42 },
   "check_run": {
     "name": "ci / test",
     "status": "completed",
@@ -179,15 +193,19 @@ Worker は `client_payload` に以下のような構造を載せます。
 }
 ```
 
-`repository` は PR が属する repository を表します。fork PR のように source repository が異なる場合は、`pull_request.head.repo` を source repository として扱います。
+### payload の補足
 
-`pull_request` event では `pull_request` に head/base を含む詳細を入れます。
-
-`check_run` event では Worker は source repository への追加 API call を行わないため、`pull_request` には関連 PR の `number` を最低限載せ、必要な詳細は `repository_dispatch.yml` 側で checker App token を使って取得する想定です。なお `linter-service:` で始まる `external_id` を持つ self-generated な check run は Worker 側で無視し、通知用 check run が再び `repository_dispatch` を起動しないようにしています。また dispatch 先 repository 自身の webhook も Worker 側で無視し、このリポジトリでは direct `pull_request` trigger を正とします。
+- `repository` は PR が属する repository を表します。
+- fork PR では `pull_request.head.repo` が source repository です。
+- `check_run` では source repo への追加 API call を行いません。
+- `linter-service:` で始まる check run は Worker が無視します。
+- dispatch 先 repo 自身の webhook も Worker が無視します。
 
 ## 関連ファイル
 
-- `src/index.ts`: Worker 本体
-- `test/index.test.ts`: webhook 検証と dispatch 処理のテスト
-- `wrangler.toml`: Cloudflare Workers 設定
-- `.dev.vars.example`: ローカル開発用の環境変数サンプル
+| ファイル | 役割 |
+|----------|------|
+| `src/index.ts` | Worker 本体 |
+| `test/index.test.ts` | Webhook 検証と dispatch 処理のテスト |
+| `wrangler.toml` | Cloudflare Workers 設定 |
+| `.dev.vars.example` | ローカル開発用の環境変数サンプル |
