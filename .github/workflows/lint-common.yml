@@ -1,0 +1,280 @@
+name: Lint Common
+
+on:
+  workflow_call:
+    inputs:
+      changed-files-json:
+        required: true
+        type: string
+      linter-name:
+        required: true
+        type: string
+      source-head-sha:
+        required: true
+        type: string
+      source-owner:
+        required: true
+        type: string
+      source-repo:
+        required: true
+        type: string
+    outputs:
+      comment_body_base64:
+        description: Base64-encoded markdown section for this linter
+        value: ${{ jobs.run-linter.outputs.comment_body_base64 }}
+      conclusion:
+        description: success or failure
+        value: ${{ jobs.run-linter.outputs.conclusion }}
+    secrets:
+      CHECKER_APP_ID:
+        required: true
+      CHECKER_PRIVATE_KEY:
+        required: true
+
+permissions: {}
+
+jobs:
+  run-linter:
+    runs-on: ubuntu-latest
+    outputs:
+      comment_body_base64: ${{ steps.publish_outputs.outputs.comment_body_base64 }}
+      conclusion: ${{ steps.publish_outputs.outputs.conclusion }}
+    env:
+      LINTER_NAME: ${{ inputs.linter-name }}
+    steps:
+      - name: Mask repository metadata
+        env:
+          SOURCE_HEAD_SHA: ${{ inputs.source-head-sha }}
+          SOURCE_OWNER: ${{ inputs.source-owner }}
+          SOURCE_REPO: ${{ inputs.source-repo }}
+        run: |
+          echo "::add-mask::$SOURCE_OWNER"
+          echo "::add-mask::$SOURCE_REPO"
+          echo "::add-mask::$SOURCE_OWNER/$SOURCE_REPO"
+          echo "::add-mask::$SOURCE_HEAD_SHA"
+
+      - name: Get source repository checker token
+        id: get_source_token
+        uses: actions/create-github-app-token@v3.0.0
+        with:
+          app-id: ${{ secrets.CHECKER_APP_ID }}
+          owner: ${{ inputs.source-owner }}
+          private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
+          repositories: ${{ inputs.source-repo }}
+
+      - name: Check out source repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.source-head-sha }}
+          repository: ${{ inputs.source-owner }}/${{ inputs.source-repo }}
+          token: ${{ steps.get_source_token.outputs.token }}
+
+      - name: Set up Python
+        if: ${{ inputs.linter-name == 'yamllint' }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Select lint target files
+        id: select_files
+        env:
+          CHANGED_FILES_JSON: ${{ inputs.changed-files-json }}
+          LINTER_NAME: ${{ inputs.linter-name }}
+        run: |
+          python3 - <<'PY' > "$RUNNER_TEMP/selected-files.txt"
+          import json
+          import os
+
+          linter_name = os.environ["LINTER_NAME"]
+          files = json.loads(os.environ["CHANGED_FILES_JSON"])
+
+          for path in files:
+              lower_path = path.lower()
+              if linter_name == "actionlint":
+                  if lower_path.startswith(".github/workflows/") and lower_path.endswith((".yaml", ".yml")):
+                      print(path)
+              elif linter_name == "yamllint":
+                  if lower_path.endswith((".yaml", ".yml")):
+                      print(path)
+              else:
+                  raise SystemExit(f"unsupported linter: {linter_name}")
+          PY
+
+          count=$(wc -l < "$RUNNER_TEMP/selected-files.txt" | tr -d ' ')
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Install linter tool
+        id: install_tool
+        if: ${{ steps.select_files.outputs.count != '0' }}
+        env:
+          LINTER_NAME: ${{ inputs.linter-name }}
+        run: |
+          case "$LINTER_NAME" in
+            actionlint)
+              curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash \
+                -o "$RUNNER_TEMP/download-actionlint.bash"
+              bash "$RUNNER_TEMP/download-actionlint.bash" latest
+              ;;
+            yamllint)
+              python -m pip install --upgrade pip yamllint
+              ;;
+            *)
+              echo "unsupported linter: $LINTER_NAME" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Run linter
+        id: run_linter
+        if: ${{ steps.select_files.outputs.count != '0' }}
+        env:
+          LINTER_NAME: ${{ inputs.linter-name }}
+        run: |
+          set +e
+          mapfile -t files < "$RUNNER_TEMP/selected-files.txt"
+
+          case "$LINTER_NAME" in
+            actionlint)
+              ./actionlint "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
+              ;;
+            yamllint)
+              cat > "$RUNNER_TEMP/yamllint.yaml" <<'EOF'
+              extends: default
+              rules:
+                comments-indentation: disable
+                document-start: disable
+                line-length: disable
+                truthy:
+                  check-keys: false
+              EOF
+              yamllint -c "$RUNNER_TEMP/yamllint.yaml" "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
+              ;;
+            *)
+              echo "unsupported linter: $LINTER_NAME" >&2
+              exit 1
+              ;;
+          esac
+
+          status=$?
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Prepare linter report
+        if: ${{ always() }}
+        env:
+          FILE_COUNT: ${{ steps.select_files.outputs.count }}
+          EXIT_CODE: ${{ steps.run_linter.outputs.exit_code }}
+          INSTALL_TOOL_OUTCOME: ${{ steps.install_tool.outcome }}
+          LINTER_NAME: ${{ inputs.linter-name }}
+          RUN_LINTER_OUTCOME: ${{ steps.run_linter.outcome }}
+          SELECT_FILES_OUTCOME: ${{ steps.select_files.outcome }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          linter_name = os.environ["LINTER_NAME"]
+          file_count = int(os.environ.get("FILE_COUNT", "0") or "0")
+          exit_code_raw = os.environ.get("EXIT_CODE", "")
+          select_outcome = os.environ.get("SELECT_FILES_OUTCOME", "")
+          install_outcome = os.environ.get("INSTALL_TOOL_OUTCOME", "")
+          run_outcome = os.environ.get("RUN_LINTER_OUTCOME", "")
+          runner_temp = Path(os.environ["RUNNER_TEMP"])
+          output_path = runner_temp / "linter-output.txt"
+          comment_path = runner_temp / "linter-comment.md"
+
+          config = {
+              "actionlint": {
+                  "details_fallback": "actionlint did not produce diagnostic output before the job failed.",
+                  "heading": "### actionlint",
+                  "infra_failure": "❌ The `actionlint` workflow failed before producing a detailed report. See the workflow logs.",
+                  "no_files": "No matching workflow files were selected for `actionlint`.",
+                  "success": "✅ No issues found in {count} changed GitHub Actions workflow file(s).",
+                  "failure": "❌ Issues found in {count} changed GitHub Actions workflow file(s).",
+              },
+              "yamllint": {
+                  "details_fallback": "yamllint did not produce diagnostic output before the job failed.",
+                  "heading": "### yamllint",
+                  "infra_failure": "❌ The `yamllint` workflow failed before producing a detailed report. See the workflow logs.",
+                  "no_files": "No matching YAML files were selected for `yamllint`.",
+                  "success": "✅ No issues found in {count} changed YAML file(s).",
+                  "failure": "❌ Issues found in {count} changed YAML file(s).",
+              },
+          }
+
+          if linter_name not in config:
+              raise SystemExit(f"unsupported linter: {linter_name}")
+
+          linter_config = config[linter_name]
+          lines = [linter_config["heading"], ""]
+          has_step_failure = "failure" in {select_outcome, install_outcome, run_outcome}
+          success = (not has_step_failure) and (file_count == 0 or exit_code_raw == "0")
+
+          if has_step_failure and not output_path.exists():
+              lines.append(linter_config["infra_failure"])
+          elif file_count == 0 and exit_code_raw == "":
+              lines.append(linter_config["no_files"])
+          elif success:
+              lines.append(linter_config["success"].format(count=file_count))
+          else:
+              details = (
+                  output_path.read_text(encoding="utf-8").strip()
+                  if output_path.exists()
+                  else linter_config["details_fallback"]
+              )
+              if len(details) > 60000:
+                  details = f"{details[:60000]}\n... truncated ..."
+
+              lines.extend(
+                  [
+                      linter_config["failure"].format(count=file_count),
+                      "",
+                      "<details><summary>Details</summary>",
+                      "",
+                      "```text",
+                      details,
+                      "```",
+                      "</details>",
+                  ]
+              )
+
+          comment_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+
+      - name: Publish workflow outputs
+        id: publish_outputs
+        if: ${{ always() }}
+        env:
+          FILE_COUNT: ${{ steps.select_files.outputs.count }}
+          EXIT_CODE: ${{ steps.run_linter.outputs.exit_code }}
+          INSTALL_TOOL_OUTCOME: ${{ steps.install_tool.outcome }}
+          RUN_LINTER_OUTCOME: ${{ steps.run_linter.outcome }}
+          SELECT_FILES_OUTCOME: ${{ steps.select_files.outcome }}
+        run: |
+          python3 - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          file_count = int(os.environ.get("FILE_COUNT", "0") or "0")
+          exit_code_raw = os.environ.get("EXIT_CODE", "")
+          select_outcome = os.environ.get("SELECT_FILES_OUTCOME", "")
+          install_outcome = os.environ.get("INSTALL_TOOL_OUTCOME", "")
+          run_outcome = os.environ.get("RUN_LINTER_OUTCOME", "")
+          has_step_failure = "failure" in {select_outcome, install_outcome, run_outcome}
+          conclusion = (
+              "success"
+              if (not has_step_failure) and (file_count == 0 or exit_code_raw == "0")
+              else "failure"
+          )
+
+          comment_path = Path(os.environ["RUNNER_TEMP"]) / "linter-comment.md"
+          body = comment_path.read_text(encoding="utf-8") if comment_path.exists() else ""
+          encoded_body = base64.b64encode(body.encode("utf-8")).decode("ascii")
+
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          with output_path.open("a", encoding="utf-8") as fh:
+              fh.write(f"comment_body_base64={encoded_body}\n")
+              fh.write(f"conclusion={conclusion}\n")
+          PY
