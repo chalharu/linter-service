@@ -23,6 +23,7 @@ permissions: {}
 
 jobs:
   run-linter:
+    environment: checker-app
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
