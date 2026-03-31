@@ -594,6 +594,7 @@ jobs:
 
       - name: Get PR repository checker token
         id: get_pr_token
+        continue-on-error: ${{ steps.decode_repository_context.outputs.pr-is-current-repo == 'true' }}
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
@@ -603,7 +604,11 @@ jobs:
           repositories: ${{ steps.decode_repository_context.outputs.pr-repo }}
 
       - name: Delete legacy workflow-authored PR comments
-        if: ${{ steps.decode_repository_context.outputs.pr-is-current-repo == 'true' }}
+        if: >-
+          ${{
+            steps.decode_repository_context.outputs.pr-is-current-repo == 'true' &&
+            steps.get_pr_token.outcome == 'success'
+          }}
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           COMMENT_MARKER: '<!-- linter-service:results -->'
@@ -742,7 +747,11 @@ jobs:
           PR_OWNER: ${{ steps.decode_repository_context.outputs.pr-owner }}
           PR_REPO: ${{ steps.decode_repository_context.outputs.pr-repo }}
         with:
-          github-token: ${{ steps.get_pr_token.outputs.token }}
+          github-token: >-
+            ${{
+              steps.get_pr_token.outcome == 'success' && steps.get_pr_token.outputs.token ||
+              (steps.decode_repository_context.outputs.pr-is-current-repo == 'true' && github.token || '')
+            }}
           script: |
             const fs = require("node:fs");
 
