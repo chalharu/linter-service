@@ -12,72 +12,88 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       changed-files-json: ${{ steps.collect.outputs.changed-files-json }}
+      pr-owner: ${{ steps.collect.outputs.pr-owner }}
+      pr-repo: ${{ steps.collect.outputs.pr-repo }}
+      pull-request-number: ${{ steps.collect.outputs.pull-request-number }}
       run-actionlint: ${{ steps.collect.outputs.run-actionlint }}
       run-yamllint: ${{ steps.collect.outputs.run-yamllint }}
       source-head-sha: ${{ steps.collect.outputs.source-head-sha }}
       source-owner: ${{ steps.collect.outputs.source-owner }}
       source-repo: ${{ steps.collect.outputs.source-repo }}
     env:
+      PR_REPOSITORY_NAME: ${{ github.event.client_payload.repository.name }}
+      PR_REPOSITORY_OWNER: ${{ github.event.client_payload.repository.owner.login }}
+      PULL_REQUEST_NUMBER: ${{ github.event.client_payload.pull_request.number }}
       SOURCE_HEAD_SHA: ${{ github.event.client_payload.pull_request.head.sha || github.event.client_payload.check_run.head_sha }}
-      SOURCE_PR_NUMBER: ${{ github.event.client_payload.pull_request.number }}
-      SOURCE_REPOSITORY_NAME: ${{ github.event.client_payload.repository.name }}
-      SOURCE_REPOSITORY_OWNER: ${{ github.event.client_payload.repository.owner.login }}
     steps:
       - name: Validate dispatch metadata
         run: |
-          test -n "$SOURCE_REPOSITORY_OWNER" || {
+          test -n "$PR_REPOSITORY_OWNER" || {
             echo "client_payload.repository.owner.login is required" >&2
             exit 1
           }
-          test -n "$SOURCE_REPOSITORY_NAME" || {
+          test -n "$PR_REPOSITORY_NAME" || {
             echo "client_payload.repository.name is required" >&2
             exit 1
           }
-          test -n "$SOURCE_HEAD_SHA" || {
-            echo "client_payload pull request head SHA is required" >&2
-            exit 1
-          }
-          case "$SOURCE_PR_NUMBER" in
+          case "$PULL_REQUEST_NUMBER" in
             ''|*[!0-9]*)
               echo "client_payload.pull_request.number must be a positive integer" >&2
               exit 1
               ;;
           esac
-          test "$SOURCE_PR_NUMBER" -gt 0 || {
+          test "$PULL_REQUEST_NUMBER" -gt 0 || {
             echo "client_payload.pull_request.number must be a positive integer" >&2
             exit 1
           }
+
+      - name: Mask repository metadata
+        run: |
+          echo "::add-mask::$PR_REPOSITORY_OWNER"
+          echo "::add-mask::$PR_REPOSITORY_NAME"
+          echo "::add-mask::$PR_REPOSITORY_OWNER/$PR_REPOSITORY_NAME"
+          if [ -n "$SOURCE_HEAD_SHA" ]; then
+            echo "::add-mask::$SOURCE_HEAD_SHA"
+          fi
 
       - name: Get checker token
         id: get_checker_token
         uses: actions/create-github-app-token@v3.0.0
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
-          owner: ${{ env.SOURCE_REPOSITORY_OWNER }}
+          owner: ${{ env.PR_REPOSITORY_OWNER }}
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
-          repositories: ${{ env.SOURCE_REPOSITORY_NAME }}
+          repositories: ${{ env.PR_REPOSITORY_NAME }}
 
       - name: Collect pull request context
         id: collect
         uses: actions/github-script@v7
         env:
+          PR_REPOSITORY_NAME: ${{ env.PR_REPOSITORY_NAME }}
+          PR_REPOSITORY_OWNER: ${{ env.PR_REPOSITORY_OWNER }}
+          PULL_REQUEST_NUMBER: ${{ env.PULL_REQUEST_NUMBER }}
           SOURCE_HEAD_SHA: ${{ env.SOURCE_HEAD_SHA }}
-          SOURCE_PR_NUMBER: ${{ env.SOURCE_PR_NUMBER }}
-          SOURCE_REPOSITORY_NAME: ${{ env.SOURCE_REPOSITORY_NAME }}
-          SOURCE_REPOSITORY_OWNER: ${{ env.SOURCE_REPOSITORY_OWNER }}
         with:
           github-token: ${{ steps.get_checker_token.outputs.token }}
           script: |
-            const owner = process.env.SOURCE_REPOSITORY_OWNER;
-            const repo = process.env.SOURCE_REPOSITORY_NAME;
-            const sourceHeadSha = process.env.SOURCE_HEAD_SHA;
-            const pullNumber = Number(process.env.SOURCE_PR_NUMBER);
+            const owner = process.env.PR_REPOSITORY_OWNER;
+            const repo = process.env.PR_REPOSITORY_NAME;
+            const pullNumber = Number(process.env.PULL_REQUEST_NUMBER);
+            const sourceHeadShaFromPayload = process.env.SOURCE_HEAD_SHA || "";
+
+            const pull = (
+              await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: pullNumber,
+              })
+            ).data;
 
             const files = await github.paginate(github.rest.pulls.listFiles, {
               owner,
-              per_page: 100,
-              pull_number: pullNumber,
               repo,
+              pull_number: pullNumber,
+              per_page: 100,
             });
 
             const currentFiles = files
@@ -90,6 +106,22 @@ jobs:
               yamllint: (path) => /\.(?:yaml|yml)$/i.test(path),
             };
 
+            const sourceOwner = pull.head.repo?.owner?.login ?? owner;
+            const sourceRepo = pull.head.repo?.name ?? repo;
+            const sourceHeadSha = sourceHeadShaFromPayload || pull.head.sha;
+
+            if (!sourceHeadSha) {
+              throw new Error("pull request head SHA is required");
+            }
+
+            core.setSecret(owner);
+            core.setSecret(repo);
+            core.setSecret(`${owner}/${repo}`);
+            core.setSecret(sourceOwner);
+            core.setSecret(sourceRepo);
+            core.setSecret(`${sourceOwner}/${sourceRepo}`);
+            core.setSecret(sourceHeadSha);
+
             for (const [name, matches] of Object.entries(selectors)) {
               core.setOutput(
                 `run-${name}`,
@@ -98,21 +130,21 @@ jobs:
             }
 
             core.setOutput("changed-files-json", JSON.stringify(currentFiles));
+            core.setOutput("pr-owner", owner);
+            core.setOutput("pr-repo", repo);
+            core.setOutput("pull-request-number", String(pullNumber));
             core.setOutput("source-head-sha", sourceHeadSha);
-            core.setOutput("source-owner", owner);
-            core.setOutput("source-repo", repo);
+            core.setOutput("source-owner", sourceOwner);
+            core.setOutput("source-repo", sourceRepo);
 
-      - name: Print routing summary
+      - name: Report routing status
         env:
-          CHANGED_FILES_JSON: ${{ steps.collect.outputs.changed-files-json }}
           RUN_ACTIONLINT: ${{ steps.collect.outputs.run-actionlint }}
           RUN_YAMLLINT: ${{ steps.collect.outputs.run-yamllint }}
         run: |
-          echo "Source repository: ${SOURCE_REPOSITORY_OWNER}/${SOURCE_REPOSITORY_NAME}"
-          echo "Pull request: ${SOURCE_PR_NUMBER}"
-          echo "Changed files: ${CHANGED_FILES_JSON}"
-          echo "Run actionlint: ${RUN_ACTIONLINT}"
-          echo "Run yamllint: ${RUN_YAMLLINT}"
+          echo "Routing targets resolved."
+          echo "actionlint selected: ${RUN_ACTIONLINT}"
+          echo "yamllint selected: ${RUN_YAMLLINT}"
 
   actionlint:
     needs: detect-targets
@@ -121,6 +153,9 @@ jobs:
     secrets: inherit
     with:
       changed-files-json: ${{ needs.detect-targets.outputs.changed-files-json }}
+      pr-owner: ${{ needs.detect-targets.outputs.pr-owner }}
+      pr-repo: ${{ needs.detect-targets.outputs.pr-repo }}
+      pull-request-number: ${{ needs.detect-targets.outputs.pull-request-number }}
       source-head-sha: ${{ needs.detect-targets.outputs.source-head-sha }}
       source-owner: ${{ needs.detect-targets.outputs.source-owner }}
       source-repo: ${{ needs.detect-targets.outputs.source-repo }}
@@ -132,6 +167,9 @@ jobs:
     secrets: inherit
     with:
       changed-files-json: ${{ needs.detect-targets.outputs.changed-files-json }}
+      pr-owner: ${{ needs.detect-targets.outputs.pr-owner }}
+      pr-repo: ${{ needs.detect-targets.outputs.pr-repo }}
+      pull-request-number: ${{ needs.detect-targets.outputs.pull-request-number }}
       source-head-sha: ${{ needs.detect-targets.outputs.source-head-sha }}
       source-owner: ${{ needs.detect-targets.outputs.source-owner }}
       source-repo: ${{ needs.detect-targets.outputs.source-repo }}
@@ -142,4 +180,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Report skipped lint execution
-        run: echo "No configured linters matched the changed files in this pull request."
+        run: echo "No configured linters matched the pull request changes."

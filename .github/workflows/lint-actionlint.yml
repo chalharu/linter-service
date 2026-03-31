@@ -6,6 +6,15 @@ on:
       changed-files-json:
         required: true
         type: string
+      pr-owner:
+        required: true
+        type: string
+      pr-repo:
+        required: true
+        type: string
+      pull-request-number:
+        required: true
+        type: string
       source-head-sha:
         required: true
         type: string
@@ -27,8 +36,33 @@ jobs:
   actionlint:
     runs-on: ubuntu-latest
     steps:
-      - name: Get checker token
-        id: get_checker_token
+      - name: Mask repository metadata
+        env:
+          PR_OWNER: ${{ inputs.pr-owner }}
+          PR_REPO: ${{ inputs.pr-repo }}
+          SOURCE_HEAD_SHA: ${{ inputs.source-head-sha }}
+          SOURCE_OWNER: ${{ inputs.source-owner }}
+          SOURCE_REPO: ${{ inputs.source-repo }}
+        run: |
+          echo "::add-mask::$PR_OWNER"
+          echo "::add-mask::$PR_REPO"
+          echo "::add-mask::$PR_OWNER/$PR_REPO"
+          echo "::add-mask::$SOURCE_OWNER"
+          echo "::add-mask::$SOURCE_REPO"
+          echo "::add-mask::$SOURCE_OWNER/$SOURCE_REPO"
+          echo "::add-mask::$SOURCE_HEAD_SHA"
+
+      - name: Get PR repository checker token
+        id: get_pr_token
+        uses: actions/create-github-app-token@v3.0.0
+        with:
+          app-id: ${{ secrets.CHECKER_APP_ID }}
+          owner: ${{ inputs.pr-owner }}
+          private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
+          repositories: ${{ inputs.pr-repo }}
+
+      - name: Get source repository checker token
+        id: get_source_token
         uses: actions/create-github-app-token@v3.0.0
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
@@ -42,7 +76,7 @@ jobs:
           persist-credentials: false
           ref: ${{ inputs.source-head-sha }}
           repository: ${{ inputs.source-owner }}/${{ inputs.source-repo }}
-          token: ${{ steps.get_checker_token.outputs.token }}
+          token: ${{ steps.get_source_token.outputs.token }}
 
       - name: Select workflow files
         id: select_files
@@ -62,13 +96,6 @@ jobs:
           count=$(wc -l < "$RUNNER_TEMP/actionlint-files.txt" | tr -d ' ')
           echo "count=$count" >> "$GITHUB_OUTPUT"
 
-          if [ "$count" -eq 0 ]; then
-            echo "No workflow files matched actionlint."
-          else
-            echo "Actionlint targets:"
-            cat "$RUNNER_TEMP/actionlint-files.txt"
-          fi
-
       - name: Install actionlint
         if: ${{ steps.select_files.outputs.count != '0' }}
         run: |
@@ -77,7 +104,115 @@ jobs:
           bash "$RUNNER_TEMP/download-actionlint.bash" latest
 
       - name: Run actionlint
+        id: run_actionlint
         if: ${{ steps.select_files.outputs.count != '0' }}
         run: |
+          set +e
           mapfile -t files < "$RUNNER_TEMP/actionlint-files.txt"
-          ./actionlint "${files[@]}"
+          ./actionlint "${files[@]}" > "$RUNNER_TEMP/actionlint-output.txt" 2>&1
+          status=$?
+          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Prepare actionlint comment
+        if: ${{ always() }}
+        env:
+          FILE_COUNT: ${{ steps.select_files.outputs.count }}
+          EXIT_CODE: ${{ steps.run_actionlint.outputs.exit_code }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          marker = "<!-- linter-service:actionlint -->"
+          file_count = int(os.environ.get("FILE_COUNT", "0") or "0")
+          exit_code_raw = os.environ.get("EXIT_CODE", "")
+          exit_code = int(exit_code_raw) if exit_code_raw else (0 if file_count == 0 else 1)
+          runner_temp = Path(os.environ["RUNNER_TEMP"])
+          output_path = runner_temp / "actionlint-output.txt"
+          comment_path = runner_temp / "actionlint-comment.md"
+
+          lines = [marker, "## actionlint", ""]
+
+          if file_count == 0:
+              lines.append("No matching workflow files were selected for `actionlint`.")
+          elif exit_code == 0:
+              lines.append(
+                  f"✅ No issues found in {file_count} changed GitHub Actions workflow file(s)."
+              )
+          else:
+              details = (
+                  output_path.read_text(encoding="utf-8").strip()
+                  if output_path.exists()
+                  else "actionlint did not produce diagnostic output before the job failed."
+              )
+              if len(details) > 60000:
+                  details = f"{details[:60000]}\n... truncated ..."
+
+              lines.extend(
+                  [
+                      f"❌ Issues found in {file_count} changed GitHub Actions workflow file(s).",
+                      "",
+                      "<details><summary>Details</summary>",
+                      "",
+                      "```text",
+                      details,
+                      "```",
+                      "</details>",
+                  ]
+              )
+
+          comment_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+
+      - name: Upsert actionlint comment
+        if: ${{ always() }}
+        uses: actions/github-script@v7
+        env:
+          COMMENT_FILE: ${{ runner.temp }}/actionlint-comment.md
+          COMMENT_MARKER: '<!-- linter-service:actionlint -->'
+          PR_NUMBER: ${{ inputs.pull-request-number }}
+          PR_OWNER: ${{ inputs.pr-owner }}
+          PR_REPO: ${{ inputs.pr-repo }}
+        with:
+          github-token: ${{ steps.get_pr_token.outputs.token }}
+          script: |
+            const fs = require("node:fs");
+
+            const body = fs.readFileSync(process.env.COMMENT_FILE, "utf8");
+            const marker = process.env.COMMENT_MARKER;
+            const owner = process.env.PR_OWNER;
+            const repo = process.env.PR_REPO;
+            const issueNumber = Number(process.env.PR_NUMBER);
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: issueNumber,
+              per_page: 100,
+            });
+
+            const existing = comments.find((comment) => comment.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              body,
+            });
+
+      - name: Fail on actionlint findings
+        if: ${{ steps.select_files.outputs.count != '0' && steps.run_actionlint.outputs.exit_code != '0' }}
+        run: |
+          echo "actionlint reported findings." >&2
+          exit 1

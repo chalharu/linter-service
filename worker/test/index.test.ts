@@ -5,7 +5,7 @@ import worker, { type Env } from "../src/index";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const TEST_PRIVATE_KEY = privateKey
-	.export({ format: "pem", type: "pkcs8" })
+	.export({ format: "pem", type: "pkcs1" })
 	.toString();
 
 const baseEnv: Env = {
@@ -348,6 +348,42 @@ describe("github webhook proxy worker", () => {
 		expect(responseJson.error).toBe(
 			"failed to resolve dispatcher installation",
 		);
+		expect(consoleError).toHaveBeenCalled();
+	});
+
+	it("returns a JSON error when the dispatcher app key is invalid", async () => {
+		const fetchMock = vi.mocked(fetch);
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+
+		const request = createWebhookRequest(
+			"pull_request",
+			{
+				action: "opened",
+				installation: { id: 987 },
+				pull_request: {
+					base: { ref: "main" },
+					head: { ref: "feature/example" },
+					number: 42,
+				},
+				repository: {
+					full_name: "acme/source-repo",
+				},
+			},
+			baseEnv.GITHUB_CHECKER_WEBHOOK_SECRET,
+		);
+
+		const response = await worker.fetch(request, {
+			...baseEnv,
+			GITHUB_DISPATCHER_APP_PRIVATE_KEY:
+				"-----BEGIN RSA PRIVATE KEY-----\ninvalid\n-----END RSA PRIVATE KEY-----",
+		});
+		const responseJson = await response.json<{ error: string }>();
+
+		expect(response.status).toBe(500);
+		expect(responseJson.error).toBe("failed to create dispatcher app JWT");
+		expect(fetchMock).not.toHaveBeenCalled();
 		expect(consoleError).toHaveBeenCalled();
 	});
 

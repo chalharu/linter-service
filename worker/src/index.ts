@@ -1,4 +1,4 @@
-import { importPKCS8, SignJWT } from "jose";
+import { SignJWT } from "jose";
 
 export interface Env {
 	GITHUB_DISPATCHER_APP_ID: string;
@@ -403,15 +403,20 @@ async function createAppJwt(
 	appId: string,
 	privateKeyPem: string,
 ): Promise<string> {
-	const key = await importPKCS8(privateKeyPem, "RS256");
-	const now = Math.floor(Date.now() / 1000);
+	try {
+		const key = await importAppPrivateKey(privateKeyPem);
+		const now = Math.floor(Date.now() / 1000);
 
-	return new SignJWT({})
-		.setProtectedHeader({ alg: "RS256" })
-		.setIssuedAt(now - 60)
-		.setExpirationTime(now + 9 * 60)
-		.setIssuer(appId)
-		.sign(key);
+		return new SignJWT({})
+			.setProtectedHeader({ alg: "RS256" })
+			.setIssuedAt(now - 60)
+			.setExpirationTime(now + 9 * 60)
+			.setIssuer(appId)
+			.sign(key);
+	} catch (error) {
+		console.error("failed to create dispatcher app JWT", error);
+		throw new HttpError(500, "failed to create dispatcher app JWT");
+	}
 }
 
 async function sendRepositoryDispatch(
@@ -444,8 +449,29 @@ async function fetchGitHubText(
 	init: RequestInit,
 	errorMessage: string,
 ): Promise<string> {
-	const response = await fetch(url, init);
-	const responseText = await response.text();
+	let response: Response;
+
+	try {
+		response = await fetch(url, init);
+	} catch (error) {
+		console.error(errorMessage, {
+			error,
+			url,
+		});
+		throw new HttpError(502, errorMessage);
+	}
+
+	let responseText: string;
+
+	try {
+		responseText = await response.text();
+	} catch (error) {
+		console.error(errorMessage, {
+			error,
+			url,
+		});
+		throw new HttpError(502, errorMessage);
+	}
 
 	if (!response.ok) {
 		console.error(errorMessage, {
@@ -627,7 +653,113 @@ function getGitHubApiBaseUrl(env: Env): string {
 }
 
 function normalizeMultilineSecret(secret: string): string {
-	return secret.replace(/\\n/g, "\n");
+	const trimmedSecret = secret.trim();
+	const unwrappedSecret =
+		trimmedSecret.startsWith('"') && trimmedSecret.endsWith('"')
+			? trimmedSecret.slice(1, -1)
+			: trimmedSecret;
+
+	return unwrappedSecret.replace(/\\n/g, "\n");
+}
+
+async function importAppPrivateKey(privateKeyPem: string): Promise<CryptoKey> {
+	const normalizedPrivateKeyPem = normalizeMultilineSecret(privateKeyPem);
+	const keyData = normalizedPrivateKeyPem.includes("BEGIN RSA PRIVATE KEY")
+		? wrapPkcs1RsaPrivateKey(
+				pemBlockToDer(normalizedPrivateKeyPem, "RSA PRIVATE KEY"),
+			)
+		: pemBlockToDer(normalizedPrivateKeyPem, "PRIVATE KEY");
+
+	return crypto.subtle.importKey(
+		"pkcs8",
+		toArrayBuffer(keyData),
+		{ hash: "SHA-256", name: "RSASSA-PKCS1-v1_5" },
+		false,
+		["sign"],
+	);
+}
+
+function pemBlockToDer(pem: string, label: string): Uint8Array {
+	const normalizedPem = pem.replace(/\r/g, "");
+	const pemMatcher = new RegExp(
+		`-----BEGIN ${label}-----([\\s\\S]+?)-----END ${label}-----`,
+	);
+	const match = normalizedPem.match(pemMatcher);
+
+	if (!match) {
+		throw new Error(`missing PEM block: ${label}`);
+	}
+
+	const base64Payload = match[1].replace(/\s+/g, "");
+	const binary = atob(base64Payload);
+	const bytes = new Uint8Array(binary.length);
+
+	for (let index = 0; index < binary.length; index += 1) {
+		bytes[index] = binary.charCodeAt(index);
+	}
+
+	return bytes;
+}
+
+function wrapPkcs1RsaPrivateKey(pkcs1KeyBytes: Uint8Array): Uint8Array {
+	const version = new Uint8Array([0x02, 0x01, 0x00]);
+	const algorithmIdentifier = new Uint8Array([
+		0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01,
+		0x01, 0x05, 0x00,
+	]);
+	const privateKeyOctetString = encodeDerElement(0x04, pkcs1KeyBytes);
+
+	return encodeDerElement(
+		0x30,
+		concatUint8Arrays(version, algorithmIdentifier, privateKeyOctetString),
+	);
+}
+
+function encodeDerElement(tag: number, body: Uint8Array): Uint8Array {
+	return concatUint8Arrays(
+		new Uint8Array([tag]),
+		encodeDerLength(body.length),
+		body,
+	);
+}
+
+function encodeDerLength(length: number): Uint8Array {
+	if (length < 0x80) {
+		return new Uint8Array([length]);
+	}
+
+	const bytes: number[] = [];
+	let remainingLength = length;
+
+	while (remainingLength > 0) {
+		bytes.unshift(remainingLength & 0xff);
+		remainingLength >>= 8;
+	}
+
+	return new Uint8Array([0x80 | bytes.length, ...bytes]);
+}
+
+function concatUint8Arrays(...arrays: Uint8Array[]): Uint8Array {
+	const totalLength = arrays.reduce(
+		(currentLength, array) => currentLength + array.length,
+		0,
+	);
+	const combined = new Uint8Array(totalLength);
+	let offset = 0;
+
+	for (const array of arrays) {
+		combined.set(array, offset);
+		offset += array.length;
+	}
+
+	return combined;
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+	return bytes.buffer.slice(
+		bytes.byteOffset,
+		bytes.byteOffset + bytes.byteLength,
+	) as ArrayBuffer;
 }
 
 function timingSafeEqual(left: string, right: string): boolean {
