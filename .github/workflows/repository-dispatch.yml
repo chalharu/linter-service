@@ -354,7 +354,7 @@ jobs:
               (response) => response.data.check_runs,
             );
             const existing = checkRuns.find(
-              (checkRun) => checkRun.external_id === externalId,
+              (checkRun) => checkRun && checkRun.external_id === externalId,
             );
 
             if (existing) {
@@ -675,7 +675,7 @@ jobs:
               (response) => response.data.check_runs,
             );
             const existing = checkRuns.find(
-              (checkRun) => checkRun.external_id === externalId,
+              (checkRun) => checkRun && checkRun.external_id === externalId,
             );
 
             if (existing) {
