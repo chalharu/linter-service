@@ -6,7 +6,7 @@
 
 ## 主な場所
 
-- `.github/workflows/repository-dispatch.yml`: `repository_dispatch` とこのリポジトリ自身の `pull_request` を受けて changed files から対象 linter を選ぶ router workflow
+- `.github/workflows/repository-dispatch.yml`: `repository_dispatch` とこのリポジトリ自身の `pull_request` を受けて changed files から対象 linter（`actionlint` / `action-shellcheck` / `biome` / `ghalint` / `spectral` / `taplo` / `yamllint` / `zizmor`）を選ぶ router workflow
 - `.github/workflows/lint-*.yml`: linter ごとの reusable workflow
 - `.github/workflows/ci.yml`: `worker/` 配下の型検査とテスト
 - `worker/`: GitHub App Webhook を受けて `repository_dispatch` を送る Cloudflare Worker

@@ -24,6 +24,7 @@ permissions: {}
 jobs:
   run-linter:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       comment_body_base64: ${{ steps.publish_outputs.outputs.comment_body_base64 }}
       conclusion: ${{ steps.publish_outputs.outputs.conclusion }}
@@ -87,6 +88,7 @@ jobs:
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
           owner: ${{ steps.decode_context.outputs.source-owner }}
+          permission-contents: read
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ steps.decode_context.outputs.source-repo }}
 
@@ -98,8 +100,14 @@ jobs:
           repository: ${{ steps.decode_context.outputs.source-owner }}/${{ steps.decode_context.outputs.source-repo }}
           token: ${{ steps.get_source_token.outputs.token }}
 
+      - name: Set up Node.js
+        if: ${{ inputs.linter-name == 'biome' || inputs.linter-name == 'spectral' || inputs.linter-name == 'taplo' }}
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24"
+
       - name: Set up Python
-        if: ${{ inputs.linter-name == 'yamllint' }}
+        if: ${{ inputs.linter-name == 'yamllint' || inputs.linter-name == 'zizmor' }}
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.x"
@@ -121,8 +129,20 @@ jobs:
 
           for path in files:
               lower_path = path.lower()
-              if linter_name == "actionlint":
+              if linter_name in {"actionlint", "ghalint", "zizmor"}:
                   if lower_path.startswith(".github/workflows/") and lower_path.endswith((".yaml", ".yml")):
+                      print(path)
+              elif linter_name == "action-shellcheck":
+                  if lower_path.endswith((".bash", ".sh")):
+                      print(path)
+              elif linter_name == "biome":
+                  if lower_path.endswith((".cjs", ".cts", ".js", ".json", ".jsonc", ".jsx", ".mjs", ".mts", ".ts", ".tsx")):
+                      print(path)
+              elif linter_name == "spectral":
+                  if lower_path.endswith((".json", ".yaml", ".yml")):
+                      print(path)
+              elif linter_name == "taplo":
+                  if lower_path.endswith(".toml"):
                       print(path)
               elif linter_name == "yamllint":
                   if lower_path.endswith((".yaml", ".yml")):
@@ -138,6 +158,7 @@ jobs:
         id: install_tool
         if: ${{ steps.select_files.outputs.count != '0' }}
         env:
+          GH_TOKEN: ${{ github.token }}
           LINTER_NAME: ${{ inputs.linter-name }}
         run: |
           case "$LINTER_NAME" in
@@ -146,8 +167,40 @@ jobs:
                 -o "$RUNNER_TEMP/download-actionlint.bash"
               bash "$RUNNER_TEMP/download-actionlint.bash" latest
               ;;
+            action-shellcheck)
+              if command -v shellcheck >/dev/null 2>&1; then
+                shellcheck --version
+              else
+                sudo apt-get update
+                sudo apt-get install -y shellcheck
+              fi
+              ;;
+            biome)
+              npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/npm-tools" @biomejs/biome
+              echo "$RUNNER_TEMP/npm-tools/node_modules/.bin" >> "$GITHUB_PATH"
+              ;;
+            ghalint)
+              version=$(gh release view --repo suzuki-shunsuke/ghalint --json tagName --jq .tagName)
+              asset="ghalint_${version#v}_linux_amd64.tar.gz"
+              mkdir -p "$RUNNER_TEMP/bin"
+              gh release download "$version" --repo suzuki-shunsuke/ghalint --pattern "$asset" --dir "$RUNNER_TEMP"
+              tar -xzf "$RUNNER_TEMP/$asset" -C "$RUNNER_TEMP/bin"
+              chmod +x "$RUNNER_TEMP/bin/ghalint"
+              echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+              ;;
+            spectral)
+              npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/npm-tools" @stoplight/spectral-cli
+              echo "$RUNNER_TEMP/npm-tools/node_modules/.bin" >> "$GITHUB_PATH"
+              ;;
+            taplo)
+              npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/npm-tools" @taplo/cli
+              echo "$RUNNER_TEMP/npm-tools/node_modules/.bin" >> "$GITHUB_PATH"
+              ;;
             yamllint)
               python -m pip install --upgrade pip yamllint
+              ;;
+            zizmor)
+              python -m pip install --upgrade pip zizmor
               ;;
             *)
               echo "unsupported linter: $LINTER_NAME" >&2
@@ -164,9 +217,76 @@ jobs:
           set +e
           mapfile -t files < "$RUNNER_TEMP/selected-files.txt"
 
+          copy_selected_files_to_root() {
+            local target_root=$1
+            shift
+
+            for file in "$@"; do
+              local destination="$target_root/$file"
+              mkdir -p "$(dirname "$destination")"
+              cp "$file" "$destination"
+            done
+          }
+
+          copy_ghalint_config() {
+            local target_root=$1
+            local config_path
+
+            for config_path in \
+              .ghalint.yaml \
+              .ghalint.yml \
+              ghalint.yaml \
+              ghalint.yml \
+              .github/ghalint.yaml \
+              .github/ghalint.yml
+            do
+              if [ -f "$config_path" ]; then
+                local destination="$target_root/$config_path"
+                mkdir -p "$(dirname "$destination")"
+                cp "$config_path" "$destination"
+                return 0
+              fi
+            done
+          }
+
           case "$LINTER_NAME" in
           actionlint)
             ./actionlint "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
+            ;;
+          action-shellcheck)
+            shellcheck --external-sources --format=gcc "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
+            ;;
+          biome)
+            biome lint --colors=off --files-ignore-unknown=true "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
+            ;;
+          ghalint)
+            temp_repo="$RUNNER_TEMP/ghalint-repo"
+            rm -rf "$temp_repo"
+            mkdir -p "$temp_repo"
+            copy_selected_files_to_root "$temp_repo" "${files[@]}"
+            copy_ghalint_config "$temp_repo"
+            (
+              cd "$temp_repo"
+              GHALINT_LOG_COLOR=never ghalint run
+            ) > "$RUNNER_TEMP/linter-output.txt" 2>&1
+            ;;
+          spectral)
+            spectral_args=(lint --fail-severity warn --ignore-unknown-format)
+            if [ ! -f .spectral.yaml ] && [ ! -f .spectral.yml ] && [ ! -f .spectral.json ] && [ ! -f .spectral.js ]; then
+              cat > "$RUNNER_TEMP/default-spectral.yaml" <<'EOF'
+          extends:
+            - spectral:oas
+            - spectral:asyncapi
+          EOF
+              spectral_args+=(--ruleset "$RUNNER_TEMP/default-spectral.yaml")
+            fi
+            spectral "${spectral_args[@]}" "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
+            ;;
+          taplo)
+            {
+              taplo --colors never lint "${files[@]}" &&
+              taplo --colors never format --check "${files[@]}"
+            } > "$RUNNER_TEMP/linter-output.txt" 2>&1
             ;;
           yamllint)
             cat > "$RUNNER_TEMP/yamllint.yaml" <<'EOF'
@@ -179,6 +299,9 @@ jobs:
               check-keys: false
           EOF
             yamllint -c "$RUNNER_TEMP/yamllint.yaml" "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
+            ;;
+          zizmor)
+            zizmor --offline --color=never --format=plain "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
             ;;
           *)
             echo "unsupported linter: $LINTER_NAME" >&2
@@ -223,6 +346,46 @@ jobs:
                   "success": "✅ No issues found in {count} changed GitHub Actions workflow file(s).",
                   "failure": "❌ Issues found in {count} changed GitHub Actions workflow file(s).",
               },
+              "action-shellcheck": {
+                  "details_fallback": "action-shellcheck did not produce diagnostic output before the job failed.",
+                  "heading": "### action-shellcheck",
+                  "infra_failure": "❌ The `action-shellcheck` workflow failed before producing a detailed report. See the workflow logs.",
+                  "no_files": "No matching shell script files were selected for `action-shellcheck`.",
+                  "success": "✅ No issues found in {count} changed shell script file(s).",
+                  "failure": "❌ Issues found in {count} changed shell script file(s).",
+              },
+              "biome": {
+                  "details_fallback": "Biome did not produce diagnostic output before the job failed.",
+                  "heading": "### biome",
+                  "infra_failure": "❌ The `biome` workflow failed before producing a detailed report. See the workflow logs.",
+                  "no_files": "No matching JavaScript, TypeScript, or JSON files were selected for `biome`.",
+                  "success": "✅ No issues found in {count} changed JavaScript, TypeScript, or JSON file(s).",
+                  "failure": "❌ Issues found in {count} changed JavaScript, TypeScript, or JSON file(s).",
+              },
+              "ghalint": {
+                  "details_fallback": "ghalint did not produce diagnostic output before the job failed.",
+                  "heading": "### ghalint",
+                  "infra_failure": "❌ The `ghalint` workflow failed before producing a detailed report. See the workflow logs.",
+                  "no_files": "No matching GitHub Actions workflow files were selected for `ghalint`.",
+                  "success": "✅ No issues found in {count} changed GitHub Actions workflow file(s).",
+                  "failure": "❌ Issues found in {count} changed GitHub Actions workflow file(s).",
+              },
+              "spectral": {
+                  "details_fallback": "spectral did not produce diagnostic output before the job failed.",
+                  "heading": "### spectral",
+                  "infra_failure": "❌ The `spectral` workflow failed before producing a detailed report. See the workflow logs.",
+                  "no_files": "No matching YAML or JSON files were selected for `spectral`.",
+                  "success": "✅ No issues found in {count} changed YAML or JSON file(s) checked by `spectral`.",
+                  "failure": "❌ Issues found in {count} changed YAML or JSON file(s) checked by `spectral`.",
+              },
+              "taplo": {
+                  "details_fallback": "Taplo did not produce diagnostic output before the job failed.",
+                  "heading": "### taplo",
+                  "infra_failure": "❌ The `taplo` workflow failed before producing a detailed report. See the workflow logs.",
+                  "no_files": "No matching TOML files were selected for `taplo`.",
+                  "success": "✅ No issues found in {count} changed TOML file(s).",
+                  "failure": "❌ Issues found in {count} changed TOML file(s).",
+              },
               "yamllint": {
                   "details_fallback": "yamllint did not produce diagnostic output before the job failed.",
                   "heading": "### yamllint",
@@ -230,6 +393,14 @@ jobs:
                   "no_files": "No matching YAML files were selected for `yamllint`.",
                   "success": "✅ No issues found in {count} changed YAML file(s).",
                   "failure": "❌ Issues found in {count} changed YAML file(s).",
+              },
+              "zizmor": {
+                  "details_fallback": "zizmor did not produce diagnostic output before the job failed.",
+                  "heading": "### zizmor",
+                  "infra_failure": "❌ The `zizmor` workflow failed before producing a detailed report. See the workflow logs.",
+                  "no_files": "No matching GitHub Actions workflow files were selected for `zizmor`.",
+                  "success": "✅ No issues found in {count} changed GitHub Actions workflow file(s).",
+                  "failure": "❌ Issues found in {count} changed GitHub Actions workflow file(s).",
               },
           }
 
