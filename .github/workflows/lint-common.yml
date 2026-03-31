@@ -6,22 +6,7 @@ on:
       changed-files-json:
         required: true
         type: string
-      check-run-external-id:
-        required: true
-        type: string
-      check-run-name:
-        required: true
-        type: string
       linter-name:
-        required: true
-        type: string
-      pr-owner:
-        required: true
-        type: string
-      pr-repo:
-        required: true
-        type: string
-      pull-request-number:
         required: true
         type: string
       source-head-sha:
@@ -33,6 +18,13 @@ on:
       source-repo:
         required: true
         type: string
+    outputs:
+      comment_body_base64:
+        description: Base64-encoded markdown section for this linter
+        value: ${{ jobs.run-linter.outputs.comment_body_base64 }}
+      conclusion:
+        description: success or failure
+        value: ${{ jobs.run-linter.outputs.conclusion }}
     secrets:
       CHECKER_APP_ID:
         required: true
@@ -44,33 +36,22 @@ permissions: {}
 jobs:
   run-linter:
     runs-on: ubuntu-latest
+    outputs:
+      comment_body_base64: ${{ steps.publish_outputs.outputs.comment_body_base64 }}
+      conclusion: ${{ steps.publish_outputs.outputs.conclusion }}
     env:
       LINTER_NAME: ${{ inputs.linter-name }}
     steps:
       - name: Mask repository metadata
         env:
-          PR_OWNER: ${{ inputs.pr-owner }}
-          PR_REPO: ${{ inputs.pr-repo }}
           SOURCE_HEAD_SHA: ${{ inputs.source-head-sha }}
           SOURCE_OWNER: ${{ inputs.source-owner }}
           SOURCE_REPO: ${{ inputs.source-repo }}
         run: |
-          echo "::add-mask::$PR_OWNER"
-          echo "::add-mask::$PR_REPO"
-          echo "::add-mask::$PR_OWNER/$PR_REPO"
           echo "::add-mask::$SOURCE_OWNER"
           echo "::add-mask::$SOURCE_REPO"
           echo "::add-mask::$SOURCE_OWNER/$SOURCE_REPO"
           echo "::add-mask::$SOURCE_HEAD_SHA"
-
-      - name: Get PR repository checker token
-        id: get_pr_token
-        uses: actions/create-github-app-token@v3.0.0
-        with:
-          app-id: ${{ secrets.CHECKER_APP_ID }}
-          owner: ${{ inputs.pr-owner }}
-          private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
-          repositories: ${{ inputs.pr-repo }}
 
       - name: Get source repository checker token
         id: get_source_token
@@ -124,6 +105,7 @@ jobs:
           echo "count=$count" >> "$GITHUB_OUTPUT"
 
       - name: Install linter tool
+        id: install_tool
         if: ${{ steps.select_files.outputs.count != '0' }}
         env:
           LINTER_NAME: ${{ inputs.linter-name }}
@@ -178,12 +160,15 @@ jobs:
           echo "exit_code=$status" >> "$GITHUB_OUTPUT"
           exit 0
 
-      - name: Prepare linter comment
+      - name: Prepare linter report
         if: ${{ always() }}
         env:
           FILE_COUNT: ${{ steps.select_files.outputs.count }}
           EXIT_CODE: ${{ steps.run_linter.outputs.exit_code }}
+          INSTALL_TOOL_OUTCOME: ${{ steps.install_tool.outcome }}
           LINTER_NAME: ${{ inputs.linter-name }}
+          RUN_LINTER_OUTCOME: ${{ steps.run_linter.outcome }}
+          SELECT_FILES_OUTCOME: ${{ steps.select_files.outcome }}
         run: |
           python3 - <<'PY'
           import os
@@ -192,7 +177,9 @@ jobs:
           linter_name = os.environ["LINTER_NAME"]
           file_count = int(os.environ.get("FILE_COUNT", "0") or "0")
           exit_code_raw = os.environ.get("EXIT_CODE", "")
-          exit_code = int(exit_code_raw) if exit_code_raw else (0 if file_count == 0 else 1)
+          select_outcome = os.environ.get("SELECT_FILES_OUTCOME", "")
+          install_outcome = os.environ.get("INSTALL_TOOL_OUTCOME", "")
+          run_outcome = os.environ.get("RUN_LINTER_OUTCOME", "")
           runner_temp = Path(os.environ["RUNNER_TEMP"])
           output_path = runner_temp / "linter-output.txt"
           comment_path = runner_temp / "linter-comment.md"
@@ -200,14 +187,16 @@ jobs:
           config = {
               "actionlint": {
                   "details_fallback": "actionlint did not produce diagnostic output before the job failed.",
-                  "heading": "## actionlint",
+                  "heading": "### actionlint",
+                  "infra_failure": "❌ The `actionlint` workflow failed before producing a detailed report. See the workflow logs.",
                   "no_files": "No matching workflow files were selected for `actionlint`.",
                   "success": "✅ No issues found in {count} changed GitHub Actions workflow file(s).",
                   "failure": "❌ Issues found in {count} changed GitHub Actions workflow file(s).",
               },
               "yamllint": {
                   "details_fallback": "yamllint did not produce diagnostic output before the job failed.",
-                  "heading": "## yamllint",
+                  "heading": "### yamllint",
+                  "infra_failure": "❌ The `yamllint` workflow failed before producing a detailed report. See the workflow logs.",
                   "no_files": "No matching YAML files were selected for `yamllint`.",
                   "success": "✅ No issues found in {count} changed YAML file(s).",
                   "failure": "❌ Issues found in {count} changed YAML file(s).",
@@ -218,12 +207,15 @@ jobs:
               raise SystemExit(f"unsupported linter: {linter_name}")
 
           linter_config = config[linter_name]
-          marker = f"<!-- linter-service:{linter_name} -->"
-          lines = [marker, linter_config["heading"], ""]
+          lines = [linter_config["heading"], ""]
+          has_step_failure = "failure" in {select_outcome, install_outcome, run_outcome}
+          success = (not has_step_failure) and (file_count == 0 or exit_code_raw == "0")
 
-          if file_count == 0:
+          if has_step_failure and not output_path.exists():
+              lines.append(linter_config["infra_failure"])
+          elif file_count == 0 and exit_code_raw == "":
               lines.append(linter_config["no_files"])
-          elif exit_code == 0:
+          elif success:
               lines.append(linter_config["success"].format(count=file_count))
           else:
               details = (
@@ -250,150 +242,39 @@ jobs:
           comment_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
           PY
 
-      - name: Upsert linter comment
+      - name: Publish workflow outputs
+        id: publish_outputs
         if: ${{ always() }}
-        uses: actions/github-script@v7
         env:
-          COMMENT_FILE: ${{ runner.temp }}/linter-comment.md
-          COMMENT_MARKER: '<!-- linter-service:${{ inputs.linter-name }} -->'
-          PR_NUMBER: ${{ inputs.pull-request-number }}
-          PR_OWNER: ${{ inputs.pr-owner }}
-          PR_REPO: ${{ inputs.pr-repo }}
-        with:
-          github-token: ${{ steps.get_pr_token.outputs.token }}
-          script: |
-            const fs = require("node:fs");
-
-            const body = fs.readFileSync(process.env.COMMENT_FILE, "utf8");
-            const marker = process.env.COMMENT_MARKER;
-            const owner = process.env.PR_OWNER;
-            const repo = process.env.PR_REPO;
-            const issueNumber = Number(process.env.PR_NUMBER);
-
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              owner,
-              repo,
-              issue_number: issueNumber,
-              per_page: 100,
-            });
-
-            const existing = comments.find((comment) => comment.body?.includes(marker));
-
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner,
-                repo,
-                comment_id: existing.id,
-                body,
-              });
-              return;
-            }
-
-            await github.rest.issues.createComment({
-              owner,
-              repo,
-              issue_number: issueNumber,
-              body,
-            });
-
-      - name: Finalize linter check run
-        if: ${{ always() }}
-        uses: actions/github-script@v7
-        env:
-          CHECK_EXTERNAL_ID: ${{ inputs.check-run-external-id }}
-          CHECK_NAME: ${{ inputs.check-run-name }}
           FILE_COUNT: ${{ steps.select_files.outputs.count }}
-          LINTER_EXIT_CODE: ${{ steps.run_linter.outputs.exit_code }}
-          LINTER_NAME: ${{ inputs.linter-name }}
-          SOURCE_HEAD_SHA: ${{ inputs.source-head-sha }}
-          SOURCE_OWNER: ${{ inputs.source-owner }}
-          SOURCE_REPO: ${{ inputs.source-repo }}
-        with:
-          github-token: ${{ steps.get_source_token.outputs.token }}
-          script: |
-            const owner = process.env.SOURCE_OWNER;
-            const repo = process.env.SOURCE_REPO;
-            const headSha = process.env.SOURCE_HEAD_SHA;
-            const externalId = process.env.CHECK_EXTERNAL_ID;
-            const name = process.env.CHECK_NAME;
-            const linterName = process.env.LINTER_NAME;
-            const fileCount = Number(process.env.FILE_COUNT || "0");
-            const exitCode = process.env.LINTER_EXIT_CODE;
-            const success = fileCount === 0 || !exitCode || exitCode === "0";
-            const detailsUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-            const summaryConfig = {
-              actionlint: {
-                failure: `Issues found in ${fileCount} changed GitHub Actions workflow file(s). See the pull request comment for details.`,
-                noFiles: "No matching workflow files were selected for actionlint.",
-                success: `No issues found in ${fileCount} changed GitHub Actions workflow file(s).`,
-              },
-              yamllint: {
-                failure: `Issues found in ${fileCount} changed YAML file(s). See the pull request comment for details.`,
-                noFiles: "No matching YAML files were selected for yamllint.",
-                success: `No issues found in ${fileCount} changed YAML file(s).`,
-              },
-            };
-
-            if (!(linterName in summaryConfig)) {
-              core.setFailed(`unsupported linter: ${linterName}`);
-              return;
-            }
-
-            const summary =
-              fileCount === 0
-                ? summaryConfig[linterName].noFiles
-                : success
-                  ? summaryConfig[linterName].success
-                  : summaryConfig[linterName].failure;
-            const output = {
-              title: success ? `${name} completed` : `${name} found issues`,
-              summary,
-            };
-            const checkRuns = await github.paginate(
-              github.rest.checks.listForRef,
-              {
-                owner,
-                repo,
-                ref: headSha,
-                per_page: 100,
-              },
-              (response) => response.data.check_runs,
-            );
-            const existing = checkRuns.find(
-              (checkRun) => checkRun.external_id === externalId,
-            );
-
-            if (existing) {
-              await github.rest.checks.update({
-                owner,
-                repo,
-                check_run_id: existing.id,
-                conclusion: success ? "success" : "failure",
-                completed_at: new Date().toISOString(),
-                details_url: detailsUrl,
-                external_id: externalId,
-                output,
-                status: "completed",
-              });
-              return;
-            }
-
-            await github.rest.checks.create({
-              owner,
-              repo,
-              name,
-              head_sha: headSha,
-              status: "completed",
-              conclusion: success ? "success" : "failure",
-              details_url: detailsUrl,
-              external_id: externalId,
-              started_at: new Date().toISOString(),
-              completed_at: new Date().toISOString(),
-              output,
-            });
-
-      - name: Fail on linter findings
-        if: ${{ steps.select_files.outputs.count != '0' && steps.run_linter.outputs.exit_code != '0' }}
+          EXIT_CODE: ${{ steps.run_linter.outputs.exit_code }}
+          INSTALL_TOOL_OUTCOME: ${{ steps.install_tool.outcome }}
+          RUN_LINTER_OUTCOME: ${{ steps.run_linter.outcome }}
+          SELECT_FILES_OUTCOME: ${{ steps.select_files.outcome }}
         run: |
-          echo "${LINTER_NAME} reported findings." >&2
-          exit 1
+          python3 - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          file_count = int(os.environ.get("FILE_COUNT", "0") or "0")
+          exit_code_raw = os.environ.get("EXIT_CODE", "")
+          select_outcome = os.environ.get("SELECT_FILES_OUTCOME", "")
+          install_outcome = os.environ.get("INSTALL_TOOL_OUTCOME", "")
+          run_outcome = os.environ.get("RUN_LINTER_OUTCOME", "")
+          has_step_failure = "failure" in {select_outcome, install_outcome, run_outcome}
+          conclusion = (
+              "success"
+              if (not has_step_failure) and (file_count == 0 or exit_code_raw == "0")
+              else "failure"
+          )
+
+          comment_path = Path(os.environ["RUNNER_TEMP"]) / "linter-comment.md"
+          body = comment_path.read_text(encoding="utf-8") if comment_path.exists() else ""
+          encoded_body = base64.b64encode(body.encode("utf-8")).decode("ascii")
+
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          with output_path.open("a", encoding="utf-8") as fh:
+              fh.write(f"comment_body_base64={encoded_body}\n")
+              fh.write(f"conclusion={conclusion}\n")
+          PY

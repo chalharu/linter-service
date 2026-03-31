@@ -11,32 +11,27 @@ jobs:
   detect-targets:
     runs-on: ubuntu-latest
     outputs:
-      actionlint-check-external-id: ${{ steps.collect.outputs.actionlint-check-external-id }}
-      actionlint-check-name: ${{ steps.collect.outputs.actionlint-check-name }}
       actionlint-selected: ${{ steps.collect.outputs.actionlint-selected }}
       changed-files-json: ${{ steps.collect.outputs.changed-files-json }}
       pr-owner: ${{ steps.collect.outputs.pr-owner }}
       pr-repo: ${{ steps.collect.outputs.pr-repo }}
+      processing-check-external-id: ${{ steps.collect.outputs.processing-check-external-id }}
+      processing-check-name: ${{ steps.collect.outputs.processing-check-name }}
       pull-request-number: ${{ steps.collect.outputs.pull-request-number }}
-      selected-linter-names-json: ${{ steps.collect.outputs.selected-linter-names-json }}
       selected-linters-json: ${{ steps.collect.outputs.selected-linters-json }}
       source-head-sha: ${{ steps.collect.outputs.source-head-sha }}
       source-owner: ${{ steps.collect.outputs.source-owner }}
       source-repo: ${{ steps.collect.outputs.source-repo }}
-      yamllint-check-external-id: ${{ steps.collect.outputs.yamllint-check-external-id }}
-      yamllint-check-name: ${{ steps.collect.outputs.yamllint-check-name }}
       yamllint-selected: ${{ steps.collect.outputs.yamllint-selected }}
     env:
       LINTER_DEFINITIONS_JSON: >-
         [
           {
             "name": "actionlint",
-            "check_name": "linter-service / actionlint",
             "patterns": ["^\\.github\\/workflows\\/.+\\.(?:yaml|yml)$"]
           },
           {
             "name": "yamllint",
-            "check_name": "linter-service / yamllint",
             "patterns": ["\\.(?:yaml|yml)$"]
           }
         ]
@@ -149,10 +144,9 @@ jobs:
                 !definition ||
                 typeof definition !== "object" ||
                 typeof definition.name !== "string" ||
-                typeof definition.check_name !== "string" ||
                 !Array.isArray(definition.patterns)
               ) {
-                throw new Error("Each linter definition must include name, check_name, and patterns");
+                throw new Error("Each linter definition must include name and patterns");
               }
 
               const patterns = definition.patterns.map((pattern) => {
@@ -165,29 +159,23 @@ jobs:
               const selected = currentFiles.some((path) =>
                 patterns.some((pattern) => pattern.test(path)),
               );
-              const checkExternalId = `linter-service:${context.runId}:${runAttempt}:${pullNumber}:${definition.name}`;
 
               core.setOutput(`${definition.name}-selected`, String(selected));
-              core.setOutput(`${definition.name}-check-name`, definition.check_name);
-              core.setOutput(`${definition.name}-check-external-id`, checkExternalId);
 
               if (selected) {
-                selectedLinters.push({
-                  check_external_id: checkExternalId,
-                  check_name: definition.check_name,
-                  name: definition.name,
-                });
+                selectedLinters.push(definition.name);
               }
             }
 
             core.setOutput("changed-files-json", JSON.stringify(currentFiles));
             core.setOutput("pr-owner", owner);
             core.setOutput("pr-repo", repo);
-            core.setOutput("pull-request-number", String(pullNumber));
             core.setOutput(
-              "selected-linter-names-json",
-              JSON.stringify(selectedLinters.map((linter) => linter.name)),
+              "processing-check-external-id",
+              `linter-service:${context.runId}:${runAttempt}:${pullNumber}`,
             );
+            core.setOutput("processing-check-name", "linter-service");
+            core.setOutput("pull-request-number", String(pullNumber));
             core.setOutput("selected-linters-json", JSON.stringify(selectedLinters));
             core.setOutput("source-head-sha", sourceHeadSha);
             core.setOutput("source-owner", sourceOwner);
@@ -195,19 +183,15 @@ jobs:
 
       - name: Report routing status
         env:
-          SELECTED_LINTERS_JSON: ${{ steps.collect.outputs.selected-linter-names-json }}
+          SELECTED_LINTERS_JSON: ${{ steps.collect.outputs.selected-linters-json }}
         run: |
           echo "Routing targets resolved."
           echo "Selected linters: ${SELECTED_LINTERS_JSON}"
 
-  notify-linters-started:
+  notify-processing-started:
     needs: detect-targets
     if: ${{ needs.detect-targets.outputs.selected-linters-json != '[]' }}
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        linter: ${{ fromJson(needs.detect-targets.outputs.selected-linters-json) }}
     steps:
       - name: Mask repository metadata
         env:
@@ -229,11 +213,12 @@ jobs:
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ needs.detect-targets.outputs.source-repo }}
 
-      - name: Notify linter start
+      - name: Notify processing start
         uses: actions/github-script@v7
         env:
-          CHECK_EXTERNAL_ID: ${{ matrix.linter.check_external_id }}
-          CHECK_NAME: ${{ matrix.linter.check_name }}
+          PROCESSING_CHECK_EXTERNAL_ID: ${{ needs.detect-targets.outputs.processing-check-external-id }}
+          PROCESSING_CHECK_NAME: ${{ needs.detect-targets.outputs.processing-check-name }}
+          SELECTED_LINTERS_JSON: ${{ needs.detect-targets.outputs.selected-linters-json }}
           SOURCE_HEAD_SHA: ${{ needs.detect-targets.outputs.source-head-sha }}
           SOURCE_OWNER: ${{ needs.detect-targets.outputs.source-owner }}
           SOURCE_REPO: ${{ needs.detect-targets.outputs.source-repo }}
@@ -243,14 +228,18 @@ jobs:
             const owner = process.env.SOURCE_OWNER;
             const repo = process.env.SOURCE_REPO;
             const headSha = process.env.SOURCE_HEAD_SHA;
-            const externalId = process.env.CHECK_EXTERNAL_ID;
-            const name = process.env.CHECK_NAME;
+            const externalId = process.env.PROCESSING_CHECK_EXTERNAL_ID;
+            const name = process.env.PROCESSING_CHECK_NAME;
+            const selectedLinters = JSON.parse(process.env.SELECTED_LINTERS_JSON || "[]");
             const detailsUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            const selectedSummary =
+              selectedLinters.length === 0
+                ? "No linters were selected."
+                : `Running linters: ${selectedLinters.join(", ")}. Detailed results will be posted as a pull request comment.`;
             const output = {
               title: `${name} is running`,
-              summary: "Linter is running. Detailed results will be posted as a pull request comment.",
+              summary: selectedSummary,
             };
-
             const checkRuns = await github.paginate(
               github.rest.checks.listForRef,
               {
@@ -293,17 +282,12 @@ jobs:
   actionlint:
     needs:
       - detect-targets
-      - notify-linters-started
+      - notify-processing-started
     if: ${{ needs.detect-targets.outputs.actionlint-selected == 'true' }}
     uses: ./.github/workflows/lint-actionlint.yml
     secrets: inherit
     with:
       changed-files-json: ${{ needs.detect-targets.outputs.changed-files-json }}
-      check-run-external-id: ${{ needs.detect-targets.outputs.actionlint-check-external-id }}
-      check-run-name: ${{ needs.detect-targets.outputs.actionlint-check-name }}
-      pr-owner: ${{ needs.detect-targets.outputs.pr-owner }}
-      pr-repo: ${{ needs.detect-targets.outputs.pr-repo }}
-      pull-request-number: ${{ needs.detect-targets.outputs.pull-request-number }}
       source-head-sha: ${{ needs.detect-targets.outputs.source-head-sha }}
       source-owner: ${{ needs.detect-targets.outputs.source-owner }}
       source-repo: ${{ needs.detect-targets.outputs.source-repo }}
@@ -311,20 +295,285 @@ jobs:
   yamllint:
     needs:
       - detect-targets
-      - notify-linters-started
+      - notify-processing-started
     if: ${{ needs.detect-targets.outputs.yamllint-selected == 'true' }}
     uses: ./.github/workflows/lint-yamllint.yml
     secrets: inherit
     with:
       changed-files-json: ${{ needs.detect-targets.outputs.changed-files-json }}
-      check-run-external-id: ${{ needs.detect-targets.outputs.yamllint-check-external-id }}
-      check-run-name: ${{ needs.detect-targets.outputs.yamllint-check-name }}
-      pr-owner: ${{ needs.detect-targets.outputs.pr-owner }}
-      pr-repo: ${{ needs.detect-targets.outputs.pr-repo }}
-      pull-request-number: ${{ needs.detect-targets.outputs.pull-request-number }}
       source-head-sha: ${{ needs.detect-targets.outputs.source-head-sha }}
       source-owner: ${{ needs.detect-targets.outputs.source-owner }}
       source-repo: ${{ needs.detect-targets.outputs.source-repo }}
+
+  publish-results:
+    needs:
+      - detect-targets
+      - notify-processing-started
+      - actionlint
+      - yamllint
+    if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mask repository metadata
+        env:
+          PR_OWNER: ${{ needs.detect-targets.outputs.pr-owner }}
+          PR_REPO: ${{ needs.detect-targets.outputs.pr-repo }}
+          SOURCE_HEAD_SHA: ${{ needs.detect-targets.outputs.source-head-sha }}
+          SOURCE_OWNER: ${{ needs.detect-targets.outputs.source-owner }}
+          SOURCE_REPO: ${{ needs.detect-targets.outputs.source-repo }}
+        run: |
+          echo "::add-mask::$PR_OWNER"
+          echo "::add-mask::$PR_REPO"
+          echo "::add-mask::$PR_OWNER/$PR_REPO"
+          echo "::add-mask::$SOURCE_OWNER"
+          echo "::add-mask::$SOURCE_REPO"
+          echo "::add-mask::$SOURCE_OWNER/$SOURCE_REPO"
+          echo "::add-mask::$SOURCE_HEAD_SHA"
+
+      - name: Get PR repository checker token
+        id: get_pr_token
+        uses: actions/create-github-app-token@v3.0.0
+        with:
+          app-id: ${{ secrets.CHECKER_APP_ID }}
+          owner: ${{ needs.detect-targets.outputs.pr-owner }}
+          private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
+          repositories: ${{ needs.detect-targets.outputs.pr-repo }}
+
+      - name: Get source repository checker token
+        id: get_source_token
+        uses: actions/create-github-app-token@v3.0.0
+        with:
+          app-id: ${{ secrets.CHECKER_APP_ID }}
+          owner: ${{ needs.detect-targets.outputs.source-owner }}
+          private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
+          repositories: ${{ needs.detect-targets.outputs.source-repo }}
+
+      - name: Prepare combined report
+        id: prepare_report
+        env:
+          ACTIONLINT_COMMENT_BODY_BASE64: ${{ needs.actionlint.outputs.comment_body_base64 }}
+          ACTIONLINT_CONCLUSION: ${{ needs.actionlint.outputs.conclusion }}
+          ACTIONLINT_JOB_RESULT: ${{ needs.actionlint.result }}
+          SELECTED_LINTERS_JSON: ${{ needs.detect-targets.outputs.selected-linters-json }}
+          YAMLLINT_COMMENT_BODY_BASE64: ${{ needs.yamllint.outputs.comment_body_base64 }}
+          YAMLLINT_CONCLUSION: ${{ needs.yamllint.outputs.conclusion }}
+          YAMLLINT_JOB_RESULT: ${{ needs.yamllint.result }}
+        run: |
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          from pathlib import Path
+
+          selected_linters = json.loads(os.environ["SELECTED_LINTERS_JSON"])
+          runner_temp = Path(os.environ["RUNNER_TEMP"])
+          comment_path = runner_temp / "combined-linter-comment.md"
+          env_map = {
+              "actionlint": {
+                  "comment_body_base64": os.environ.get("ACTIONLINT_COMMENT_BODY_BASE64", ""),
+                  "conclusion": os.environ.get("ACTIONLINT_CONCLUSION", ""),
+                  "job_result": os.environ.get("ACTIONLINT_JOB_RESULT", ""),
+              },
+              "yamllint": {
+                  "comment_body_base64": os.environ.get("YAMLLINT_COMMENT_BODY_BASE64", ""),
+                  "conclusion": os.environ.get("YAMLLINT_CONCLUSION", ""),
+                  "job_result": os.environ.get("YAMLLINT_JOB_RESULT", ""),
+              },
+          }
+
+          sections = []
+          passed = 0
+          failed = 0
+
+          for linter_name in selected_linters:
+              linter_env = env_map.get(linter_name, {})
+              encoded_body = linter_env.get("comment_body_base64", "")
+              job_result = linter_env.get("job_result", "")
+              conclusion = linter_env.get("conclusion", "")
+
+              if encoded_body:
+                  section = base64.b64decode(encoded_body).decode("utf-8").strip()
+              else:
+                  section = ""
+
+              if job_result == "failure" and not section:
+                  section = (
+                      f"### {linter_name}\n\n"
+                      f"❌ The `{linter_name}` workflow failed before producing a detailed report. See the workflow logs."
+                  )
+              elif job_result == "cancelled" and not section:
+                  section = (
+                      f"### {linter_name}\n\n"
+                      f"❌ The `{linter_name}` workflow was cancelled before producing a detailed report."
+                  )
+
+              is_success = job_result not in {"failure", "cancelled"} and conclusion == "success"
+
+              if is_success:
+                  passed += 1
+              else:
+                  failed += 1
+
+              if section:
+                  sections.append(section)
+
+          total = len(selected_linters)
+          overall_conclusion = "success" if failed == 0 else "failure"
+
+          if overall_conclusion == "success":
+              overall_summary = f"All {total} selected linter(s) completed successfully."
+          else:
+              overall_summary = f"{failed} of {total} selected linter(s) reported issues or failed."
+
+          lines = [
+              "<!-- linter-service:results -->",
+              "## linter-service",
+              "",
+              overall_summary,
+              "",
+          ]
+
+          for index, section in enumerate(sections):
+              lines.append(section)
+              if index != len(sections) - 1:
+                  lines.append("")
+
+          comment_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          with output_path.open("a", encoding="utf-8") as fh:
+              fh.write(f"overall_conclusion={overall_conclusion}\n")
+              fh.write(f"overall_summary={overall_summary}\n")
+          PY
+
+      - name: Upsert combined PR comment
+        if: ${{ always() }}
+        uses: actions/github-script@v7
+        env:
+          COMMENT_FILE: ${{ runner.temp }}/combined-linter-comment.md
+          COMMENT_MARKER: '<!-- linter-service:results -->'
+          PR_NUMBER: ${{ needs.detect-targets.outputs.pull-request-number }}
+          PR_OWNER: ${{ needs.detect-targets.outputs.pr-owner }}
+          PR_REPO: ${{ needs.detect-targets.outputs.pr-repo }}
+        with:
+          github-token: ${{ steps.get_pr_token.outputs.token }}
+          script: |
+            const fs = require("node:fs");
+
+            const body = fs.existsSync(process.env.COMMENT_FILE)
+              ? fs.readFileSync(process.env.COMMENT_FILE, "utf8")
+              : [
+                  process.env.COMMENT_MARKER,
+                  "## linter-service",
+                  "",
+                  "❌ The linter-service workflow failed to generate a combined report. See the workflow logs.",
+                  "",
+                ].join("\n");
+            const marker = process.env.COMMENT_MARKER;
+            const owner = process.env.PR_OWNER;
+            const repo = process.env.PR_REPO;
+            const issueNumber = Number(process.env.PR_NUMBER);
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: issueNumber,
+              per_page: 100,
+            });
+
+            const existing = comments.find((comment) => comment.body?.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              body,
+            });
+
+      - name: Finalize processing check run
+        if: ${{ always() }}
+        uses: actions/github-script@v7
+        env:
+          OVERALL_CONCLUSION: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_conclusion || 'failure' }}
+          OVERALL_SUMMARY: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_summary || 'The linter-service workflow failed to generate a combined report.' }}
+          PROCESSING_CHECK_EXTERNAL_ID: ${{ needs.detect-targets.outputs.processing-check-external-id }}
+          PROCESSING_CHECK_NAME: ${{ needs.detect-targets.outputs.processing-check-name }}
+          SOURCE_HEAD_SHA: ${{ needs.detect-targets.outputs.source-head-sha }}
+          SOURCE_OWNER: ${{ needs.detect-targets.outputs.source-owner }}
+          SOURCE_REPO: ${{ needs.detect-targets.outputs.source-repo }}
+        with:
+          github-token: ${{ steps.get_source_token.outputs.token }}
+          script: |
+            const owner = process.env.SOURCE_OWNER;
+            const repo = process.env.SOURCE_REPO;
+            const headSha = process.env.SOURCE_HEAD_SHA;
+            const externalId = process.env.PROCESSING_CHECK_EXTERNAL_ID;
+            const name = process.env.PROCESSING_CHECK_NAME;
+            const overallConclusion = process.env.OVERALL_CONCLUSION;
+            const overallSummary = process.env.OVERALL_SUMMARY;
+            const detailsUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            const output = {
+              title: overallConclusion === "success" ? `${name} completed` : `${name} found issues`,
+              summary: overallSummary,
+            };
+            const checkRuns = await github.paginate(
+              github.rest.checks.listForRef,
+              {
+                owner,
+                repo,
+                ref: headSha,
+                per_page: 100,
+              },
+              (response) => response.data.check_runs,
+            );
+            const existing = checkRuns.find(
+              (checkRun) => checkRun.external_id === externalId,
+            );
+
+            if (existing) {
+              await github.rest.checks.update({
+                owner,
+                repo,
+                check_run_id: existing.id,
+                conclusion: overallConclusion,
+                completed_at: new Date().toISOString(),
+                details_url: detailsUrl,
+                external_id: externalId,
+                output,
+                status: "completed",
+              });
+              return;
+            }
+
+            await github.rest.checks.create({
+              owner,
+              repo,
+              name,
+              head_sha: headSha,
+              status: "completed",
+              conclusion: overallConclusion,
+              details_url: detailsUrl,
+              external_id: externalId,
+              started_at: new Date().toISOString(),
+              completed_at: new Date().toISOString(),
+              output,
+            });
+
+      - name: Fail workflow when lint reports issues
+        if: ${{ steps.prepare_report.outputs.overall_conclusion != 'success' }}
+        run: |
+          echo "One or more linters reported issues." >&2
+          exit 1
 
   no-linters-needed:
     needs: detect-targets

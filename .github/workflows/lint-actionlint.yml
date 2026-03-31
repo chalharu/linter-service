@@ -6,21 +6,6 @@ on:
       changed-files-json:
         required: true
         type: string
-      check-run-external-id:
-        required: true
-        type: string
-      check-run-name:
-        required: true
-        type: string
-      pr-owner:
-        required: true
-        type: string
-      pr-repo:
-        required: true
-        type: string
-      pull-request-number:
-        required: true
-        type: string
       source-head-sha:
         required: true
         type: string
@@ -30,6 +15,13 @@ on:
       source-repo:
         required: true
         type: string
+    outputs:
+      comment_body_base64:
+        description: Base64-encoded markdown section for actionlint
+        value: ${{ jobs.actionlint.outputs.comment_body_base64 }}
+      conclusion:
+        description: success or failure
+        value: ${{ jobs.actionlint.outputs.conclusion }}
     secrets:
       CHECKER_APP_ID:
         required: true
@@ -44,12 +36,7 @@ jobs:
     secrets: inherit
     with:
       changed-files-json: ${{ inputs.changed-files-json }}
-      check-run-external-id: ${{ inputs.check-run-external-id }}
-      check-run-name: ${{ inputs.check-run-name }}
       linter-name: actionlint
-      pr-owner: ${{ inputs.pr-owner }}
-      pr-repo: ${{ inputs.pr-repo }}
-      pull-request-number: ${{ inputs.pull-request-number }}
       source-head-sha: ${{ inputs.source-head-sha }}
       source-owner: ${{ inputs.source-owner }}
       source-repo: ${{ inputs.source-repo }}

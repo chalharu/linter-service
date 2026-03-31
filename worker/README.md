@@ -31,7 +31,7 @@ Worker はこの App の credentials を使って、このリポジトリへ `re
   - `Pull requests: read`
   - `Metadata: read`
 
-Cloudflare Worker はこの App の webhook secret で署名検証を行います。`repository_dispatch.yml` ではこの App の credentials を使って、PR metadata の取得、対象ソース repository の checkout、PR comment の更新、linter ごとの check run 更新を行います。
+Cloudflare Worker はこの App の webhook secret で署名検証を行います。`repository_dispatch.yml` ではこの App の credentials を使って、PR metadata の取得、対象ソース repository の checkout、集約 PR comment の更新、共通 processing check run の更新を行います。
 
 ## 役割
 
@@ -105,7 +105,7 @@ wrangler secret put GITHUB_DISPATCH_REPO
 
 workflow は `client_payload.repository.owner.login` と `client_payload.repository.name` を使って PR repository 用 token を取得し、PR details から head/source repository を解決します。
 
-また `repository_dispatch.yml` は declarative な linter 定義から changed files を評価し、対象 linter の in-progress check run を先に作成してから reusable linter workflow を並列実行します。各 workflow は結果を対象 PR comment に upsert し、対応する check run も success/failure へ更新します。private repository を前提に、workflow logs には repository 名や changed file 一覧、lint diagnostics を極力出さず、詳細は PR comment に寄せます。
+また `repository_dispatch.yml` は declarative な linter 定義から changed files を評価し、共通の in-progress check run を作成してから reusable linter workflow を並列実行します。個別 workflow は lint 実行結果だけを返し、最終的な PR comment の upsert と processing check run の success/failure 更新は `repository_dispatch.yml` 側で一括して行います。private repository を前提に、workflow logs には repository 名や changed file 一覧、lint diagnostics を極力出さず、詳細は PR comment に寄せます。
 
 ## `repository_dispatch` payload
 
