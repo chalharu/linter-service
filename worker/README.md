@@ -20,18 +20,17 @@ Worker はこの App の credentials を使って、このリポジトリへ `re
 ### `linter-service-checker`
 
 - 利用場所: `.github/workflows/repository-dispatch.yml`
-- Install 先: 各利用リポジトリ
+- Install 先: 各利用リポジトリ（このリポジトリ自身を含む）
 - Webhook: Cloudflare Worker
   - `Pull request`
   - `Check run`
 - 権限:
   - `Checks: write`
   - `Contents: read`
-  - `Issues: write`
-  - `Pull requests: read`
+  - `Pull requests: write`
   - `Metadata: read`
 
-Cloudflare Worker はこの App の webhook secret で署名検証を行います。`repository_dispatch.yml` ではこの App の credentials を使って、PR metadata の取得、対象ソース repository の checkout、集約 PR comment の更新、共通 processing check run の更新を行います。
+Cloudflare Worker はこの App の webhook secret で署名検証を行います。`repository_dispatch.yml` ではこの App の credentials を使って、PR metadata の取得、対象ソース repository の checkout、集約 PR comment の更新、共通 processing check run の更新を行います。workflow 側の `permissions` は `{}` のままにし、GitHub への書き込みは checker App token を使います。
 
 ## 役割
 
@@ -106,7 +105,7 @@ wrangler secret put GITHUB_DISPATCH_REPO
 - `CHECKER_APP_ID`
 - `CHECKER_PRIVATE_KEY`
 
-`repository_dispatch` 経由では workflow は `client_payload.repository.owner.login` と `client_payload.repository.name` を使って PR repository 用 token を取得し、PR details から head/source repository を解決します。このリポジトリ自身の `pull_request` event でも同じ workflow を直接実行でき、その場合は `github.event` から同等の情報を解決します。Worker は dispatch 先と同じ repository から来た webhook を送信せず、このリポジトリの PR が `pull_request` trigger と `repository_dispatch` trigger の両方で二重実行されることを避けます。
+`repository_dispatch` 経由では workflow は `client_payload.repository.owner.login` と `client_payload.repository.name` を使って PR repository 用 token を取得し、PR details から head/source repository を解決します。このリポジトリ自身の `pull_request` event でも同じ workflow を直接実行でき、その場合も checker App がこのリポジトリに install されている前提で同じ token 解決を行います。Worker は dispatch 先と同じ repository から来た webhook を送信せず、このリポジトリの PR が `pull_request` trigger と `repository_dispatch` trigger の両方で二重実行されることを避けます。
 
 また `repository_dispatch.yml` は declarative な linter 定義から changed files を評価し、共通の in-progress check run を作成してから reusable linter workflow を並列実行します。個別 workflow は lint 実行結果だけを返し、最終的な PR comment の upsert と processing check run の success/failure 更新は `repository_dispatch.yml` 側で一括して行います。このリポジトリの PR では `pull_request` trigger、外部リポジトリでは Worker からの `repository_dispatch` trigger を使います。private repository を前提に、workflow logs には repository 名や changed file 一覧、lint diagnostics を極力出さず、詳細は PR comment に寄せます。
 

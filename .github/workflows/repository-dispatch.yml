@@ -253,8 +253,6 @@ jobs:
     needs: detect-targets
     if: ${{ needs.detect-targets.outputs.selected-linters-json != '[]' }}
     runs-on: ubuntu-latest
-    permissions:
-      checks: write
     steps:
       - name: Download dispatch context artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -288,8 +286,6 @@ jobs:
         id: decode_source_context
         env:
           CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
-          CURRENT_REPO: ${{ github.event.repository.name }}
-          CURRENT_OWNER: ${{ github.repository_owner }}
         run: |
           python3 - <<'PY'
           import json
@@ -297,18 +293,12 @@ jobs:
           from pathlib import Path
 
           context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
-          current_owner = os.environ["CURRENT_OWNER"]
-          current_repo = os.environ["CURRENT_REPO"]
           source_owner = context["source_owner"]
           source_repo = context["source_repo"]
           values = {
               "processing-check-external-id": context["processing_check_external_id"],
               "processing-check-name": context["processing_check_name"],
               "source-head-sha": context["source_head_sha"],
-              "source-is-current-repo": str(
-                  source_owner.lower() == current_owner.lower()
-                  and source_repo.lower() == current_repo.lower()
-              ).lower(),
               "source-owner": source_owner,
               "source-repo": source_repo,
           }
@@ -321,7 +311,6 @@ jobs:
 
       - name: Get source repository checker token
         id: get_source_token
-        if: ${{ steps.decode_source_context.outputs.source-is-current-repo != 'true' }}
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
@@ -339,7 +328,7 @@ jobs:
           SOURCE_OWNER: ${{ steps.decode_source_context.outputs.source-owner }}
           SOURCE_REPO: ${{ steps.decode_source_context.outputs.source-repo }}
         with:
-          github-token: ${{ steps.decode_source_context.outputs.source-is-current-repo == 'true' && github.token || steps.get_source_token.outputs.token }}
+          github-token: ${{ steps.get_source_token.outputs.token }}
           script: |
             const owner = process.env.SOURCE_OWNER;
             const repo = process.env.SOURCE_REPO;
@@ -419,10 +408,6 @@ jobs:
       - yamllint
     if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
     runs-on: ubuntu-latest
-    permissions:
-      checks: write
-      issues: write
-      pull-requests: write
     steps:
       - name: Download dispatch context artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -462,8 +447,6 @@ jobs:
         id: decode_repository_context
         env:
           CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
-          CURRENT_REPO: ${{ github.event.repository.name }}
-          CURRENT_OWNER: ${{ github.repository_owner }}
         run: |
           python3 - <<'PY'
           import json
@@ -471,26 +454,16 @@ jobs:
           from pathlib import Path
 
           context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
-          current_owner = os.environ["CURRENT_OWNER"]
-          current_repo = os.environ["CURRENT_REPO"]
           pr_owner = context["pr_owner"]
           pr_repo = context["pr_repo"]
           source_owner = context["source_owner"]
           source_repo = context["source_repo"]
           values = {
-              "pr-is-current-repo": str(
-                  pr_owner.lower() == current_owner.lower()
-                  and pr_repo.lower() == current_repo.lower()
-              ).lower(),
               "pr-owner": pr_owner,
               "pr-repo": pr_repo,
               "processing-check-external-id": context["processing_check_external_id"],
               "processing-check-name": context["processing_check_name"],
               "source-head-sha": context["source_head_sha"],
-              "source-is-current-repo": str(
-                  source_owner.lower() == current_owner.lower()
-                  and source_repo.lower() == current_repo.lower()
-              ).lower(),
               "source-owner": source_owner,
               "source-repo": source_repo,
           }
@@ -503,7 +476,6 @@ jobs:
 
       - name: Get PR repository checker token
         id: get_pr_token
-        if: ${{ steps.decode_repository_context.outputs.pr-is-current-repo != 'true' }}
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
@@ -513,7 +485,6 @@ jobs:
 
       - name: Get source repository checker token
         id: get_source_token
-        if: ${{ steps.decode_repository_context.outputs.source-is-current-repo != 'true' }}
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
@@ -629,7 +600,7 @@ jobs:
           PR_OWNER: ${{ steps.decode_repository_context.outputs.pr-owner }}
           PR_REPO: ${{ steps.decode_repository_context.outputs.pr-repo }}
         with:
-          github-token: ${{ steps.decode_repository_context.outputs.pr-is-current-repo == 'true' && github.token || steps.get_pr_token.outputs.token }}
+          github-token: ${{ steps.get_pr_token.outputs.token }}
           script: |
             const fs = require("node:fs");
 
@@ -685,7 +656,7 @@ jobs:
           SOURCE_OWNER: ${{ steps.decode_repository_context.outputs.source-owner }}
           SOURCE_REPO: ${{ steps.decode_repository_context.outputs.source-repo }}
         with:
-          github-token: ${{ steps.decode_repository_context.outputs.source-is-current-repo == 'true' && github.token || steps.get_source_token.outputs.token }}
+          github-token: ${{ steps.get_source_token.outputs.token }}
           script: |
             const owner = process.env.SOURCE_OWNER;
             const repo = process.env.SOURCE_REPO;
