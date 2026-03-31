@@ -27,8 +27,7 @@ Worker はこの App の credentials を使って、このリポジトリへ `re
 - 権限:
   - `Checks: write`
   - `Contents: read`
-  - `Issues: write`
-  - `Pull requests: read`
+  - `Pull requests: write`
   - `Metadata: read`
 
 Cloudflare Worker はこの App の webhook secret で署名検証を行います。`repository_dispatch.yml` ではこの App の credentials を使って、PR metadata の取得、対象ソース repository の checkout、集約 PR comment の更新、共通 processing check run の更新を行います。

@@ -599,7 +599,7 @@ jobs:
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
           owner: ${{ steps.decode_repository_context.outputs.pr-owner }}
-          permission-issues: write
+          permission-pull-requests: write
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ steps.decode_repository_context.outputs.pr-repo }}
 
