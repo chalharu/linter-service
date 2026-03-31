@@ -603,42 +603,6 @@ jobs:
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ steps.decode_repository_context.outputs.pr-repo }}
 
-      - name: Delete legacy workflow-authored PR comments
-        if: ${{ steps.decode_repository_context.outputs.pr-is-current-repo == 'true' }}
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
-        env:
-          COMMENT_MARKER: '<!-- linter-service:results -->'
-          PR_NUMBER: ${{ needs.detect-targets.outputs.pull-request-number }}
-          PR_OWNER: ${{ steps.decode_repository_context.outputs.pr-owner }}
-          PR_REPO: ${{ steps.decode_repository_context.outputs.pr-repo }}
-        with:
-          github-token: ${{ github.token }}
-          script: |
-            const marker = process.env.COMMENT_MARKER;
-            const owner = process.env.PR_OWNER;
-            const repo = process.env.PR_REPO;
-            const issueNumber = Number(process.env.PR_NUMBER);
-
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              owner,
-              repo,
-              issue_number: issueNumber,
-              per_page: 100,
-            });
-
-            const legacyComments = comments.filter((comment) =>
-              comment.body?.includes(marker) &&
-              comment.user?.login === "github-actions[bot]",
-            );
-
-            for (const comment of legacyComments) {
-              await github.rest.issues.deleteComment({
-                owner,
-                repo,
-                comment_id: comment.id,
-              });
-            }
-
       - name: Get source repository checker token
         id: get_source_token
         if: ${{ steps.decode_repository_context.outputs.source-is-current-repo != 'true' }}
@@ -739,6 +703,7 @@ jobs:
         env:
           COMMENT_FILE: ${{ runner.temp }}/combined-linter-comment.md
           COMMENT_MARKER: '<!-- linter-service:results -->'
+          PREFER_APP_AUTHORED_COMMENT: ${{ steps.get_pr_token.outcome == 'success' && 'true' || 'false' }}
           PR_NUMBER: ${{ needs.detect-targets.outputs.pull-request-number }}
           PR_OWNER: ${{ steps.decode_repository_context.outputs.pr-owner }}
           PR_REPO: ${{ steps.decode_repository_context.outputs.pr-repo }}
@@ -761,9 +726,13 @@ jobs:
                   "",
                 ].join("\n");
             const marker = process.env.COMMENT_MARKER;
+            const preferAppAuthoredComment =
+              process.env.PREFER_APP_AUTHORED_COMMENT === "true";
             const owner = process.env.PR_OWNER;
             const repo = process.env.PR_REPO;
             const issueNumber = Number(process.env.PR_NUMBER);
+            const isWorkflowAuthoredComment = (comment) =>
+              comment.user?.login === "github-actions[bot]";
 
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner,
@@ -772,7 +741,12 @@ jobs:
               per_page: 100,
             });
 
-            const existing = comments.find((comment) => comment.body?.includes(marker));
+            const matchingComments = comments.filter((comment) =>
+              comment.body?.includes(marker),
+            );
+            const existing = preferAppAuthoredComment
+              ? matchingComments.find((comment) => !isWorkflowAuthoredComment(comment))
+              : matchingComments.find((comment) => isWorkflowAuthoredComment(comment));
 
             if (existing) {
               await github.rest.issues.updateComment({
