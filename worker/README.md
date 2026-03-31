@@ -56,8 +56,11 @@ npm run dev
 
 ```bash
 cd worker
+npm run lint
 npm run check
 ```
+
+`npm run check` には TypeScript の型検査、Biome lint、Vitest が含まれます。
 
 ## デプロイ
 
