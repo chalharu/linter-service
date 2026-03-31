@@ -21,9 +21,12 @@ checker App Webhook
  repository-dispatch.yml
         |
         v
- reusable workflows
-        |
-        v
+ lint-common.yml
+         |
+         v
+ linter shell scripts
+         |
+         v
  PR comment / check run 更新
 ```
 
@@ -121,7 +124,7 @@ Worker は self-webhook を落として二重起動を防ぎます。
 
 1. changed files と linter 定義を評価する
 2. 共通の in-progress check run を作る
-3. reusable linter workflow を並列実行する
+3. `lint-common.yml` を linter 名ごとに並列実行する
 4. 結果を PR comment と check run に集約する
 
 ### linter ごとの扱い
@@ -134,6 +137,7 @@ Worker は self-webhook を落として二重起動を防ぎます。
 | `yamllint` | `.yamllint` 系 3 形式を順に探します。 |
 | `zizmor` | このリポジトリでは `zizmor.yml` / `zizmor.yaml` / `.github/zizmor.yml` / `.github/zizmor.yaml` を配置先として案内します。 |
 
+- 実装本体は `.github/scripts/linters/*.sh` に分割しています。
 - 詳細ログは抑え、結果は PR comment へ集約します。
 
 ## `repository_dispatch` payload
