@@ -1,0 +1,39 @@
+{
+  "name": "linter-service-webhook-proxy",
+  "version": "0.1.0",
+  "description": "Cloudflare Workers webhook proxy for GitHub App repository_dispatch forwarding",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit && vitest run",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chalharu/linter-service.git"
+  },
+  "keywords": [
+    "cloudflare-workers",
+    "github-app",
+    "repository-dispatch",
+    "webhook"
+  ],
+  "license": "AGPL-3.0-only",
+  "bugs": {
+    "url": "https://github.com/chalharu/linter-service/issues"
+  },
+  "homepage": "https://github.com/chalharu/linter-service#readme",
+  "dependencies": {
+    "jose": "^6.2.2"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260329.1",
+    "@types/node": "^25.5.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2",
+    "wrangler": "^4.78.0"
+  }
+}

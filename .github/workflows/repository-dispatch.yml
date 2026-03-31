@@ -1,0 +1,41 @@
+name: Repository Dispatch
+
+on:
+  repository_dispatch:
+
+permissions: {}
+
+jobs:
+  run-linter-skeleton:
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_REPOSITORY_OWNER: ${{ github.event.client_payload.repository.owner.login }}
+      SOURCE_REPOSITORY_NAME: ${{ github.event.client_payload.repository.name }}
+    steps:
+      - name: Validate dispatch metadata
+        run: |
+          test -n "$SOURCE_REPOSITORY_OWNER" || {
+            echo "client_payload.repository.owner.login is required" >&2
+            exit 1
+          }
+          test -n "$SOURCE_REPOSITORY_NAME" || {
+            echo "client_payload.repository.name is required" >&2
+            exit 1
+          }
+
+      - name: Get checker token
+        id: get_token
+        uses: actions/create-github-app-token@v3.0.0
+        with:
+          private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
+          app-id: ${{ secrets.CHECKER_APP_ID }}
+          owner: ${{ env.SOURCE_REPOSITORY_OWNER }}
+          repositories: ${{ env.SOURCE_REPOSITORY_NAME }}
+
+      - name: Print dispatch metadata
+        env:
+          CLIENT_PAYLOAD: ${{ toJson(github.event.client_payload) }}
+        run: |
+          echo "repository_dispatch action: ${{ github.event.action }}"
+          echo "$CLIENT_PAYLOAD"
+          echo "TODO: execute the shared linter workflow for the requested pull request"
