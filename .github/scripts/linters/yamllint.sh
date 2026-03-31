@@ -23,6 +23,7 @@ EOF
   run)
     : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
     output_file="$RUNNER_TEMP/linter-output.txt"
+    files=("$@")
     yamllint_config=""
     for candidate in .yamllint .yamllint.yaml .yamllint.yml; do
       if [ -f "$candidate" ]; then
@@ -44,11 +45,11 @@ rules:
 EOF
     fi
 
-    set +e
-    yamllint -c "$yamllint_config" "$@" >"$output_file" 2>&1
-    exit_code=$?
-    set -e
-    linter_lib::emit_json_result "$exit_code" "$output_file"
+    run_yamllint() {
+      yamllint -c "$yamllint_config" "${files[@]}"
+    }
+
+    linter_lib::run_and_emit_json "$output_file" run_yamllint
     ;;
   *)
     echo "usage: $0 {patterns|install|run}" >&2

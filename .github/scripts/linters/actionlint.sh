@@ -32,11 +32,7 @@ EOF
   run)
     : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
     output_file="$RUNNER_TEMP/linter-output.txt"
-    set +e
-    actionlint "$@" >"$output_file" 2>&1
-    exit_code=$?
-    set -e
-    linter_lib::emit_json_result "$exit_code" "$output_file"
+    linter_lib::run_and_emit_json "$output_file" actionlint "$@"
     ;;
   *)
     echo "usage: $0 {patterns|install|run}" >&2

@@ -249,6 +249,69 @@ describe("github webhook proxy worker", () => {
 		);
 	});
 
+	it("rejects invalid custom GitHub API base URLs", async () => {
+		const fetchMock = vi.mocked(fetch);
+		const request = createWebhookRequest(
+			"pull_request",
+			{
+				action: "opened",
+				installation: { id: 987 },
+				pull_request: {
+					base: {
+						label: "acme:main",
+						ref: "main",
+						repo: {
+							full_name: "acme/source-repo",
+							html_url: "https://github.com/acme/source-repo",
+							id: 10,
+							name: "source-repo",
+							owner: { id: 1, login: "acme", type: "Organization" },
+							private: false,
+						},
+						sha: "def456",
+					},
+					draft: false,
+					head: {
+						label: "octocat:feature/example",
+						ref: "feature/example",
+						repo: {
+							clone_url: "https://github.com/octocat/forked-repo.git",
+							full_name: "octocat/forked-repo",
+							html_url: "https://github.com/octocat/forked-repo",
+							id: 11,
+							name: "forked-repo",
+							owner: { id: 2, login: "octocat", type: "User" },
+							private: false,
+						},
+						sha: "abc123",
+					},
+					number: 42,
+				},
+				repository: {
+					full_name: "acme/source-repo",
+					html_url: "https://github.com/acme/source-repo",
+					id: 10,
+					name: "source-repo",
+					owner: { id: 1, login: "acme", type: "Organization" },
+					private: false,
+				},
+			},
+			baseEnv.GITHUB_CHECKER_WEBHOOK_SECRET,
+		);
+
+		const response = await worker.fetch(request, {
+			...baseEnv,
+			GITHUB_API_BASE_URL: "http://api.github.example.test",
+		});
+		const responseJson = await response.json<{ error: string }>();
+
+		expect(response.status).toBe(500);
+		expect(responseJson.error).toBe(
+			"GITHUB_API_BASE_URL must be a valid HTTPS URL",
+		);
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
 	it("skips pull_request events for the dispatch target repository", async () => {
 		const fetchMock = vi.mocked(fetch);
 

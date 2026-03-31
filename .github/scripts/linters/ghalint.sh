@@ -43,14 +43,13 @@ EOF
       ghalint.yml \
       .github/ghalint.yaml \
       .github/ghalint.yml || true
-    set +e
-    (
+
+    run_ghalint() {
       cd "$temp_repo" || exit 1
       GHALINT_LOG_COLOR=never ghalint run
-    ) >"$output_file" 2>&1
-    exit_code=$?
-    set -e
-    linter_lib::emit_json_result "$exit_code" "$output_file"
+    }
+
+    linter_lib::run_and_emit_json "$output_file" run_ghalint
     ;;
   *)
     echo "usage: $0 {patterns|install|run}" >&2

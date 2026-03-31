@@ -74,6 +74,19 @@ print(json.dumps({"details": details, "exit_code": exit_code}))
 PY
 }
 
+linter_lib::run_and_emit_json() {
+  local output_file=$1
+  shift
+  local exit_code
+
+  set +e
+  "$@" >"$output_file" 2>&1
+  exit_code=$?
+  set -e
+
+  linter_lib::emit_json_result "$exit_code" "$output_file"
+}
+
 linter_lib::install_node_tools() {
   local prefix_dir=$1
   shift

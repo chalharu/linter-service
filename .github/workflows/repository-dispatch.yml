@@ -166,6 +166,17 @@ jobs:
               throw new Error("LINTER_DEFINITIONS_PATH must resolve to a JSON array");
             }
 
+            for (const definition of definitions) {
+              if (
+                !definition ||
+                typeof definition !== "object" ||
+                typeof definition.name !== "string" ||
+                !Array.isArray(definition.patterns)
+              ) {
+                throw new Error("Each linter definition must include name and patterns");
+              }
+            }
+
             if (isSelfRepositoryDispatch) {
               const skipReason =
                 "Skipping repository_dispatch for this repository because local pull requests are handled by the direct pull_request trigger.";
@@ -182,17 +193,6 @@ jobs:
                 source_owner: owner,
                 source_repo: repo,
               };
-
-              for (const definition of definitions) {
-                if (
-                  !definition ||
-                  typeof definition !== "object" ||
-                  typeof definition.name !== "string" ||
-                  !Array.isArray(definition.patterns)
-                ) {
-                  throw new Error("Each linter definition must include name and patterns");
-                }
-              }
 
               writeContext(contextValues);
               core.setOutput("actionlint-selected", "false");
@@ -324,54 +324,50 @@ jobs:
           name: detect-targets-context
           path: ${{ runner.temp }}/detect-targets-context
 
+      - name: Get current repository checker token
+        id: get_current_repo_token
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        with:
+          app-id: ${{ secrets.CHECKER_APP_ID }}
+          owner: ${{ github.repository_owner }}
+          permission-contents: read
+          private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+
+      - name: Check out linter-service repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          path: linter-service
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          token: ${{ steps.get_current_repo_token.outputs.token }}
+
       - name: Mask repository metadata
         env:
           CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
         run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
-          source_owner = context["source_owner"]
-          source_repo = context["source_repo"]
-          source_head_sha = context["source_head_sha"]
-
-          for value in (source_owner, source_repo, source_head_sha):
-              if value:
-                  print(f"::add-mask::{value}")
-
-          if source_owner and source_repo:
-              print(f"::add-mask::{source_owner}/{source_repo}")
-          PY
+          python3 "$LINTER_SERVICE_PATH/.github/scripts/context-artifact.py" \
+            mask \
+            "$CONTEXT_PATH" \
+            source_owner \
+            source_repo \
+            source_head_sha
 
       - name: Decode source repository context
         id: decode_source_context
         env:
           CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
         run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
-          source_owner = context["source_owner"]
-          source_repo = context["source_repo"]
-          values = {
-              "processing-check-external-id": context["processing_check_external_id"],
-              "processing-check-name": context["processing_check_name"],
-              "source-head-sha": context["source_head_sha"],
-              "source-owner": source_owner,
-              "source-repo": source_repo,
-          }
-
-          output_path = Path(os.environ["GITHUB_OUTPUT"])
-          with output_path.open("a", encoding="utf-8") as fh:
-              for key, value in values.items():
-                  fh.write(f"{key}={value}\n")
-          PY
+          python3 "$LINTER_SERVICE_PATH/.github/scripts/context-artifact.py" \
+            outputs \
+            "$CONTEXT_PATH" \
+            processing_check_external_id=processing-check-external-id \
+            processing_check_name=processing-check-name \
+            source_head_sha=source-head-sha \
+            source_owner=source-owner \
+            source_repo=source-repo
 
       - name: Get source repository checker token
         id: get_source_token
@@ -386,6 +382,14 @@ jobs:
       - name: Notify processing start
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
+          CHECK_RUN_EXTERNAL_ID: ${{ steps.decode_source_context.outputs.processing-check-external-id }}
+          CHECK_RUN_HEAD_SHA: ${{ steps.decode_source_context.outputs.source-head-sha }}
+          CHECK_RUN_NAME: ${{ steps.decode_source_context.outputs.processing-check-name }}
+          CHECK_RUN_OUTPUT_TITLE: ${{ steps.decode_source_context.outputs.processing-check-name }} is running
+          CHECK_RUN_OWNER: ${{ steps.decode_source_context.outputs.source-owner }}
+          CHECK_RUN_REPO: ${{ steps.decode_source_context.outputs.source-repo }}
+          CHECK_RUN_STATUS: in_progress
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
           PROCESSING_CHECK_EXTERNAL_ID: ${{ steps.decode_source_context.outputs.processing-check-external-id }}
           PROCESSING_CHECK_NAME: ${{ steps.decode_source_context.outputs.processing-check-name }}
           SELECTED_LINTERS_JSON: ${{ needs.detect-targets.outputs.selected-linters-json }}
@@ -395,59 +399,15 @@ jobs:
         with:
           github-token: ${{ steps.get_source_token.outputs.token }}
           script: |
-            const owner = process.env.SOURCE_OWNER;
-            const repo = process.env.SOURCE_REPO;
-            const headSha = process.env.SOURCE_HEAD_SHA;
-            const externalId = process.env.PROCESSING_CHECK_EXTERNAL_ID;
-            const name = process.env.PROCESSING_CHECK_NAME;
             const selectedLinters = JSON.parse(process.env.SELECTED_LINTERS_JSON || "[]");
-            const detailsUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-            const selectedSummary =
+            process.env.CHECK_RUN_OUTPUT_SUMMARY =
               selectedLinters.length === 0
                 ? "No linters were selected."
                 : `Running linters: ${selectedLinters.join(", ")}. Detailed results will be posted as a pull request comment.`;
-            const output = {
-              title: `${name} is running`,
-              summary: selectedSummary,
-            };
-            const checkRuns = await github.paginate(
-              github.rest.checks.listForRef,
-              {
-                owner,
-                repo,
-                ref: headSha,
-                per_page: 100,
-              },
-              (response) => response.data.check_runs,
+            const upsertCheckRun = require(
+              `${process.env.LINTER_SERVICE_PATH}/.github/scripts/upsert-check-run.js`,
             );
-            const existing = checkRuns.find(
-              (checkRun) => checkRun && checkRun.external_id === externalId,
-            );
-
-            if (existing) {
-              await github.rest.checks.update({
-                owner,
-                repo,
-                check_run_id: existing.id,
-                details_url: detailsUrl,
-                external_id: externalId,
-                output,
-                status: "in_progress",
-              });
-              return;
-            }
-
-            await github.rest.checks.create({
-              owner,
-              repo,
-              name,
-              head_sha: headSha,
-              status: "in_progress",
-              details_url: detailsUrl,
-              external_id: externalId,
-              started_at: new Date().toISOString(),
-              output,
-            });
+            await upsertCheckRun({ github, env: process.env });
 
   actionlint:
     needs:
@@ -528,64 +488,54 @@ jobs:
           name: detect-targets-context
           path: ${{ runner.temp }}/detect-targets-context
 
+      - name: Get current repository checker token
+        id: get_current_repo_token
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        with:
+          app-id: ${{ secrets.CHECKER_APP_ID }}
+          owner: ${{ github.repository_owner }}
+          permission-contents: read
+          private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+
+      - name: Check out linter-service repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          path: linter-service
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          token: ${{ steps.get_current_repo_token.outputs.token }}
+
       - name: Mask repository metadata
         env:
           CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
         run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
-          decoded = {
-              "pr_owner": context["pr_owner"],
-              "pr_repo": context["pr_repo"],
-              "source_head_sha": context["source_head_sha"],
-              "source_owner": context["source_owner"],
-              "source_repo": context["source_repo"],
-          }
-
-          for key in ("pr_owner", "pr_repo", "source_head_sha", "source_owner", "source_repo"):
-              if decoded[key]:
-                  print(f"::add-mask::{decoded[key]}")
-
-          if decoded["pr_owner"] and decoded["pr_repo"]:
-              print(f"::add-mask::{decoded['pr_owner']}/{decoded['pr_repo']}")
-          if decoded["source_owner"] and decoded["source_repo"]:
-              print(f"::add-mask::{decoded['source_owner']}/{decoded['source_repo']}")
-          PY
+          python3 "$LINTER_SERVICE_PATH/.github/scripts/context-artifact.py" \
+            mask \
+            "$CONTEXT_PATH" \
+            pr_owner \
+            pr_repo \
+            source_head_sha \
+            source_owner \
+            source_repo
 
       - name: Decode repository context
         id: decode_repository_context
         env:
           CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
         run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
-          pr_owner = context["pr_owner"]
-          pr_repo = context["pr_repo"]
-          source_owner = context["source_owner"]
-          source_repo = context["source_repo"]
-          values = {
-              "pr-owner": pr_owner,
-              "pr-repo": pr_repo,
-              "processing-check-external-id": context["processing_check_external_id"],
-              "processing-check-name": context["processing_check_name"],
-              "source-head-sha": context["source_head_sha"],
-              "source-owner": source_owner,
-              "source-repo": source_repo,
-          }
-
-          output_path = Path(os.environ["GITHUB_OUTPUT"])
-          with output_path.open("a", encoding="utf-8") as fh:
-              for key, value in values.items():
-                  fh.write(f"{key}={value}\n")
-          PY
+          python3 "$LINTER_SERVICE_PATH/.github/scripts/context-artifact.py" \
+            outputs \
+            "$CONTEXT_PATH" \
+            pr_owner=pr-owner \
+            pr_repo=pr-repo \
+            processing_check_external_id=processing-check-external-id \
+            processing_check_name=processing-check-name \
+            source_head_sha=source-head-sha \
+            source_owner=source-owner \
+            source_repo=source-repo
 
       - name: Get PR repository checker token
         id: get_pr_token
@@ -787,6 +737,16 @@ jobs:
         if: ${{ always() }}
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
+          CHECK_RUN_CONCLUSION: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_conclusion || 'failure' }}
+          CHECK_RUN_EXTERNAL_ID: ${{ steps.decode_repository_context.outputs.processing-check-external-id }}
+          CHECK_RUN_HEAD_SHA: ${{ steps.decode_repository_context.outputs.source-head-sha }}
+          CHECK_RUN_NAME: ${{ steps.decode_repository_context.outputs.processing-check-name }}
+          CHECK_RUN_OUTPUT_SUMMARY: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_summary || 'The linter-service workflow failed to generate a combined report.' }}
+          CHECK_RUN_OUTPUT_TITLE: ${{ (steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_conclusion || 'failure') == 'success' && format('{0} completed', steps.decode_repository_context.outputs.processing-check-name) || format('{0} found issues', steps.decode_repository_context.outputs.processing-check-name) }}
+          CHECK_RUN_OWNER: ${{ steps.decode_repository_context.outputs.source-owner }}
+          CHECK_RUN_REPO: ${{ steps.decode_repository_context.outputs.source-repo }}
+          CHECK_RUN_STATUS: completed
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
           OVERALL_CONCLUSION: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_conclusion || 'failure' }}
           OVERALL_SUMMARY: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_summary || 'The linter-service workflow failed to generate a combined report.' }}
           PROCESSING_CHECK_EXTERNAL_ID: ${{ steps.decode_repository_context.outputs.processing-check-external-id }}
@@ -797,60 +757,10 @@ jobs:
         with:
           github-token: ${{ steps.get_source_token.outputs.token }}
           script: |
-            const owner = process.env.SOURCE_OWNER;
-            const repo = process.env.SOURCE_REPO;
-            const headSha = process.env.SOURCE_HEAD_SHA;
-            const externalId = process.env.PROCESSING_CHECK_EXTERNAL_ID;
-            const name = process.env.PROCESSING_CHECK_NAME;
-            const overallConclusion = process.env.OVERALL_CONCLUSION;
-            const overallSummary = process.env.OVERALL_SUMMARY;
-            const detailsUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-            const output = {
-              title: overallConclusion === "success" ? `${name} completed` : `${name} found issues`,
-              summary: overallSummary,
-            };
-            const checkRuns = await github.paginate(
-              github.rest.checks.listForRef,
-              {
-                owner,
-                repo,
-                ref: headSha,
-                per_page: 100,
-              },
-              (response) => response.data.check_runs,
+            const upsertCheckRun = require(
+              `${process.env.LINTER_SERVICE_PATH}/.github/scripts/upsert-check-run.js`,
             );
-            const existing = checkRuns.find(
-              (checkRun) => checkRun && checkRun.external_id === externalId,
-            );
-
-            if (existing) {
-              await github.rest.checks.update({
-                owner,
-                repo,
-                check_run_id: existing.id,
-                conclusion: overallConclusion,
-                completed_at: new Date().toISOString(),
-                details_url: detailsUrl,
-                external_id: externalId,
-                output,
-                status: "completed",
-              });
-              return;
-            }
-
-            await github.rest.checks.create({
-              owner,
-              repo,
-              name,
-              head_sha: headSha,
-              status: "completed",
-              conclusion: overallConclusion,
-              details_url: detailsUrl,
-              external_id: externalId,
-              started_at: new Date().toISOString(),
-              completed_at: new Date().toISOString(),
-              output,
-            });
+            await upsertCheckRun({ github, env: process.env });
 
       - name: Fail workflow when lint reports issues
         if: ${{ steps.prepare_report.outputs.overall_conclusion != 'success' }}

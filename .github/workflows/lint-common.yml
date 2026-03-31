@@ -26,8 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
-      comment_body_base64: ${{ steps.publish_outputs.outputs.comment_body_base64 }}
-      conclusion: ${{ steps.publish_outputs.outputs.conclusion }}
+      comment_body_base64: ${{ steps.prepare_report.outputs.comment_body_base64 }}
+      conclusion: ${{ steps.prepare_report.outputs.conclusion }}
     env:
       LINTER_NAME: ${{ inputs.linter-name }}
       LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
@@ -38,51 +38,6 @@ jobs:
         with:
           name: detect-targets-context
           path: ${{ runner.temp }}/detect-targets-context
-
-      - name: Mask repository metadata
-        env:
-          CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
-          source_owner = context["source_owner"]
-          source_repo = context["source_repo"]
-          source_head_sha = context["source_head_sha"]
-
-          for value in (source_owner, source_repo, source_head_sha):
-              if value:
-                  print(f"::add-mask::{value}")
-
-          if source_owner and source_repo:
-              print(f"::add-mask::{source_owner}/{source_repo}")
-          PY
-
-      - name: Decode repository metadata
-        id: decode_context
-        env:
-          CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
-          values = {
-              "source-head-sha": context["source_head_sha"],
-              "source-owner": context["source_owner"],
-              "source-repo": context["source_repo"],
-          }
-
-          output_path = Path(os.environ["GITHUB_OUTPUT"])
-          with output_path.open("a", encoding="utf-8") as fh:
-              for key, value in values.items():
-                  fh.write(f"{key}={value}\n")
-          PY
 
       - name: Get current repository checker token
         id: get_current_repo_token
@@ -101,6 +56,29 @@ jobs:
           persist-credentials: false
           ref: ${{ github.sha }}
           token: ${{ steps.get_current_repo_token.outputs.token }}
+
+      - name: Mask repository metadata
+        env:
+          CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
+        run: |
+          python3 "$LINTER_SERVICE_PATH/.github/scripts/context-artifact.py" \
+            mask \
+            "$CONTEXT_PATH" \
+            source_owner \
+            source_repo \
+            source_head_sha
+
+      - name: Decode repository metadata
+        id: decode_context
+        env:
+          CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
+        run: |
+          python3 "$LINTER_SERVICE_PATH/.github/scripts/context-artifact.py" \
+            outputs \
+            "$CONTEXT_PATH" \
+            source_head_sha=source-head-sha \
+            source_owner=source-owner \
+            source_repo=source-repo
 
       - name: Get source repository checker token
         id: get_source_token
@@ -157,7 +135,7 @@ jobs:
         run: |
           script_path="$LINTER_SERVICE_PATH/.github/scripts/linters/$LINTER_NAME.sh"
           (
-            cd "$SOURCE_REPOSITORY_PATH" || exit 1
+            cd "$LINTER_SERVICE_PATH" || exit 1
             bash "$script_path" install
           )
 
@@ -191,6 +169,7 @@ jobs:
           PY
 
       - name: Prepare linter report
+        id: prepare_report
         if: ${{ always() }}
         env:
           FILE_COUNT: ${{ steps.select_files.outputs.count }}
@@ -202,6 +181,7 @@ jobs:
           SELECT_FILES_OUTCOME: ${{ steps.select_files.outcome }}
         run: |
           python3 - <<'PY'
+          import base64
           import json
           import os
           from pathlib import Path
@@ -266,6 +246,7 @@ jobs:
           lines = [linter_config["heading"], ""]
           has_step_failure = "failure" in {select_outcome, install_outcome, run_outcome}
           success = (not has_step_failure) and (file_count == 0 or exit_code_raw == "0")
+          conclusion = "success" if success else "failure"
 
           if has_step_failure and not result_path.exists():
               lines.append(linter_config["infra_failure"])
@@ -300,37 +281,7 @@ jobs:
               )
 
           comment_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-          PY
-
-      - name: Publish workflow outputs
-        id: publish_outputs
-        if: ${{ always() }}
-        env:
-          FILE_COUNT: ${{ steps.select_files.outputs.count }}
-          EXIT_CODE: ${{ steps.run_linter.outputs.exit_code }}
-          INSTALL_TOOL_OUTCOME: ${{ steps.install_tool.outcome }}
-          RUN_LINTER_OUTCOME: ${{ steps.run_linter.outcome }}
-          SELECT_FILES_OUTCOME: ${{ steps.select_files.outcome }}
-        run: |
-          python3 - <<'PY'
-          import base64
-          import os
-          from pathlib import Path
-
-          file_count = int(os.environ.get("FILE_COUNT", "0") or "0")
-          exit_code_raw = os.environ.get("EXIT_CODE", "")
-          select_outcome = os.environ.get("SELECT_FILES_OUTCOME", "")
-          install_outcome = os.environ.get("INSTALL_TOOL_OUTCOME", "")
-          run_outcome = os.environ.get("RUN_LINTER_OUTCOME", "")
-          has_step_failure = "failure" in {select_outcome, install_outcome, run_outcome}
-          conclusion = (
-              "success"
-              if (not has_step_failure) and (file_count == 0 or exit_code_raw == "0")
-              else "failure"
-          )
-
-          comment_path = Path(os.environ["RUNNER_TEMP"]) / "linter-comment.md"
-          body = comment_path.read_text(encoding="utf-8") if comment_path.exists() else ""
+          body = comment_path.read_text(encoding="utf-8")
           encoded_body = base64.b64encode(body.encode("utf-8")).decode("ascii")
 
           output_path = Path(os.environ["GITHUB_OUTPUT"])
