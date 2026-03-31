@@ -5,9 +5,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "tsc --noEmit && vitest run",
+    "check": "npm run typecheck && npm run lint && npm run test",
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
+    "lint": "biome lint src test",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -30,6 +31,7 @@
     "jose": "^6.2.2"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.10",
     "@cloudflare/workers-types": "^4.20260329.1",
     "@types/node": "^25.5.0",
     "typescript": "^6.0.2",
