@@ -173,14 +173,6 @@ jobs:
               throw new Error("pull request head SHA is required");
             }
 
-            core.setSecret(owner);
-            core.setSecret(repo);
-            core.setSecret(`${owner}/${repo}`);
-            core.setSecret(sourceOwner);
-            core.setSecret(sourceRepo);
-            core.setSecret(`${sourceOwner}/${sourceRepo}`);
-            core.setSecret(sourceHeadSha);
-
             const selectedLinters = [];
 
             for (const definition of definitions) {
