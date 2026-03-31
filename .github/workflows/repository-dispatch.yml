@@ -21,6 +21,7 @@ jobs:
       actionlint-selected: ${{ steps.collect.outputs.actionlint-selected }}
       ghalint-selected: ${{ steps.collect.outputs.ghalint-selected }}
       pull-request-number: ${{ steps.collect.outputs.pull-request-number }}
+      spectral-selected: ${{ steps.collect.outputs.spectral-selected }}
       selected-linters-json: ${{ steps.collect.outputs.selected-linters-json }}
       skip-reason: ${{ steps.collect.outputs.skip-reason }}
       yamllint-selected: ${{ steps.collect.outputs.yamllint-selected }}
@@ -35,6 +36,10 @@ jobs:
           {
             "name": "ghalint",
             "patterns": ["^\\.github\\/workflows\\/.+\\.(?:yaml|yml)$"]
+          },
+          {
+            "name": "spectral",
+            "patterns": ["\\.(?:json|yaml|yml)$"]
           },
           {
             "name": "yamllint",
@@ -162,6 +167,7 @@ jobs:
               core.setOutput("actionlint-selected", "false");
               core.setOutput("ghalint-selected", "false");
               core.setOutput("pull-request-number", String(pullNumber));
+              core.setOutput("spectral-selected", "false");
               core.setOutput("selected-linters-json", JSON.stringify([]));
               core.setOutput("skip-reason", skipReason);
               core.setOutput("yamllint-selected", "false");
@@ -246,6 +252,10 @@ jobs:
             core.setOutput(
               "ghalint-selected",
               String(selectedLinters.includes("ghalint")),
+            );
+            core.setOutput(
+              "spectral-selected",
+              String(selectedLinters.includes("spectral")),
             );
             core.setOutput(
               "yamllint-selected",
@@ -428,6 +438,16 @@ jobs:
       CHECKER_APP_ID: ${{ secrets.CHECKER_APP_ID }}
       CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
 
+  spectral:
+    needs:
+      - detect-targets
+      - notify-processing-started
+    if: ${{ needs.detect-targets.outputs.spectral-selected == 'true' }}
+    uses: ./.github/workflows/lint-spectral.yml
+    secrets:
+      CHECKER_APP_ID: ${{ secrets.CHECKER_APP_ID }}
+      CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
+
   yamllint:
     needs:
       - detect-targets
@@ -454,6 +474,7 @@ jobs:
       - notify-processing-started
       - actionlint
       - ghalint
+      - spectral
       - yamllint
       - zizmor
     if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
@@ -554,6 +575,9 @@ jobs:
           GHALINT_COMMENT_BODY_BASE64: ${{ needs.ghalint.outputs.comment_body_base64 }}
           GHALINT_CONCLUSION: ${{ needs.ghalint.outputs.conclusion }}
           GHALINT_JOB_RESULT: ${{ needs.ghalint.result }}
+          SPECTRAL_COMMENT_BODY_BASE64: ${{ needs.spectral.outputs.comment_body_base64 }}
+          SPECTRAL_CONCLUSION: ${{ needs.spectral.outputs.conclusion }}
+          SPECTRAL_JOB_RESULT: ${{ needs.spectral.result }}
           SELECTED_LINTERS_JSON: ${{ needs.detect-targets.outputs.selected-linters-json }}
           YAMLLINT_COMMENT_BODY_BASE64: ${{ needs.yamllint.outputs.comment_body_base64 }}
           YAMLLINT_CONCLUSION: ${{ needs.yamllint.outputs.conclusion }}
@@ -581,6 +605,11 @@ jobs:
                   "comment_body_base64": os.environ.get("GHALINT_COMMENT_BODY_BASE64", ""),
                   "conclusion": os.environ.get("GHALINT_CONCLUSION", ""),
                   "job_result": os.environ.get("GHALINT_JOB_RESULT", ""),
+              },
+              "spectral": {
+                  "comment_body_base64": os.environ.get("SPECTRAL_COMMENT_BODY_BASE64", ""),
+                  "conclusion": os.environ.get("SPECTRAL_CONCLUSION", ""),
+                  "job_result": os.environ.get("SPECTRAL_JOB_RESULT", ""),
               },
               "yamllint": {
                   "comment_body_base64": os.environ.get("YAMLLINT_COMMENT_BODY_BASE64", ""),
