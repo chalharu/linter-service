@@ -165,25 +165,25 @@ jobs:
           mapfile -t files < "$RUNNER_TEMP/selected-files.txt"
 
           case "$LINTER_NAME" in
-            actionlint)
-              ./actionlint "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
-              ;;
-            yamllint)
-              cat > "$RUNNER_TEMP/yamllint.yaml" <<'EOF'
-              extends: default
-              rules:
-                comments-indentation: disable
-                document-start: disable
-                line-length: disable
-                truthy:
-                  check-keys: false
-              EOF
-              yamllint -c "$RUNNER_TEMP/yamllint.yaml" "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
-              ;;
-            *)
-              echo "unsupported linter: $LINTER_NAME" >&2
-              exit 1
-              ;;
+          actionlint)
+            ./actionlint "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
+            ;;
+          yamllint)
+            cat > "$RUNNER_TEMP/yamllint.yaml" <<'EOF'
+          extends: default
+          rules:
+            comments-indentation: disable
+            document-start: disable
+            line-length: disable
+            truthy:
+              check-keys: false
+          EOF
+            yamllint -c "$RUNNER_TEMP/yamllint.yaml" "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
+            ;;
+          *)
+            echo "unsupported linter: $LINTER_NAME" >&2
+            exit 1
+            ;;
           esac
 
           status=$?
