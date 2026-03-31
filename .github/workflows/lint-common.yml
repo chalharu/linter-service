@@ -44,30 +44,78 @@ jobs:
     steps:
       - name: Mask repository metadata
         env:
-          SOURCE_HEAD_SHA: ${{ inputs.source-head-sha }}
-          SOURCE_OWNER: ${{ inputs.source-owner }}
-          SOURCE_REPO: ${{ inputs.source-repo }}
+          SOURCE_HEAD_SHA_BASE64: ${{ inputs.source-head-sha }}
+          SOURCE_OWNER_BASE64: ${{ inputs.source-owner }}
+          SOURCE_REPO_BASE64: ${{ inputs.source-repo }}
         run: |
-          echo "::add-mask::$SOURCE_OWNER"
-          echo "::add-mask::$SOURCE_REPO"
-          echo "::add-mask::$SOURCE_OWNER/$SOURCE_REPO"
-          echo "::add-mask::$SOURCE_HEAD_SHA"
+          python3 - <<'PY'
+          import base64
+          import os
+
+          source_owner = (
+              base64.b64decode(os.environ["SOURCE_OWNER_BASE64"]).decode("utf-8")
+              if os.environ.get("SOURCE_OWNER_BASE64")
+              else ""
+          )
+          source_repo = (
+              base64.b64decode(os.environ["SOURCE_REPO_BASE64"]).decode("utf-8")
+              if os.environ.get("SOURCE_REPO_BASE64")
+              else ""
+          )
+          source_head_sha = (
+              base64.b64decode(os.environ["SOURCE_HEAD_SHA_BASE64"]).decode("utf-8")
+              if os.environ.get("SOURCE_HEAD_SHA_BASE64")
+              else ""
+          )
+
+          for value in (source_owner, source_repo, source_head_sha):
+              if value:
+                  print(f"::add-mask::{value}")
+
+          if source_owner and source_repo:
+              print(f"::add-mask::{source_owner}/{source_repo}")
+          PY
+
+      - name: Decode repository metadata
+        id: decode_context
+        env:
+          SOURCE_HEAD_SHA_BASE64: ${{ inputs.source-head-sha }}
+          SOURCE_OWNER_BASE64: ${{ inputs.source-owner }}
+          SOURCE_REPO_BASE64: ${{ inputs.source-repo }}
+        run: |
+          python3 - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          values = {
+              "source-head-sha": os.environ.get("SOURCE_HEAD_SHA_BASE64", ""),
+              "source-owner": os.environ.get("SOURCE_OWNER_BASE64", ""),
+              "source-repo": os.environ.get("SOURCE_REPO_BASE64", ""),
+          }
+
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          with output_path.open("a", encoding="utf-8") as fh:
+              for key, encoded in values.items():
+                  decoded = base64.b64decode(encoded).decode("utf-8") if encoded else ""
+                  fh.write(f"{key}={decoded}\n")
+          PY
 
       - name: Get source repository checker token
         id: get_source_token
         uses: actions/create-github-app-token@v3.0.0
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
-          owner: ${{ inputs.source-owner }}
+          owner: ${{ steps.decode_context.outputs.source-owner }}
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
-          repositories: ${{ inputs.source-repo }}
+          repositories: ${{ steps.decode_context.outputs.source-repo }}
 
       - name: Check out source repository
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-          ref: ${{ inputs.source-head-sha }}
-          repository: ${{ inputs.source-owner }}/${{ inputs.source-repo }}
+          ref: ${{ steps.decode_context.outputs.source-head-sha }}
+          repository: ${{ steps.decode_context.outputs.source-owner }}/${{ steps.decode_context.outputs.source-repo }}
           token: ${{ steps.get_source_token.outputs.token }}
 
       - name: Set up Python
@@ -79,15 +127,18 @@ jobs:
       - name: Select lint target files
         id: select_files
         env:
-          CHANGED_FILES_JSON: ${{ inputs.changed-files-json }}
+          CHANGED_FILES_JSON_BASE64: ${{ inputs.changed-files-json }}
           LINTER_NAME: ${{ inputs.linter-name }}
         run: |
           python3 - <<'PY' > "$RUNNER_TEMP/selected-files.txt"
+          import base64
           import json
           import os
 
           linter_name = os.environ["LINTER_NAME"]
-          files = json.loads(os.environ["CHANGED_FILES_JSON"])
+          files = json.loads(
+              base64.b64decode(os.environ["CHANGED_FILES_JSON_BASE64"]).decode("utf-8")
+          )
 
           for path in files:
               lower_path = path.lower()

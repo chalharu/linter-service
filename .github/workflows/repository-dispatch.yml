@@ -103,6 +103,7 @@ jobs:
             const pullNumber = Number(process.env.PULL_REQUEST_NUMBER);
             const sourceHeadShaFromPayload = process.env.SOURCE_HEAD_SHA || "";
             const definitions = JSON.parse(process.env.LINTER_DEFINITIONS_JSON ?? "[]");
+            const encode = (value) => Buffer.from(value, "utf8").toString("base64");
             const isSelfRepositoryDispatch =
               context.eventName === "repository_dispatch" &&
               owner.toLowerCase() === context.repo.owner.toLowerCase() &&
@@ -116,17 +117,17 @@ jobs:
               const skipReason =
                 "Skipping repository_dispatch for this repository because local pull requests are handled by the direct pull_request trigger.";
 
-              core.setOutput("changed-files-json", JSON.stringify([]));
-              core.setOutput("pr-owner", owner);
-              core.setOutput("pr-repo", repo);
-              core.setOutput("processing-check-external-id", "");
-              core.setOutput("processing-check-name", "linter-service");
+              core.setOutput("changed-files-json", encode(JSON.stringify([])));
+              core.setOutput("pr-owner", encode(owner));
+              core.setOutput("pr-repo", encode(repo));
+              core.setOutput("processing-check-external-id", encode(""));
+              core.setOutput("processing-check-name", encode("linter-service"));
               core.setOutput("pull-request-number", String(pullNumber));
               core.setOutput("selected-linters-json", JSON.stringify([]));
               core.setOutput("skip-reason", skipReason);
-              core.setOutput("source-head-sha", sourceHeadShaFromPayload);
-              core.setOutput("source-owner", owner);
-              core.setOutput("source-repo", repo);
+              core.setOutput("source-head-sha", encode(sourceHeadShaFromPayload));
+              core.setOutput("source-owner", encode(owner));
+              core.setOutput("source-repo", encode(repo));
 
               for (const definition of definitions) {
                 if (
@@ -203,19 +204,19 @@ jobs:
               }
             }
 
-            core.setOutput("changed-files-json", JSON.stringify(currentFiles));
-            core.setOutput("pr-owner", owner);
-            core.setOutput("pr-repo", repo);
+            core.setOutput("changed-files-json", encode(JSON.stringify(currentFiles)));
+            core.setOutput("pr-owner", encode(owner));
+            core.setOutput("pr-repo", encode(repo));
             core.setOutput(
               "processing-check-external-id",
-              `linter-service:${pullNumber}:${sourceHeadSha}`,
+              encode(`linter-service:${pullNumber}:${sourceHeadSha}`),
             );
-            core.setOutput("processing-check-name", "linter-service");
+            core.setOutput("processing-check-name", encode("linter-service"));
             core.setOutput("pull-request-number", String(pullNumber));
             core.setOutput("selected-linters-json", JSON.stringify(selectedLinters));
-            core.setOutput("source-head-sha", sourceHeadSha);
-            core.setOutput("source-owner", sourceOwner);
-            core.setOutput("source-repo", sourceRepo);
+            core.setOutput("source-head-sha", encode(sourceHeadSha));
+            core.setOutput("source-owner", encode(sourceOwner));
+            core.setOutput("source-repo", encode(sourceRepo));
 
       - name: Report routing status
         env:
@@ -231,33 +232,85 @@ jobs:
     steps:
       - name: Mask repository metadata
         env:
-          SOURCE_HEAD_SHA: ${{ needs.detect-targets.outputs.source-head-sha }}
-          SOURCE_OWNER: ${{ needs.detect-targets.outputs.source-owner }}
-          SOURCE_REPO: ${{ needs.detect-targets.outputs.source-repo }}
+          SOURCE_HEAD_SHA_BASE64: ${{ needs.detect-targets.outputs.source-head-sha }}
+          SOURCE_OWNER_BASE64: ${{ needs.detect-targets.outputs.source-owner }}
+          SOURCE_REPO_BASE64: ${{ needs.detect-targets.outputs.source-repo }}
         run: |
-          echo "::add-mask::$SOURCE_OWNER"
-          echo "::add-mask::$SOURCE_REPO"
-          echo "::add-mask::$SOURCE_OWNER/$SOURCE_REPO"
-          echo "::add-mask::$SOURCE_HEAD_SHA"
+          python3 - <<'PY'
+          import base64
+          import os
+
+          source_owner = (
+              base64.b64decode(os.environ["SOURCE_OWNER_BASE64"]).decode("utf-8")
+              if os.environ.get("SOURCE_OWNER_BASE64")
+              else ""
+          )
+          source_repo = (
+              base64.b64decode(os.environ["SOURCE_REPO_BASE64"]).decode("utf-8")
+              if os.environ.get("SOURCE_REPO_BASE64")
+              else ""
+          )
+          source_head_sha = (
+              base64.b64decode(os.environ["SOURCE_HEAD_SHA_BASE64"]).decode("utf-8")
+              if os.environ.get("SOURCE_HEAD_SHA_BASE64")
+              else ""
+          )
+
+          for value in (source_owner, source_repo, source_head_sha):
+              if value:
+                  print(f"::add-mask::{value}")
+
+          if source_owner and source_repo:
+              print(f"::add-mask::{source_owner}/{source_repo}")
+          PY
+
+      - name: Decode source repository context
+        id: decode_source_context
+        env:
+          PROCESSING_CHECK_EXTERNAL_ID_BASE64: ${{ needs.detect-targets.outputs.processing-check-external-id }}
+          PROCESSING_CHECK_NAME_BASE64: ${{ needs.detect-targets.outputs.processing-check-name }}
+          SOURCE_HEAD_SHA_BASE64: ${{ needs.detect-targets.outputs.source-head-sha }}
+          SOURCE_OWNER_BASE64: ${{ needs.detect-targets.outputs.source-owner }}
+          SOURCE_REPO_BASE64: ${{ needs.detect-targets.outputs.source-repo }}
+        run: |
+          python3 - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          values = {
+              "processing-check-external-id": os.environ.get("PROCESSING_CHECK_EXTERNAL_ID_BASE64", ""),
+              "processing-check-name": os.environ.get("PROCESSING_CHECK_NAME_BASE64", ""),
+              "source-head-sha": os.environ.get("SOURCE_HEAD_SHA_BASE64", ""),
+              "source-owner": os.environ.get("SOURCE_OWNER_BASE64", ""),
+              "source-repo": os.environ.get("SOURCE_REPO_BASE64", ""),
+          }
+
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          with output_path.open("a", encoding="utf-8") as fh:
+              for key, encoded in values.items():
+                  decoded = base64.b64decode(encoded).decode("utf-8") if encoded else ""
+                  fh.write(f"{key}={decoded}\n")
+          PY
 
       - name: Get source repository checker token
         id: get_source_token
         uses: actions/create-github-app-token@v3.0.0
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
-          owner: ${{ needs.detect-targets.outputs.source-owner }}
+          owner: ${{ steps.decode_source_context.outputs.source-owner }}
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
-          repositories: ${{ needs.detect-targets.outputs.source-repo }}
+          repositories: ${{ steps.decode_source_context.outputs.source-repo }}
 
       - name: Notify processing start
         uses: actions/github-script@v7
         env:
-          PROCESSING_CHECK_EXTERNAL_ID: ${{ needs.detect-targets.outputs.processing-check-external-id }}
-          PROCESSING_CHECK_NAME: ${{ needs.detect-targets.outputs.processing-check-name }}
+          PROCESSING_CHECK_EXTERNAL_ID: ${{ steps.decode_source_context.outputs.processing-check-external-id }}
+          PROCESSING_CHECK_NAME: ${{ steps.decode_source_context.outputs.processing-check-name }}
           SELECTED_LINTERS_JSON: ${{ needs.detect-targets.outputs.selected-linters-json }}
-          SOURCE_HEAD_SHA: ${{ needs.detect-targets.outputs.source-head-sha }}
-          SOURCE_OWNER: ${{ needs.detect-targets.outputs.source-owner }}
-          SOURCE_REPO: ${{ needs.detect-targets.outputs.source-repo }}
+          SOURCE_HEAD_SHA: ${{ steps.decode_source_context.outputs.source-head-sha }}
+          SOURCE_OWNER: ${{ steps.decode_source_context.outputs.source-owner }}
+          SOURCE_REPO: ${{ steps.decode_source_context.outputs.source-repo }}
         with:
           github-token: ${{ steps.get_source_token.outputs.token }}
           script: |
@@ -352,37 +405,88 @@ jobs:
     steps:
       - name: Mask repository metadata
         env:
-          PR_OWNER: ${{ needs.detect-targets.outputs.pr-owner }}
-          PR_REPO: ${{ needs.detect-targets.outputs.pr-repo }}
-          SOURCE_HEAD_SHA: ${{ needs.detect-targets.outputs.source-head-sha }}
-          SOURCE_OWNER: ${{ needs.detect-targets.outputs.source-owner }}
-          SOURCE_REPO: ${{ needs.detect-targets.outputs.source-repo }}
+          PR_OWNER_BASE64: ${{ needs.detect-targets.outputs.pr-owner }}
+          PR_REPO_BASE64: ${{ needs.detect-targets.outputs.pr-repo }}
+          SOURCE_HEAD_SHA_BASE64: ${{ needs.detect-targets.outputs.source-head-sha }}
+          SOURCE_OWNER_BASE64: ${{ needs.detect-targets.outputs.source-owner }}
+          SOURCE_REPO_BASE64: ${{ needs.detect-targets.outputs.source-repo }}
         run: |
-          echo "::add-mask::$PR_OWNER"
-          echo "::add-mask::$PR_REPO"
-          echo "::add-mask::$PR_OWNER/$PR_REPO"
-          echo "::add-mask::$SOURCE_OWNER"
-          echo "::add-mask::$SOURCE_REPO"
-          echo "::add-mask::$SOURCE_OWNER/$SOURCE_REPO"
-          echo "::add-mask::$SOURCE_HEAD_SHA"
+          python3 - <<'PY'
+          import base64
+          import os
+
+          values = {
+              "pr_owner": os.environ.get("PR_OWNER_BASE64", ""),
+              "pr_repo": os.environ.get("PR_REPO_BASE64", ""),
+              "source_head_sha": os.environ.get("SOURCE_HEAD_SHA_BASE64", ""),
+              "source_owner": os.environ.get("SOURCE_OWNER_BASE64", ""),
+              "source_repo": os.environ.get("SOURCE_REPO_BASE64", ""),
+          }
+          decoded = {
+              key: base64.b64decode(value).decode("utf-8") if value else ""
+              for key, value in values.items()
+          }
+
+          for key in ("pr_owner", "pr_repo", "source_head_sha", "source_owner", "source_repo"):
+              if decoded[key]:
+                  print(f"::add-mask::{decoded[key]}")
+
+          if decoded["pr_owner"] and decoded["pr_repo"]:
+              print(f"::add-mask::{decoded['pr_owner']}/{decoded['pr_repo']}")
+          if decoded["source_owner"] and decoded["source_repo"]:
+              print(f"::add-mask::{decoded['source_owner']}/{decoded['source_repo']}")
+          PY
+
+      - name: Decode repository context
+        id: decode_repository_context
+        env:
+          PR_OWNER_BASE64: ${{ needs.detect-targets.outputs.pr-owner }}
+          PR_REPO_BASE64: ${{ needs.detect-targets.outputs.pr-repo }}
+          PROCESSING_CHECK_EXTERNAL_ID_BASE64: ${{ needs.detect-targets.outputs.processing-check-external-id }}
+          PROCESSING_CHECK_NAME_BASE64: ${{ needs.detect-targets.outputs.processing-check-name }}
+          SOURCE_HEAD_SHA_BASE64: ${{ needs.detect-targets.outputs.source-head-sha }}
+          SOURCE_OWNER_BASE64: ${{ needs.detect-targets.outputs.source-owner }}
+          SOURCE_REPO_BASE64: ${{ needs.detect-targets.outputs.source-repo }}
+        run: |
+          python3 - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          values = {
+              "pr-owner": os.environ.get("PR_OWNER_BASE64", ""),
+              "pr-repo": os.environ.get("PR_REPO_BASE64", ""),
+              "processing-check-external-id": os.environ.get("PROCESSING_CHECK_EXTERNAL_ID_BASE64", ""),
+              "processing-check-name": os.environ.get("PROCESSING_CHECK_NAME_BASE64", ""),
+              "source-head-sha": os.environ.get("SOURCE_HEAD_SHA_BASE64", ""),
+              "source-owner": os.environ.get("SOURCE_OWNER_BASE64", ""),
+              "source-repo": os.environ.get("SOURCE_REPO_BASE64", ""),
+          }
+
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          with output_path.open("a", encoding="utf-8") as fh:
+              for key, encoded in values.items():
+                  decoded = base64.b64decode(encoded).decode("utf-8") if encoded else ""
+                  fh.write(f"{key}={decoded}\n")
+          PY
 
       - name: Get PR repository checker token
         id: get_pr_token
         uses: actions/create-github-app-token@v3.0.0
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
-          owner: ${{ needs.detect-targets.outputs.pr-owner }}
+          owner: ${{ steps.decode_repository_context.outputs.pr-owner }}
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
-          repositories: ${{ needs.detect-targets.outputs.pr-repo }}
+          repositories: ${{ steps.decode_repository_context.outputs.pr-repo }}
 
       - name: Get source repository checker token
         id: get_source_token
         uses: actions/create-github-app-token@v3.0.0
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
-          owner: ${{ needs.detect-targets.outputs.source-owner }}
+          owner: ${{ steps.decode_repository_context.outputs.source-owner }}
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
-          repositories: ${{ needs.detect-targets.outputs.source-repo }}
+          repositories: ${{ steps.decode_repository_context.outputs.source-repo }}
 
       - name: Prepare combined report
         id: prepare_report
@@ -489,8 +593,8 @@ jobs:
           COMMENT_FILE: ${{ runner.temp }}/combined-linter-comment.md
           COMMENT_MARKER: '<!-- linter-service:results -->'
           PR_NUMBER: ${{ needs.detect-targets.outputs.pull-request-number }}
-          PR_OWNER: ${{ needs.detect-targets.outputs.pr-owner }}
-          PR_REPO: ${{ needs.detect-targets.outputs.pr-repo }}
+          PR_OWNER: ${{ steps.decode_repository_context.outputs.pr-owner }}
+          PR_REPO: ${{ steps.decode_repository_context.outputs.pr-repo }}
         with:
           github-token: ${{ steps.get_pr_token.outputs.token }}
           script: |
@@ -542,11 +646,11 @@ jobs:
         env:
           OVERALL_CONCLUSION: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_conclusion || 'failure' }}
           OVERALL_SUMMARY: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_summary || 'The linter-service workflow failed to generate a combined report.' }}
-          PROCESSING_CHECK_EXTERNAL_ID: ${{ needs.detect-targets.outputs.processing-check-external-id }}
-          PROCESSING_CHECK_NAME: ${{ needs.detect-targets.outputs.processing-check-name }}
-          SOURCE_HEAD_SHA: ${{ needs.detect-targets.outputs.source-head-sha }}
-          SOURCE_OWNER: ${{ needs.detect-targets.outputs.source-owner }}
-          SOURCE_REPO: ${{ needs.detect-targets.outputs.source-repo }}
+          PROCESSING_CHECK_EXTERNAL_ID: ${{ steps.decode_repository_context.outputs.processing-check-external-id }}
+          PROCESSING_CHECK_NAME: ${{ steps.decode_repository_context.outputs.processing-check-name }}
+          SOURCE_HEAD_SHA: ${{ steps.decode_repository_context.outputs.source-head-sha }}
+          SOURCE_OWNER: ${{ steps.decode_repository_context.outputs.source-owner }}
+          SOURCE_REPO: ${{ steps.decode_repository_context.outputs.source-repo }}
         with:
           github-token: ${{ steps.get_source_token.outputs.token }}
           script: |
