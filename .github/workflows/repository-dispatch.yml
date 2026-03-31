@@ -16,8 +16,10 @@ permissions: {}
 jobs:
   detect-targets:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
       actionlint-selected: ${{ steps.collect.outputs.actionlint-selected }}
+      ghalint-selected: ${{ steps.collect.outputs.ghalint-selected }}
       pull-request-number: ${{ steps.collect.outputs.pull-request-number }}
       selected-linters-json: ${{ steps.collect.outputs.selected-linters-json }}
       skip-reason: ${{ steps.collect.outputs.skip-reason }}
@@ -28,6 +30,10 @@ jobs:
         [
           {
             "name": "actionlint",
+            "patterns": ["^\\.github\\/workflows\\/.+\\.(?:yaml|yml)$"]
+          },
+          {
+            "name": "ghalint",
             "patterns": ["^\\.github\\/workflows\\/.+\\.(?:yaml|yml)$"]
           },
           {
@@ -80,6 +86,7 @@ jobs:
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
           owner: ${{ env.PR_REPOSITORY_OWNER }}
+          permission-pull-requests: read
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ env.PR_REPOSITORY_NAME }}
 
@@ -153,6 +160,7 @@ jobs:
 
               writeContext(contextValues);
               core.setOutput("actionlint-selected", "false");
+              core.setOutput("ghalint-selected", "false");
               core.setOutput("pull-request-number", String(pullNumber));
               core.setOutput("selected-linters-json", JSON.stringify([]));
               core.setOutput("skip-reason", skipReason);
@@ -236,6 +244,10 @@ jobs:
             core.setOutput("selected-linters-json", JSON.stringify(selectedLinters));
             core.setOutput("skip-reason", "");
             core.setOutput(
+              "ghalint-selected",
+              String(selectedLinters.includes("ghalint")),
+            );
+            core.setOutput(
               "yamllint-selected",
               String(selectedLinters.includes("yamllint")),
             );
@@ -263,6 +275,7 @@ jobs:
     needs: detect-targets
     if: ${{ needs.detect-targets.outputs.selected-linters-json != '[]' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Download dispatch context artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -325,6 +338,7 @@ jobs:
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
           owner: ${{ steps.decode_source_context.outputs.source-owner }}
+          permission-checks: write
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ steps.decode_source_context.outputs.source-repo }}
 
@@ -404,6 +418,16 @@ jobs:
       CHECKER_APP_ID: ${{ secrets.CHECKER_APP_ID }}
       CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
 
+  ghalint:
+    needs:
+      - detect-targets
+      - notify-processing-started
+    if: ${{ needs.detect-targets.outputs.ghalint-selected == 'true' }}
+    uses: ./.github/workflows/lint-ghalint.yml
+    secrets:
+      CHECKER_APP_ID: ${{ secrets.CHECKER_APP_ID }}
+      CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
+
   yamllint:
     needs:
       - detect-targets
@@ -429,10 +453,12 @@ jobs:
       - detect-targets
       - notify-processing-started
       - actionlint
+      - ghalint
       - yamllint
       - zizmor
     if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Download dispatch context artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -505,6 +531,7 @@ jobs:
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
           owner: ${{ steps.decode_repository_context.outputs.pr-owner }}
+          permission-issues: write
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ steps.decode_repository_context.outputs.pr-repo }}
 
@@ -514,6 +541,7 @@ jobs:
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
           owner: ${{ steps.decode_repository_context.outputs.source-owner }}
+          permission-checks: write
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ steps.decode_repository_context.outputs.source-repo }}
 
@@ -523,6 +551,9 @@ jobs:
           ACTIONLINT_COMMENT_BODY_BASE64: ${{ needs.actionlint.outputs.comment_body_base64 }}
           ACTIONLINT_CONCLUSION: ${{ needs.actionlint.outputs.conclusion }}
           ACTIONLINT_JOB_RESULT: ${{ needs.actionlint.result }}
+          GHALINT_COMMENT_BODY_BASE64: ${{ needs.ghalint.outputs.comment_body_base64 }}
+          GHALINT_CONCLUSION: ${{ needs.ghalint.outputs.conclusion }}
+          GHALINT_JOB_RESULT: ${{ needs.ghalint.result }}
           SELECTED_LINTERS_JSON: ${{ needs.detect-targets.outputs.selected-linters-json }}
           YAMLLINT_COMMENT_BODY_BASE64: ${{ needs.yamllint.outputs.comment_body_base64 }}
           YAMLLINT_CONCLUSION: ${{ needs.yamllint.outputs.conclusion }}
@@ -545,6 +576,11 @@ jobs:
                   "comment_body_base64": os.environ.get("ACTIONLINT_COMMENT_BODY_BASE64", ""),
                   "conclusion": os.environ.get("ACTIONLINT_CONCLUSION", ""),
                   "job_result": os.environ.get("ACTIONLINT_JOB_RESULT", ""),
+              },
+              "ghalint": {
+                  "comment_body_base64": os.environ.get("GHALINT_COMMENT_BODY_BASE64", ""),
+                  "conclusion": os.environ.get("GHALINT_CONCLUSION", ""),
+                  "job_result": os.environ.get("GHALINT_JOB_RESULT", ""),
               },
               "yamllint": {
                   "comment_body_base64": os.environ.get("YAMLLINT_COMMENT_BODY_BASE64", ""),
@@ -756,6 +792,7 @@ jobs:
     needs: detect-targets
     if: ${{ needs.detect-targets.outputs.selected-linters-json == '[]' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Report skipped lint execution
         env:

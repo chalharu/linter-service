@@ -24,6 +24,7 @@ permissions: {}
 jobs:
   run-linter:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
       comment_body_base64: ${{ steps.publish_outputs.outputs.comment_body_base64 }}
       conclusion: ${{ steps.publish_outputs.outputs.conclusion }}
@@ -87,6 +88,7 @@ jobs:
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
           owner: ${{ steps.decode_context.outputs.source-owner }}
+          permission-contents: read
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ steps.decode_context.outputs.source-repo }}
 
@@ -121,14 +123,11 @@ jobs:
 
           for path in files:
               lower_path = path.lower()
-              if linter_name == "actionlint":
+              if linter_name in {"actionlint", "ghalint", "zizmor"}:
                   if lower_path.startswith(".github/workflows/") and lower_path.endswith((".yaml", ".yml")):
                       print(path)
               elif linter_name == "yamllint":
                   if lower_path.endswith((".yaml", ".yml")):
-                      print(path)
-              elif linter_name == "zizmor":
-                  if lower_path.startswith(".github/workflows/") and lower_path.endswith((".yaml", ".yml")):
                       print(path)
               else:
                   raise SystemExit(f"unsupported linter: {linter_name}")
@@ -148,6 +147,17 @@ jobs:
               curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash \
                 -o "$RUNNER_TEMP/download-actionlint.bash"
               bash "$RUNNER_TEMP/download-actionlint.bash" latest
+              ;;
+            ghalint)
+              release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/suzuki-shunsuke/ghalint/releases/latest)"
+              version="$(basename "$release_url")"
+              version_number="$(printf '%s' "$version" | sed 's/^v//')"
+              asset="ghalint_${version_number}_linux_amd64.tar.gz"
+              mkdir -p "$RUNNER_TEMP/bin"
+              curl -fsSL "https://github.com/suzuki-shunsuke/ghalint/releases/download/$version/$asset" -o "$RUNNER_TEMP/$asset"
+              tar -xzf "$RUNNER_TEMP/$asset" -C "$RUNNER_TEMP/bin"
+              chmod +x "$RUNNER_TEMP/bin/ghalint"
+              echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
               ;;
             yamllint)
               python -m pip install --upgrade pip yamllint
@@ -170,9 +180,52 @@ jobs:
           set +e
           mapfile -t files < "$RUNNER_TEMP/selected-files.txt"
 
+          copy_selected_files_to_root() {
+            local target_root=$1
+            shift
+
+            for file in "$@"; do
+              local destination="$target_root/$file"
+              mkdir -p "$(dirname "$destination")"
+              cp "$file" "$destination"
+            done
+          }
+
+          copy_ghalint_config() {
+            local target_root=$1
+            local config_path
+
+            for config_path in \
+              .ghalint.yaml \
+              .ghalint.yml \
+              ghalint.yaml \
+              ghalint.yml \
+              .github/ghalint.yaml \
+              .github/ghalint.yml
+            do
+              if [ -f "$config_path" ]; then
+                local destination="$target_root/$config_path"
+                mkdir -p "$(dirname "$destination")"
+                cp "$config_path" "$destination"
+                return 0
+              fi
+            done
+          }
+
           case "$LINTER_NAME" in
           actionlint)
             ./actionlint "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
+            ;;
+          ghalint)
+            temp_repo="$RUNNER_TEMP/ghalint-repo"
+            rm -rf "$temp_repo"
+            mkdir -p "$temp_repo"
+            copy_selected_files_to_root "$temp_repo" "${files[@]}"
+            copy_ghalint_config "$temp_repo"
+            (
+              cd "$temp_repo" || exit 1
+              GHALINT_LOG_COLOR=never ghalint run
+            ) > "$RUNNER_TEMP/linter-output.txt" 2>&1
             ;;
           yamllint)
             yamllint_config=""
@@ -239,6 +292,14 @@ jobs:
                   "heading": "### actionlint",
                   "infra_failure": "❌ The `actionlint` workflow failed before producing a detailed report. See the workflow logs.",
                   "no_files": "No matching workflow files were selected for `actionlint`.",
+                  "success": "✅ No issues found in {count} changed GitHub Actions workflow file(s).",
+                  "failure": "❌ Issues found in {count} changed GitHub Actions workflow file(s).",
+              },
+              "ghalint": {
+                  "details_fallback": "ghalint did not produce diagnostic output before the job failed.",
+                  "heading": "### ghalint",
+                  "infra_failure": "❌ The `ghalint` workflow failed before producing a detailed report. See the workflow logs.",
+                  "no_files": "No matching GitHub Actions workflow files were selected for `ghalint`.",
                   "success": "✅ No issues found in {count} changed GitHub Actions workflow file(s).",
                   "failure": "❌ Issues found in {count} changed GitHub Actions workflow file(s).",
               },
