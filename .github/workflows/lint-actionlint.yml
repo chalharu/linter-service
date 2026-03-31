@@ -20,6 +20,8 @@ permissions: {}
 jobs:
   actionlint:
     uses: ./.github/workflows/lint-common.yml
-    secrets: inherit
+    secrets:
+      CHECKER_APP_ID: ${{ secrets.CHECKER_APP_ID }}
+      CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
     with:
       linter-name: actionlint

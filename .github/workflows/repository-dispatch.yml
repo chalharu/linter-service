@@ -22,6 +22,7 @@ jobs:
       selected-linters-json: ${{ steps.collect.outputs.selected-linters-json }}
       skip-reason: ${{ steps.collect.outputs.skip-reason }}
       yamllint-selected: ${{ steps.collect.outputs.yamllint-selected }}
+      zizmor-selected: ${{ steps.collect.outputs.zizmor-selected }}
     env:
       LINTER_DEFINITIONS_JSON: >-
         [
@@ -32,6 +33,10 @@ jobs:
           {
             "name": "yamllint",
             "patterns": ["\\.(?:yaml|yml)$"]
+          },
+          {
+            "name": "zizmor",
+            "patterns": ["^\\.github\\/workflows\\/.+\\.(?:yaml|yml)$"]
           }
         ]
       PR_REPOSITORY_NAME: ${{ github.event_name == 'pull_request' && github.event.repository.name || github.event.client_payload.repository.name }}
@@ -152,6 +157,7 @@ jobs:
               core.setOutput("selected-linters-json", JSON.stringify([]));
               core.setOutput("skip-reason", skipReason);
               core.setOutput("yamllint-selected", "false");
+              core.setOutput("zizmor-selected", "false");
               return;
             }
 
@@ -232,6 +238,10 @@ jobs:
             core.setOutput(
               "yamllint-selected",
               String(selectedLinters.includes("yamllint")),
+            );
+            core.setOutput(
+              "zizmor-selected",
+              String(selectedLinters.includes("zizmor")),
             );
 
       - name: Report routing status
@@ -390,7 +400,9 @@ jobs:
       - notify-processing-started
     if: ${{ needs.detect-targets.outputs.actionlint-selected == 'true' }}
     uses: ./.github/workflows/lint-actionlint.yml
-    secrets: inherit
+    secrets:
+      CHECKER_APP_ID: ${{ secrets.CHECKER_APP_ID }}
+      CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
 
   yamllint:
     needs:
@@ -398,7 +410,19 @@ jobs:
       - notify-processing-started
     if: ${{ needs.detect-targets.outputs.yamllint-selected == 'true' }}
     uses: ./.github/workflows/lint-yamllint.yml
-    secrets: inherit
+    secrets:
+      CHECKER_APP_ID: ${{ secrets.CHECKER_APP_ID }}
+      CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
+
+  zizmor:
+    needs:
+      - detect-targets
+      - notify-processing-started
+    if: ${{ needs.detect-targets.outputs.zizmor-selected == 'true' }}
+    uses: ./.github/workflows/lint-zizmor.yml
+    secrets:
+      CHECKER_APP_ID: ${{ secrets.CHECKER_APP_ID }}
+      CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
 
   publish-results:
     needs:
@@ -406,6 +430,7 @@ jobs:
       - notify-processing-started
       - actionlint
       - yamllint
+      - zizmor
     if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
     runs-on: ubuntu-latest
     steps:
@@ -502,6 +527,9 @@ jobs:
           YAMLLINT_COMMENT_BODY_BASE64: ${{ needs.yamllint.outputs.comment_body_base64 }}
           YAMLLINT_CONCLUSION: ${{ needs.yamllint.outputs.conclusion }}
           YAMLLINT_JOB_RESULT: ${{ needs.yamllint.result }}
+          ZIZMOR_COMMENT_BODY_BASE64: ${{ needs.zizmor.outputs.comment_body_base64 }}
+          ZIZMOR_CONCLUSION: ${{ needs.zizmor.outputs.conclusion }}
+          ZIZMOR_JOB_RESULT: ${{ needs.zizmor.result }}
         run: |
           python3 - <<'PY'
           import base64
@@ -522,6 +550,11 @@ jobs:
                   "comment_body_base64": os.environ.get("YAMLLINT_COMMENT_BODY_BASE64", ""),
                   "conclusion": os.environ.get("YAMLLINT_CONCLUSION", ""),
                   "job_result": os.environ.get("YAMLLINT_JOB_RESULT", ""),
+              },
+              "zizmor": {
+                  "comment_body_base64": os.environ.get("ZIZMOR_COMMENT_BODY_BASE64", ""),
+                  "conclusion": os.environ.get("ZIZMOR_CONCLUSION", ""),
+                  "job_result": os.environ.get("ZIZMOR_JOB_RESULT", ""),
               },
           }
 
