@@ -15,6 +15,8 @@ permissions: {}
 
 jobs:
   detect-targets:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -62,23 +64,12 @@ jobs:
             echo "::add-mask::$SOURCE_HEAD_SHA"
           fi
 
-      - name: Get current repository checker token
-        id: get_current_repo_token
-        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
-        with:
-          app-id: ${{ secrets.CHECKER_APP_ID }}
-          owner: ${{ github.repository_owner }}
-          permission-contents: read
-          private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
-          repositories: ${{ github.event.repository.name }}
-
       - name: Check out linter-service repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           path: linter-service
           persist-credentials: false
           ref: ${{ github.sha }}
-          token: ${{ steps.get_current_repo_token.outputs.token }}
 
       - name: Build linter definitions
         id: build_linter_definitions
@@ -315,6 +306,8 @@ jobs:
   notify-processing-started:
     needs: detect-targets
     if: ${{ needs.detect-targets.outputs.selected-linters-json != '[]' }}
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -324,23 +317,12 @@ jobs:
           name: detect-targets-context
           path: ${{ runner.temp }}/detect-targets-context
 
-      - name: Get current repository checker token
-        id: get_current_repo_token
-        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
-        with:
-          app-id: ${{ secrets.CHECKER_APP_ID }}
-          owner: ${{ github.repository_owner }}
-          permission-contents: read
-          private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
-          repositories: ${{ github.event.repository.name }}
-
       - name: Check out linter-service repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           path: linter-service
           persist-credentials: false
           ref: ${{ github.sha }}
-          token: ${{ steps.get_current_repo_token.outputs.token }}
 
       - name: Mask repository metadata
         env:
@@ -479,6 +461,8 @@ jobs:
       - yamllint
       - zizmor
     if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -488,23 +472,12 @@ jobs:
           name: detect-targets-context
           path: ${{ runner.temp }}/detect-targets-context
 
-      - name: Get current repository checker token
-        id: get_current_repo_token
-        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
-        with:
-          app-id: ${{ secrets.CHECKER_APP_ID }}
-          owner: ${{ github.repository_owner }}
-          permission-contents: read
-          private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
-          repositories: ${{ github.event.repository.name }}
-
       - name: Check out linter-service repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           path: linter-service
           persist-credentials: false
           ref: ${{ github.sha }}
-          token: ${{ steps.get_current_repo_token.outputs.token }}
 
       - name: Mask repository metadata
         env:
