@@ -169,7 +169,15 @@ jobs:
             ./actionlint "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
             ;;
           yamllint)
-            cat > "$RUNNER_TEMP/yamllint.yaml" <<'EOF'
+            yamllint_config=""
+            for candidate in ".yamllint" ".yamllint.yaml" ".yamllint.yml"; do
+              if [ -f "$candidate" ]; then
+                yamllint_config="$candidate"
+                break
+              fi
+            done
+            if [ -z "$yamllint_config" ]; then
+              cat > "$RUNNER_TEMP/yamllint.yaml" <<'EOF'
           extends: default
           rules:
             comments-indentation: disable
@@ -178,7 +186,9 @@ jobs:
             truthy:
               check-keys: false
           EOF
-            yamllint -c "$RUNNER_TEMP/yamllint.yaml" "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
+              yamllint_config="$RUNNER_TEMP/yamllint.yaml"
+            fi
+            yamllint -c "$yamllint_config" "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
             ;;
           *)
             echo "unsupported linter: $LINTER_NAME" >&2
