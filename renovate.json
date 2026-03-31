@@ -1,0 +1,40 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests",
+    ":disableRateLimiting"
+  ],
+  "enabledManagers": ["github-actions"],
+  "labels": ["dependencies", "renovate", "renovate-gate-wait-3d"],
+  "dependencyDashboard": true,
+  "prCreation": "immediate",
+  "rebaseWhen": "behind-base-branch",
+  "timezone": "Asia/Tokyo",
+  "automergeStrategy": "auto",
+  "pruneStaleBranches": false,
+  "separateMajorMinor": true,
+  "separateMinorPatch": true,
+  "separateMultipleMajor": true,
+  "separateMultipleMinor": true,
+  "automerge": true,
+  "platformAutomerge": false,
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["dependencies", "renovate", "security"]
+  },
+  "packageRules": [
+    {
+      "description": "Give each target version or digest its own Renovate branch",
+      "matchUpdateTypes": [
+        "digest",
+        "major",
+        "minor",
+        "patch",
+        "pin",
+        "pinDigest"
+      ],
+      "branchTopic": "{{{depNameSanitized}}}{{#if newVersion}}__v{{{newVersion}}}{{/if}}{{#if newDigestShort}}__d{{{newDigestShort}}}{{/if}}"
+    }
+  ]
+}
