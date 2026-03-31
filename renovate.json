@@ -1,0 +1,75 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests",
+    ":disableRateLimiting"
+  ],
+  "enabledManagers": ["github-actions", "custom.regex"],
+  "labels": ["dependencies", "renovate", "renovate-gate-wait-3d"],
+  "dependencyDashboard": true,
+  "prCreation": "immediate",
+  "rebaseWhen": "behind-base-branch",
+  "timezone": "Asia/Tokyo",
+  "automergeStrategy": "auto",
+  "pruneStaleBranches": false,
+  "separateMajorMinor": true,
+  "separateMinorPatch": true,
+  "separateMultipleMajor": true,
+  "separateMultipleMinor": true,
+  "automerge": true,
+  "platformAutomerge": false,
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["dependencies", "renovate", "security"]
+  },
+  "packageRules": [
+    {
+      "description": "Give each target version or digest its own Renovate branch",
+      "matchUpdateTypes": [
+        "digest",
+        "major",
+        "minor",
+        "patch",
+        "pin",
+        "pinDigest"
+      ],
+      "branchTopic": "{{{depNameSanitized}}}{{#if newVersion}}__v{{{newVersion}}}{{/if}}{{#if newDigestShort}}__d{{{newDigestShort}}}{{/if}}"
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github\\/aqua\\/aqua\\.ya?ml$/"],
+      "matchStrings": ["ref:\\s*(?<currentValue>v?[^\\s]+)"],
+      "depNameTemplate": "aquaproj/aqua-registry",
+      "datasourceTemplate": "github-tags"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github\\/aqua\\/imports\\/.*\\.ya?ml$/"],
+      "matchStrings": [
+        "- name:\\s*(?<depName>[^@\\s]+)@(?<currentValue>v?[^\\s]+)"
+      ],
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github\\/workflows\\/github-actions-linters\\.yml$/"
+      ],
+      "matchStrings": ["aqua_version:\\s*(?<currentValue>v?[^\\s]+)"],
+      "depNameTemplate": "aquaproj/aqua",
+      "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github\\/scripts\\/validate-renovate-config\\.sh$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: versioning=(?<versioning>\\S+))?\\s+[a-z_]+=\"\\$\\{[A-Z0-9_]+:-[^:@\"}]+:(?<currentValue>[^@\"}]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?\\}\""
+      ]
+    }
+  ]
+}
