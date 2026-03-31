@@ -4,15 +4,42 @@
 
 GitHub App からこのリポジトリへ直接 Webhook できない前提のため、Worker が Proxy として動作します。
 
+## GitHub Apps の役割分担
+
+### `linter-service-dispatcher`
+
+- 利用場所: Cloudflare Worker
+- Install 先: このリポジトリ
+- Webhook: なし
+- 権限:
+  - `Contents: write`
+  - `Metadata: read`
+
+Worker はこの App の credentials を使って、このリポジトリへ `repository_dispatch` を送信します。
+
+### `linter-service-checker`
+
+- 利用場所: `.github/workflows/repository-dispatch.yml`
+- Install 先: 各利用リポジトリ
+- Webhook: Cloudflare Worker
+  - `Pull request`
+  - `Check run`
+- 権限:
+  - `Checks: write`
+  - `Contents: read`
+  - `Pull requests: read`
+  - `Metadata: read`
+
+Cloudflare Worker はこの App の webhook secret で署名検証を行います。`repository_dispatch.yml` ではこの App の credentials を使って、source repository に対する API 操作を行う想定です。
+
 ## 役割
 
-- GitHub App の `pull_request` と `check_run` Webhook を受信する
-- `X-Hub-Signature-256` を使って Webhook 署名を検証する
-- `pull_request` は payload から、`check_run` は必要に応じて GitHub API から PR 元情報を取得する
-- GitHub App の installation token を発行する
-- 設定済みリポジトリへ `repository_dispatch` を送信する
-
-通常は `GITHUB_DISPATCH_OWNER` / `GITHUB_DISPATCH_REPO` にこのリポジトリを指定し、ルート側の GitHub Actions が共通 Linter を実行します。
+- `linter-service-checker` の `pull_request` / `check_run` Webhook を受信する
+- `X-Hub-Signature-256` を使って webhook 署名を検証する
+- `pull_request` は payload から PR 情報をそのまま取り出す
+- `check_run` は関連 PR 番号と check_run metadata を取り出す
+- `linter-service-dispatcher` の installation token を取得する
+- このリポジトリへ `repository_dispatch` を送信する
 
 ## ローカル開発
 
@@ -39,44 +66,46 @@ npm run deploy
 
 `wrangler.toml` はこのディレクトリにあります。
 
-## 環境変数
+## Worker の環境変数
 
 Cloudflare Workers には Secret として、ローカル開発時には `worker/.dev.vars` として設定します。
 
-- `GITHUB_APP_ID`
-- `GITHUB_APP_PRIVATE_KEY`
-- `GITHUB_WEBHOOK_SECRET`
+- `GITHUB_DISPATCHER_APP_ID`
+- `GITHUB_DISPATCHER_APP_PRIVATE_KEY`
+- `GITHUB_CHECKER_WEBHOOK_SECRET`
 - `GITHUB_DISPATCH_OWNER`
 - `GITHUB_DISPATCH_REPO`
-- `GITHUB_DISPATCH_EVENT_TYPE` 任意。未指定時は `github_app_webhook`
-- `GITHUB_DISPATCH_INSTALLATION_ID` 任意。Webhook を受けた repo の installation とは別の installation で dispatch 先 repo にアクセスする必要がある場合だけ指定
 - `GITHUB_API_BASE_URL` 任意。既定値は `https://api.github.com`
 
-通常必要なのは `GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY` / `GITHUB_WEBHOOK_SECRET` / `GITHUB_DISPATCH_OWNER` / `GITHUB_DISPATCH_REPO` です。
+`repository_dispatch` の `event_type` は固定で `github_app_webhook` を使います。
 
-`GITHUB_DISPATCH_EVENT_TYPE` は `repository_dispatch` の `event_type` を上書きしたい場合のためのオプションです。現在の実装では未指定でも `github_app_webhook` が使われるため、通常は不要です。
-
-`GITHUB_DISPATCH_INSTALLATION_ID` は、Webhook 元 repo の `installation.id` では dispatch 先 repo にアクセスできない場合のためのオプションです。例えば、Worker が複数 owner の repo から Webhook を受ける一方で、dispatch 先がこのリポジトリに固定されていて、その repo へアクセスできる GitHub App installation が別にある場合に使います。
+dispatcher App は install 先がこのリポジトリに固定されている前提なので、Worker は `GITHUB_DISPATCH_OWNER` / `GITHUB_DISPATCH_REPO` から installation を解決します。そのため `GITHUB_DISPATCH_INSTALLATION_ID` のような追加設定は不要です。
 
 デプロイ前には Cloudflare 側へ Secret を登録します。
 
 ```bash
 cd worker
-wrangler secret put GITHUB_APP_ID
-wrangler secret put GITHUB_APP_PRIVATE_KEY
-wrangler secret put GITHUB_WEBHOOK_SECRET
+wrangler secret put GITHUB_DISPATCHER_APP_ID
+wrangler secret put GITHUB_DISPATCHER_APP_PRIVATE_KEY
+wrangler secret put GITHUB_CHECKER_WEBHOOK_SECRET
 wrangler secret put GITHUB_DISPATCH_OWNER
 wrangler secret put GITHUB_DISPATCH_REPO
-# Optional:
-# wrangler secret put GITHUB_DISPATCH_EVENT_TYPE
-# wrangler secret put GITHUB_DISPATCH_INSTALLATION_ID
 ```
+
+## `repository_dispatch.yml` 側の secrets
+
+このリポジトリの GitHub Actions では、checker App 用に以下の secrets を使います。
+
+- `CHECKER_APP_ID`
+- `CHECKER_PRIVATE_KEY`
+
+workflow は `client_payload.repository.owner.login` と `client_payload.repository.name` を使って、source repository に対する checker App token を取得します。
 
 ## `repository_dispatch` payload
 
 Worker は `client_payload` に以下のような構造を載せます。
 
-ルート側の `repository_dispatch` workflow では、この metadata の `repository.owner.login` を使って GitHub App token を取得します。
+### `pull_request` event
 
 ```json
 {
@@ -84,9 +113,9 @@ Worker は `client_payload` に以下のような構造を載せます。
   "action": "opened",
   "delivery_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
   "source_installation_id": 12345,
-  "dispatch_installation_id": 12345,
   "repository": {
     "full_name": "octo-org/source-repo",
+    "name": "source-repo",
     "owner": {
       "login": "octo-org",
       "type": "Organization"
@@ -102,16 +131,41 @@ Worker は `client_payload` に以下のような構造を載せます。
       "ref": "main",
       "sha": "def456"
     }
-  },
-  "check_run": {
-    "name": "ci / test",
-    "status": "completed",
-    "conclusion": "success"
   }
 }
 ```
 
-`check_run` 由来でない場合、`check_run` は含まれません。
+### `check_run` event
+
+```json
+{
+  "event_name": "check_run",
+  "action": "completed",
+  "delivery_id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "source_installation_id": 12345,
+  "repository": {
+    "full_name": "octo-org/source-repo",
+    "name": "source-repo",
+    "owner": {
+      "login": "octo-org",
+      "type": "Organization"
+    }
+  },
+  "pull_request": {
+    "number": 42
+  },
+  "check_run": {
+    "name": "ci / test",
+    "status": "completed",
+    "conclusion": "success",
+    "head_sha": "abc123"
+  }
+}
+```
+
+`pull_request` event では `pull_request` に head/base を含む詳細を入れます。
+
+`check_run` event では Worker は source repository への追加 API call を行わないため、`pull_request` には関連 PR の `number` を最低限載せ、必要な詳細は `repository_dispatch.yml` 側で checker App token を使って取得する想定です。
 
 ## 関連ファイル
 

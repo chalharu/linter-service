@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SOURCE_REPOSITORY_OWNER: ${{ github.event.client_payload.repository.owner.login }}
+      SOURCE_REPOSITORY_NAME: ${{ github.event.client_payload.repository.name }}
     steps:
       - name: Validate dispatch metadata
         run: |
@@ -17,14 +18,19 @@ jobs:
             echo "client_payload.repository.owner.login is required" >&2
             exit 1
           }
+          test -n "$SOURCE_REPOSITORY_NAME" || {
+            echo "client_payload.repository.name is required" >&2
+            exit 1
+          }
 
-      - name: Get token
+      - name: Get checker token
         id: get_token
         uses: actions/create-github-app-token@v3.0.0
         with:
-          private-key: ${{ secrets.PRIVATE_KEY }}
-          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
+          app-id: ${{ secrets.CHECKER_APP_ID }}
           owner: ${{ env.SOURCE_REPOSITORY_OWNER }}
+          repositories: ${{ env.SOURCE_REPOSITORY_NAME }}
 
       - name: Print dispatch metadata
         env:

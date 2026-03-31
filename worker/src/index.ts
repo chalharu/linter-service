@@ -1,13 +1,11 @@
 import { importPKCS8, SignJWT } from "jose";
 
 export interface Env {
-	GITHUB_APP_ID: string;
-	GITHUB_APP_PRIVATE_KEY: string;
-	GITHUB_WEBHOOK_SECRET: string;
+	GITHUB_DISPATCHER_APP_ID: string;
+	GITHUB_DISPATCHER_APP_PRIVATE_KEY: string;
+	GITHUB_CHECKER_WEBHOOK_SECRET: string;
 	GITHUB_DISPATCH_OWNER: string;
 	GITHUB_DISPATCH_REPO: string;
-	GITHUB_DISPATCH_EVENT_TYPE?: string;
-	GITHUB_DISPATCH_INSTALLATION_ID?: string;
 	GITHUB_API_BASE_URL?: string;
 }
 
@@ -97,15 +95,8 @@ interface CheckRunEventPayload {
 	sender?: GitHubUser;
 }
 
-interface InstallationContext {
-	sourceInstallationId: number;
-	dispatchInstallationId: number;
-	getSourceToken: () => Promise<string>;
-	getDispatchToken: () => Promise<string>;
-}
-
 const DEFAULT_API_BASE_URL = "https://api.github.com";
-const DEFAULT_DISPATCH_EVENT_TYPE = "github_app_webhook";
+const DISPATCH_EVENT_TYPE = "github_app_webhook";
 const GITHUB_API_VERSION = "2022-11-28";
 const USER_AGENT = "linter-service-webhook-proxy";
 
@@ -151,8 +142,8 @@ async function routeRequest(request: Request, env: Env): Promise<Response> {
 
 async function handleWebhook(request: Request, env: Env): Promise<Response> {
 	const webhookSecret = requireEnv(
-		env.GITHUB_WEBHOOK_SECRET,
-		"GITHUB_WEBHOOK_SECRET",
+		env.GITHUB_CHECKER_WEBHOOK_SECRET,
+		"GITHUB_CHECKER_WEBHOOK_SECRET",
 	);
 	const eventName = requireHeader(request.headers, "x-github-event");
 	const deliveryId = requireHeader(request.headers, "x-github-delivery");
@@ -189,11 +180,7 @@ async function handlePullRequestEvent(
 	env: Env,
 ): Promise<Response> {
 	const sourceInstallationId = getSourceInstallationId(payload.installation);
-	const installationContext = createInstallationContext(
-		env,
-		sourceInstallationId,
-	);
-	const dispatchToken = await installationContext.getDispatchToken();
+	const dispatchToken = await createDispatchInstallationToken(env);
 
 	await sendRepositoryDispatch(
 		env,
@@ -201,12 +188,11 @@ async function handlePullRequestEvent(
 		buildClientPayload({
 			action: payload.action,
 			deliveryId,
-			dispatchInstallationId: installationContext.dispatchInstallationId,
 			eventName: "pull_request",
-			pullRequest: payload.pull_request,
+			pullRequest: normalizePullRequest(payload.pull_request),
 			repository: payload.repository,
 			sender: payload.sender,
-			sourceInstallationId: installationContext.sourceInstallationId,
+			sourceInstallationId,
 		}),
 	);
 
@@ -231,17 +217,11 @@ async function handleCheckRunEvent(
 	env: Env,
 ): Promise<Response> {
 	const sourceInstallationId = getSourceInstallationId(payload.installation);
-	const installationContext = createInstallationContext(
-		env,
-		sourceInstallationId,
-	);
-	const pullRequest = await resolveCheckRunPullRequest(
-		payload,
-		env,
-		installationContext.getSourceToken,
+	const pullRequestNumber = resolveAssociatedPullRequestNumber(
+		payload.check_run,
 	);
 
-	if (!pullRequest) {
+	if (!pullRequestNumber) {
 		return json(
 			{
 				ok: true,
@@ -253,7 +233,7 @@ async function handleCheckRunEvent(
 		);
 	}
 
-	const dispatchToken = await installationContext.getDispatchToken();
+	const dispatchToken = await createDispatchInstallationToken(env);
 
 	await sendRepositoryDispatch(
 		env,
@@ -262,12 +242,11 @@ async function handleCheckRunEvent(
 			action: payload.action,
 			checkRun: payload.check_run,
 			deliveryId,
-			dispatchInstallationId: installationContext.dispatchInstallationId,
 			eventName: "check_run",
-			pullRequest,
+			pullRequest: normalizePullRequestReference(pullRequestNumber),
 			repository: payload.repository,
 			sender: payload.sender,
-			sourceInstallationId: installationContext.sourceInstallationId,
+			sourceInstallationId,
 		}),
 	);
 
@@ -277,56 +256,18 @@ async function handleCheckRunEvent(
 			dispatched: true,
 			skipped: false,
 			pull_request: {
-				head_ref: pullRequest.head.ref ?? null,
-				head_sha: pullRequest.head.sha ?? null,
-				number: pullRequest.number,
+				head_sha: payload.check_run.head_sha ?? null,
+				number: pullRequestNumber,
 			},
 		},
 		200,
 	);
 }
 
-function createInstallationContext(
-	env: Env,
-	sourceInstallationId: number,
-): InstallationContext {
-	const dispatchInstallationId = resolveDispatchInstallationId(
-		env,
-		sourceInstallationId,
-	);
-	let sourceTokenPromise: Promise<string> | undefined;
-	let dispatchTokenPromise: Promise<string> | undefined;
-
-	const getSourceToken = (): Promise<string> => {
-		sourceTokenPromise ??= createInstallationToken(env, sourceInstallationId);
-		return sourceTokenPromise;
-	};
-
-	const getDispatchToken = (): Promise<string> => {
-		if (dispatchInstallationId === sourceInstallationId) {
-			return getSourceToken();
-		}
-
-		dispatchTokenPromise ??= createInstallationToken(
-			env,
-			dispatchInstallationId,
-		);
-		return dispatchTokenPromise;
-	};
-
-	return {
-		dispatchInstallationId,
-		getDispatchToken,
-		getSourceToken,
-		sourceInstallationId,
-	};
-}
-
 function buildClientPayload({
 	action,
 	checkRun,
 	deliveryId,
-	dispatchInstallationId,
 	eventName,
 	pullRequest,
 	repository,
@@ -336,9 +277,8 @@ function buildClientPayload({
 	action: string;
 	checkRun?: GitHubCheckRun;
 	deliveryId: string;
-	dispatchInstallationId: number;
 	eventName: "pull_request" | "check_run";
-	pullRequest: GitHubPullRequest;
+	pullRequest: JsonRecord;
 	repository: GitHubRepository;
 	sender?: GitHubUser;
 	sourceInstallationId: number;
@@ -346,9 +286,8 @@ function buildClientPayload({
 	const payload: JsonRecord = {
 		action,
 		delivery_id: deliveryId,
-		dispatch_installation_id: dispatchInstallationId,
 		event_name: eventName,
-		pull_request: normalizePullRequest(pullRequest),
+		pull_request: pullRequest,
 		received_at: new Date().toISOString(),
 		repository: normalizeRepository(repository),
 		sender: normalizeUser(sender),
@@ -362,16 +301,13 @@ function buildClientPayload({
 	return payload;
 }
 
-async function resolveCheckRunPullRequest(
-	payload: CheckRunEventPayload,
-	env: Env,
-	getSourceToken: () => Promise<string>,
-): Promise<GitHubPullRequest | null> {
+function resolveAssociatedPullRequestNumber(
+	checkRun: GitHubCheckRun,
+): number | null {
 	const associatedPullRequests =
-		payload.check_run.pull_requests &&
-		payload.check_run.pull_requests.length > 0
-			? payload.check_run.pull_requests
-			: (payload.check_run.check_suite?.pull_requests ?? []);
+		checkRun.pull_requests && checkRun.pull_requests.length > 0
+			? checkRun.pull_requests
+			: (checkRun.check_suite?.pull_requests ?? []);
 
 	if (associatedPullRequests.length === 0) {
 		return null;
@@ -384,54 +320,60 @@ async function resolveCheckRunPullRequest(
 		"check_run payload must include a positive pull request number",
 	);
 
-	const repositoryFullName = payload.repository.full_name;
-
-	if (!repositoryFullName) {
-		throw new HttpError(
-			400,
-			"check_run payload is missing repository.full_name",
-		);
-	}
-
-	const { owner, repo } = splitRepositoryFullName(repositoryFullName);
-	const sourceToken = await getSourceToken();
-
-	return fetchPullRequest(env, sourceToken, owner, repo, pullRequestNumber);
+	return pullRequestNumber;
 }
 
-async function fetchPullRequest(
+async function createDispatchInstallationToken(env: Env): Promise<string> {
+	const appId = requireEnv(
+		env.GITHUB_DISPATCHER_APP_ID,
+		"GITHUB_DISPATCHER_APP_ID",
+	);
+	const privateKey = normalizeMultilineSecret(
+		requireEnv(
+			env.GITHUB_DISPATCHER_APP_PRIVATE_KEY,
+			"GITHUB_DISPATCHER_APP_PRIVATE_KEY",
+		),
+	);
+	const appJwt = await createAppJwt(appId, privateKey);
+	const installationId = await resolveDispatchInstallationId(env, appJwt);
+
+	return createInstallationToken(env, appJwt, installationId);
+}
+
+async function resolveDispatchInstallationId(
 	env: Env,
-	token: string,
-	owner: string,
-	repo: string,
-	pullRequestNumber: number,
-): Promise<GitHubPullRequest> {
+	appJwt: string,
+): Promise<number> {
+	const owner = requireEnv(env.GITHUB_DISPATCH_OWNER, "GITHUB_DISPATCH_OWNER");
+	const repo = requireEnv(env.GITHUB_DISPATCH_REPO, "GITHUB_DISPATCH_REPO");
 	const responseText = await fetchGitHubText(
-		`${getGitHubApiBaseUrl(env)}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${pullRequestNumber}`,
+		`${getGitHubApiBaseUrl(env)}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/installation`,
 		{
-			headers: buildGitHubHeaders(token),
+			headers: {
+				...buildGitHubHeaders(undefined),
+				Authorization: `Bearer ${appJwt}`,
+			},
 			method: "GET",
 		},
-		"failed to fetch pull request details",
+		"failed to resolve dispatcher installation",
 	);
 	const payload = parseJson(responseText);
+	const installationId = isRecord(payload) ? payload.id : undefined;
 
-	if (!isPullRequest(payload)) {
-		throw new HttpError(502, "GitHub pull request response was malformed");
-	}
+	assertPositiveInteger(
+		installationId,
+		"GitHub dispatcher installation response was malformed",
+		502,
+	);
 
-	return payload;
+	return installationId;
 }
 
 async function createInstallationToken(
 	env: Env,
+	appJwt: string,
 	installationId: number,
 ): Promise<string> {
-	const appId = requireEnv(env.GITHUB_APP_ID, "GITHUB_APP_ID");
-	const privateKey = normalizeMultilineSecret(
-		requireEnv(env.GITHUB_APP_PRIVATE_KEY, "GITHUB_APP_PRIVATE_KEY"),
-	);
-	const appJwt = await createAppJwt(appId, privateKey);
 	const responseText = await fetchGitHubText(
 		`${getGitHubApiBaseUrl(env)}/app/installations/${installationId}/access_tokens`,
 		{
@@ -443,7 +385,7 @@ async function createInstallationToken(
 			},
 			method: "POST",
 		},
-		"failed to create installation token",
+		"failed to create dispatcher installation token",
 	);
 	const payload = parseJson(responseText);
 
@@ -479,15 +421,13 @@ async function sendRepositoryDispatch(
 ): Promise<void> {
 	const owner = requireEnv(env.GITHUB_DISPATCH_OWNER, "GITHUB_DISPATCH_OWNER");
 	const repo = requireEnv(env.GITHUB_DISPATCH_REPO, "GITHUB_DISPATCH_REPO");
-	const eventType =
-		env.GITHUB_DISPATCH_EVENT_TYPE?.trim() || DEFAULT_DISPATCH_EVENT_TYPE;
 
 	await fetchGitHubText(
 		`${getGitHubApiBaseUrl(env)}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/dispatches`,
 		{
 			body: JSON.stringify({
 				client_payload: clientPayload,
-				event_type: eventType,
+				event_type: DISPATCH_EVENT_TYPE,
 			}),
 			headers: {
 				...buildGitHubHeaders(token),
@@ -553,26 +493,6 @@ async function verifySignature(
 	}
 }
 
-function resolveDispatchInstallationId(
-	env: Env,
-	sourceInstallationId: number,
-): number {
-	const rawDispatchInstallationId = env.GITHUB_DISPATCH_INSTALLATION_ID?.trim();
-
-	if (!rawDispatchInstallationId) {
-		return sourceInstallationId;
-	}
-
-	const parsedDispatchInstallationId = Number(rawDispatchInstallationId);
-	assertPositiveInteger(
-		parsedDispatchInstallationId,
-		"GITHUB_DISPATCH_INSTALLATION_ID must be a positive integer",
-		500,
-	);
-
-	return parsedDispatchInstallationId;
-}
-
 function getSourceInstallationId(
 	installation: GitHubInstallation | undefined,
 ): number {
@@ -594,6 +514,12 @@ function normalizePullRequest(pullRequest: GitHubPullRequest): JsonRecord {
 		head: normalizePullRequestBranch(pullRequest.head),
 		state: pullRequest.state ?? null,
 		title: pullRequest.title ?? null,
+	};
+}
+
+function normalizePullRequestReference(pullRequestNumber: number): JsonRecord {
+	return {
+		number: pullRequestNumber,
 	};
 }
 
@@ -691,21 +617,6 @@ function parseJson(input: string): unknown {
 
 		throw error;
 	}
-}
-
-function splitRepositoryFullName(fullName: string): {
-	owner: string;
-	repo: string;
-} {
-	const [rawOwner, rawRepo, ...rest] = fullName.split("/");
-	const owner = rawOwner?.trim();
-	const repo = rawRepo?.trim();
-
-	if (!owner || !repo || rest.length > 0) {
-		throw new HttpError(400, `repository.full_name is invalid: ${fullName}`);
-	}
-
-	return { owner, repo };
 }
 
 function getGitHubApiBaseUrl(env: Env): string {
