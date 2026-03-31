@@ -103,9 +103,9 @@ wrangler secret put GITHUB_DISPATCH_REPO
 - `CHECKER_APP_ID`
 - `CHECKER_PRIVATE_KEY`
 
-workflow は `client_payload.repository.owner.login` と `client_payload.repository.name` を使って PR repository 用 token を取得し、PR details から head/source repository を解決します。
+`repository_dispatch` 経由では workflow は `client_payload.repository.owner.login` と `client_payload.repository.name` を使って PR repository 用 token を取得し、PR details から head/source repository を解決します。このリポジトリ自身の `pull_request` event でも同じ workflow を直接実行でき、その場合は `github.event` から同等の情報を解決します。Worker は dispatch 先と同じ repository から来た webhook を送信せず、このリポジトリの PR が `pull_request` trigger と `repository_dispatch` trigger の両方で二重実行されることを避けます。
 
-また `repository_dispatch.yml` は declarative な linter 定義から changed files を評価し、共通の in-progress check run を作成してから reusable linter workflow を並列実行します。個別 workflow は lint 実行結果だけを返し、最終的な PR comment の upsert と processing check run の success/failure 更新は `repository_dispatch.yml` 側で一括して行います。private repository を前提に、workflow logs には repository 名や changed file 一覧、lint diagnostics を極力出さず、詳細は PR comment に寄せます。
+また `repository_dispatch.yml` は declarative な linter 定義から changed files を評価し、共通の in-progress check run を作成してから reusable linter workflow を並列実行します。個別 workflow は lint 実行結果だけを返し、最終的な PR comment の upsert と processing check run の success/failure 更新は `repository_dispatch.yml` 側で一括して行います。このリポジトリの PR では `pull_request` trigger、外部リポジトリでは Worker からの `repository_dispatch` trigger を使います。private repository を前提に、workflow logs には repository 名や changed file 一覧、lint diagnostics を極力出さず、詳細は PR comment に寄せます。
 
 ## `repository_dispatch` payload
 
@@ -181,7 +181,7 @@ Worker は `client_payload` に以下のような構造を載せます。
 
 `pull_request` event では `pull_request` に head/base を含む詳細を入れます。
 
-`check_run` event では Worker は source repository への追加 API call を行わないため、`pull_request` には関連 PR の `number` を最低限載せ、必要な詳細は `repository_dispatch.yml` 側で checker App token を使って取得する想定です。なお `linter-service:` で始まる `external_id` を持つ self-generated な check run は Worker 側で無視し、通知用 check run が再び `repository_dispatch` を起動しないようにしています。
+`check_run` event では Worker は source repository への追加 API call を行わないため、`pull_request` には関連 PR の `number` を最低限載せ、必要な詳細は `repository_dispatch.yml` 側で checker App token を使って取得する想定です。なお `linter-service:` で始まる `external_id` を持つ self-generated な check run は Worker 側で無視し、通知用 check run が再び `repository_dispatch` を起動しないようにしています。また dispatch 先 repository 自身の webhook も Worker 側で無視し、このリポジトリでは direct `pull_request` trigger を正とします。
 
 ## 関連ファイル
 
