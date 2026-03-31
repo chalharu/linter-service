@@ -604,11 +604,7 @@ jobs:
           repositories: ${{ steps.decode_repository_context.outputs.pr-repo }}
 
       - name: Delete legacy workflow-authored PR comments
-        if: >-
-          ${{
-            steps.decode_repository_context.outputs.pr-is-current-repo == 'true' &&
-            steps.get_pr_token.outcome == 'success'
-          }}
+        if: ${{ steps.decode_repository_context.outputs.pr-is-current-repo == 'true' }}
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           COMMENT_MARKER: '<!-- linter-service:results -->'
