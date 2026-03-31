@@ -98,12 +98,26 @@ jobs:
         with:
           github-token: ${{ steps.get_checker_token.outputs.token }}
           script: |
+            const fs = require("node:fs");
+            const path = require("node:path");
             const owner = process.env.PR_REPOSITORY_OWNER;
             const repo = process.env.PR_REPOSITORY_NAME;
             const pullNumber = Number(process.env.PULL_REQUEST_NUMBER);
             const sourceHeadShaFromPayload = process.env.SOURCE_HEAD_SHA || "";
             const definitions = JSON.parse(process.env.LINTER_DEFINITIONS_JSON ?? "[]");
             const encode = (value) => Buffer.from(value, "utf8").toString("base64");
+            const contextPath = path.join(
+              process.env.RUNNER_TEMP,
+              "detect-targets-context.json",
+            );
+            const writeContext = (contextValues) => {
+              fs.writeFileSync(
+                contextPath,
+                JSON.stringify(contextValues),
+                "utf8",
+              );
+              core.setOutput("context-path", contextPath);
+            };
             const isSelfRepositoryDispatch =
               context.eventName === "repository_dispatch" &&
               owner.toLowerCase() === context.repo.owner.toLowerCase() &&
@@ -117,17 +131,21 @@ jobs:
               const skipReason =
                 "Skipping repository_dispatch for this repository because local pull requests are handled by the direct pull_request trigger.";
 
-              core.setOutput("changed-files-json", encode(JSON.stringify([])));
-              core.setOutput("pr-owner", encode(owner));
-              core.setOutput("pr-repo", encode(repo));
-              core.setOutput("processing-check-external-id", encode(""));
-              core.setOutput("processing-check-name", encode("linter-service"));
-              core.setOutput("pull-request-number", String(pullNumber));
-              core.setOutput("selected-linters-json", JSON.stringify([]));
-              core.setOutput("skip-reason", skipReason);
-              core.setOutput("source-head-sha", encode(sourceHeadShaFromPayload));
-              core.setOutput("source-owner", encode(owner));
-              core.setOutput("source-repo", encode(repo));
+              const contextValues = {
+                "actionlint-selected": "false",
+                "changed-files-json": encode(JSON.stringify([])),
+                "pr-owner": encode(owner),
+                "pr-repo": encode(repo),
+                "processing-check-external-id": encode(""),
+                "processing-check-name": encode("linter-service"),
+                "pull-request-number": String(pullNumber),
+                "selected-linters-json": JSON.stringify([]),
+                "skip-reason": skipReason,
+                "source-head-sha": encode(sourceHeadShaFromPayload),
+                "source-owner": encode(owner),
+                "source-repo": encode(repo),
+                "yamllint-selected": "false",
+              };
 
               for (const definition of definitions) {
                 if (
@@ -138,14 +156,11 @@ jobs:
                 ) {
                   throw new Error("Each linter definition must include name and patterns");
                 }
-
-                core.setOutput(`${definition.name}-selected`, "false");
               }
 
+              writeContext(contextValues);
               return;
             }
-
-            core.setOutput("skip-reason", "");
 
             const pull = (
               await github.rest.pulls.get({
@@ -197,70 +212,84 @@ jobs:
                 patterns.some((pattern) => pattern.test(path)),
               );
 
-              core.setOutput(`${definition.name}-selected`, String(selected));
-
               if (selected) {
                 selectedLinters.push(definition.name);
               }
             }
 
-            core.setOutput("changed-files-json", encode(JSON.stringify(currentFiles)));
-            core.setOutput("pr-owner", encode(owner));
-            core.setOutput("pr-repo", encode(repo));
-            core.setOutput(
-              "processing-check-external-id",
-              encode(`linter-service:${pullNumber}:${sourceHeadSha}`),
-            );
-            core.setOutput("processing-check-name", encode("linter-service"));
-            core.setOutput("pull-request-number", String(pullNumber));
-            core.setOutput("selected-linters-json", JSON.stringify(selectedLinters));
-            core.setOutput("source-head-sha", encode(sourceHeadSha));
-            core.setOutput("source-owner", encode(sourceOwner));
-            core.setOutput("source-repo", encode(sourceRepo));
+            writeContext({
+              "actionlint-selected": String(selectedLinters.includes("actionlint")),
+              "changed-files-json": encode(JSON.stringify(currentFiles)),
+              "pr-owner": encode(owner),
+              "pr-repo": encode(repo),
+              "processing-check-external-id": encode(
+                `linter-service:${pullNumber}:${sourceHeadSha}`,
+              ),
+              "processing-check-name": encode("linter-service"),
+              "pull-request-number": String(pullNumber),
+              "selected-linters-json": JSON.stringify(selectedLinters),
+              "skip-reason": "",
+              "source-head-sha": encode(sourceHeadSha),
+              "source-owner": encode(sourceOwner),
+              "source-repo": encode(sourceRepo),
+              "yamllint-selected": String(selectedLinters.includes("yamllint")),
+            });
 
       - name: Report routing status
         env:
-          SELECTED_LINTERS_JSON: ${{ steps.collect.outputs.selected-linters-json }}
+          CONTEXT_PATH: ${{ steps.collect.outputs.context-path }}
         run: |
-          echo "Routing targets resolved."
-          echo "Selected linters: ${SELECTED_LINTERS_JSON}"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
+          print("Routing targets resolved.")
+          print(f"Selected linters: {context['selected-linters-json']}")
+          PY
 
       - name: Publish safe job outputs
         id: publish_job_outputs
         env:
-          ACTIONLINT_SELECTED: ${{ steps.collect.outputs.actionlint-selected }}
-          CHANGED_FILES_JSON: ${{ steps.collect.outputs.changed-files-json }}
-          PR_OWNER: ${{ steps.collect.outputs.pr-owner }}
-          PR_REPO: ${{ steps.collect.outputs.pr-repo }}
-          PROCESSING_CHECK_EXTERNAL_ID: ${{ steps.collect.outputs.processing-check-external-id }}
-          PROCESSING_CHECK_NAME: ${{ steps.collect.outputs.processing-check-name }}
-          PULL_REQUEST_NUMBER: ${{ steps.collect.outputs.pull-request-number }}
-          SELECTED_LINTERS_JSON: ${{ steps.collect.outputs.selected-linters-json }}
-          SKIP_REASON: ${{ steps.collect.outputs.skip-reason }}
-          SOURCE_HEAD_SHA: ${{ steps.collect.outputs.source-head-sha }}
-          SOURCE_OWNER: ${{ steps.collect.outputs.source-owner }}
-          SOURCE_REPO: ${{ steps.collect.outputs.source-repo }}
-          YAMLLINT_SELECTED: ${{ steps.collect.outputs.yamllint-selected }}
+          CONTEXT_PATH: ${{ steps.collect.outputs.context-path }}
         run: |
-          {
-            echo "actionlint-selected=$ACTIONLINT_SELECTED"
-            echo "changed-files-json=$CHANGED_FILES_JSON"
-            echo "pr-owner=$PR_OWNER"
-            echo "pr-repo=$PR_REPO"
-            echo "processing-check-external-id=$PROCESSING_CHECK_EXTERNAL_ID"
-            echo "processing-check-name=$PROCESSING_CHECK_NAME"
-            echo "pull-request-number=$PULL_REQUEST_NUMBER"
-            echo "selected-linters-json<<__LINTER_SERVICE_SELECTED_LINTERS__"
-            echo "$SELECTED_LINTERS_JSON"
-            echo "__LINTER_SERVICE_SELECTED_LINTERS__"
-            echo "skip-reason<<__LINTER_SERVICE_SKIP_REASON__"
-            echo "$SKIP_REASON"
-            echo "__LINTER_SERVICE_SKIP_REASON__"
-            echo "source-head-sha=$SOURCE_HEAD_SHA"
-            echo "source-owner=$SOURCE_OWNER"
-            echo "source-repo=$SOURCE_REPO"
-            echo "yamllint-selected=$YAMLLINT_SELECTED"
-          } >> "$GITHUB_OUTPUT"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          multiline_delimiters = {
+              "selected-linters-json": "__LINTER_SERVICE_SELECTED_LINTERS__",
+              "skip-reason": "__LINTER_SERVICE_SKIP_REASON__",
+          }
+          ordered_keys = [
+              "actionlint-selected",
+              "changed-files-json",
+              "pr-owner",
+              "pr-repo",
+              "processing-check-external-id",
+              "processing-check-name",
+              "pull-request-number",
+              "selected-linters-json",
+              "skip-reason",
+              "source-head-sha",
+              "source-owner",
+              "source-repo",
+              "yamllint-selected",
+          ]
+
+          with output_path.open("a", encoding="utf-8") as fh:
+              for key in ordered_keys:
+                  value = str(context.get(key, ""))
+                  delimiter = multiline_delimiters.get(key)
+                  if delimiter:
+                      fh.write(f"{key}<<{delimiter}\n{value}\n{delimiter}\n")
+                  else:
+                      fh.write(f"{key}={value}\n")
+          PY
 
   notify-processing-started:
     needs: detect-targets
