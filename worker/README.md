@@ -105,7 +105,7 @@ wrangler secret put GITHUB_DISPATCH_REPO
 - `CHECKER_APP_ID`
 - `CHECKER_PRIVATE_KEY`
 
-これらの secrets を使う jobs は `checker-app` environment に関連付けています。必要に応じて GitHub 側でも同名 environment を作成し、protection rules や environment secrets に移行してください。
+これらは repository secrets として参照します。shared linter service では source / PR repository 向けの短命な installation token を都度発行する構成のため、GitHub Actions の environment は使いません。`secrets-outside-env` については `.github/zizmor.yml` で `lint-common.yml` と `repository-dispatch.yml` に限定して抑制しています。
 
 `repository_dispatch` 経由では workflow は `client_payload.repository.owner.login` と `client_payload.repository.name` を使って PR repository 用 token を取得し、PR details から head/source repository を解決します。このリポジトリ自身の `pull_request` event でも同じ workflow を直接実行でき、その場合は `github.event` から同等の情報を解決します。Worker は dispatch 先と同じ repository から来た webhook を送信せず、このリポジトリの PR が `pull_request` trigger と `repository_dispatch` trigger の両方で二重実行されることを避けます。
 

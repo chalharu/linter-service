@@ -15,7 +15,6 @@ permissions: {}
 
 jobs:
   detect-targets:
-    environment: checker-app
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -268,7 +267,6 @@ jobs:
   notify-processing-started:
     needs: detect-targets
     if: ${{ needs.detect-targets.outputs.selected-linters-json != '[]' }}
-    environment: checker-app
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -507,7 +505,6 @@ jobs:
       - yamllint
       - zizmor
     if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
-    environment: checker-app
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
