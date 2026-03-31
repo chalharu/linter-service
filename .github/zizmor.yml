@@ -10,11 +10,11 @@ rules:
     ignore:
       - lint-common.yml:89
       - lint-common.yml:92
-      - repository-dispatch.yml:87
-      - repository-dispatch.yml:90
-      - repository-dispatch.yml:339
-      - repository-dispatch.yml:342
-      - repository-dispatch.yml:532
-      - repository-dispatch.yml:535
-      - repository-dispatch.yml:542
-      - repository-dispatch.yml:545
+      - repository-dispatch.yml:92
+      - repository-dispatch.yml:95
+      - repository-dispatch.yml:349
+      - repository-dispatch.yml:352
+      - repository-dispatch.yml:553
+      - repository-dispatch.yml:556
+      - repository-dispatch.yml:563
+      - repository-dispatch.yml:566
