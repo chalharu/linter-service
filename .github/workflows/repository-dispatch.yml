@@ -594,7 +594,6 @@ jobs:
 
       - name: Get PR repository checker token
         id: get_pr_token
-        if: ${{ steps.decode_repository_context.outputs.pr-is-current-repo != 'true' }}
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
@@ -602,6 +601,42 @@ jobs:
           permission-issues: write
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ steps.decode_repository_context.outputs.pr-repo }}
+
+      - name: Delete legacy workflow-authored PR comments
+        if: ${{ steps.decode_repository_context.outputs.pr-is-current-repo == 'true' }}
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          COMMENT_MARKER: '<!-- linter-service:results -->'
+          PR_NUMBER: ${{ needs.detect-targets.outputs.pull-request-number }}
+          PR_OWNER: ${{ steps.decode_repository_context.outputs.pr-owner }}
+          PR_REPO: ${{ steps.decode_repository_context.outputs.pr-repo }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const marker = process.env.COMMENT_MARKER;
+            const owner = process.env.PR_OWNER;
+            const repo = process.env.PR_REPO;
+            const issueNumber = Number(process.env.PR_NUMBER);
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: issueNumber,
+              per_page: 100,
+            });
+
+            const legacyComments = comments.filter((comment) =>
+              comment.body?.includes(marker) &&
+              comment.user?.login === "github-actions[bot]",
+            );
+
+            for (const comment of legacyComments) {
+              await github.rest.issues.deleteComment({
+                owner,
+                repo,
+                comment_id: comment.id,
+              });
+            }
 
       - name: Get source repository checker token
         id: get_source_token
@@ -707,7 +742,7 @@ jobs:
           PR_OWNER: ${{ steps.decode_repository_context.outputs.pr-owner }}
           PR_REPO: ${{ steps.decode_repository_context.outputs.pr-repo }}
         with:
-          github-token: ${{ steps.decode_repository_context.outputs.pr-is-current-repo == 'true' && github.token || steps.get_pr_token.outputs.token }}
+          github-token: ${{ steps.get_pr_token.outputs.token }}
           script: |
             const fs = require("node:fs");
 
