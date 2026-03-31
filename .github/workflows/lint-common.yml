@@ -166,15 +166,17 @@ jobs:
 
           case "$LINTER_NAME" in
           actionlint)
-            actionlint_args=("${files[@]}")
-            if [ -f ".github/actionlint.yaml" ]; then
-              actionlint_args=(-config-file ".github/actionlint.yaml" "${actionlint_args[@]}")
-            fi
-            ./actionlint "${actionlint_args[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
+            ./actionlint "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
             ;;
           yamllint)
-            yamllint_config=".yamllint.yml"
-            if [ ! -f "$yamllint_config" ]; then
+            yamllint_config=""
+            for candidate in ".yamllint" ".yamllint.yaml" ".yamllint.yml"; do
+              if [ -f "$candidate" ]; then
+                yamllint_config="$candidate"
+                break
+              fi
+            done
+            if [ -z "$yamllint_config" ]; then
               cat > "$RUNNER_TEMP/yamllint.yaml" <<'EOF'
           extends: default
           rules:
