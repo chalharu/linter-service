@@ -17,19 +17,19 @@ jobs:
   detect-targets:
     runs-on: ubuntu-latest
     outputs:
-      actionlint-selected: ${{ steps.collect.outputs.actionlint-selected }}
-      changed-files-json: ${{ steps.collect.outputs.changed-files-json }}
-      pr-owner: ${{ steps.collect.outputs.pr-owner }}
-      pr-repo: ${{ steps.collect.outputs.pr-repo }}
-      processing-check-external-id: ${{ steps.collect.outputs.processing-check-external-id }}
-      processing-check-name: ${{ steps.collect.outputs.processing-check-name }}
-      pull-request-number: ${{ steps.collect.outputs.pull-request-number }}
-      selected-linters-json: ${{ steps.collect.outputs.selected-linters-json }}
-      skip-reason: ${{ steps.collect.outputs.skip-reason }}
-      source-head-sha: ${{ steps.collect.outputs.source-head-sha }}
-      source-owner: ${{ steps.collect.outputs.source-owner }}
-      source-repo: ${{ steps.collect.outputs.source-repo }}
-      yamllint-selected: ${{ steps.collect.outputs.yamllint-selected }}
+      actionlint-selected: ${{ steps.publish_job_outputs.outputs.actionlint-selected }}
+      changed-files-json: ${{ steps.publish_job_outputs.outputs.changed-files-json }}
+      pr-owner: ${{ steps.publish_job_outputs.outputs.pr-owner }}
+      pr-repo: ${{ steps.publish_job_outputs.outputs.pr-repo }}
+      processing-check-external-id: ${{ steps.publish_job_outputs.outputs.processing-check-external-id }}
+      processing-check-name: ${{ steps.publish_job_outputs.outputs.processing-check-name }}
+      pull-request-number: ${{ steps.publish_job_outputs.outputs.pull-request-number }}
+      selected-linters-json: ${{ steps.publish_job_outputs.outputs.selected-linters-json }}
+      skip-reason: ${{ steps.publish_job_outputs.outputs.skip-reason }}
+      source-head-sha: ${{ steps.publish_job_outputs.outputs.source-head-sha }}
+      source-owner: ${{ steps.publish_job_outputs.outputs.source-owner }}
+      source-repo: ${{ steps.publish_job_outputs.outputs.source-repo }}
+      yamllint-selected: ${{ steps.publish_job_outputs.outputs.yamllint-selected }}
     env:
       LINTER_DEFINITIONS_JSON: >-
         [
@@ -224,6 +224,43 @@ jobs:
         run: |
           echo "Routing targets resolved."
           echo "Selected linters: ${SELECTED_LINTERS_JSON}"
+
+      - name: Publish safe job outputs
+        id: publish_job_outputs
+        env:
+          ACTIONLINT_SELECTED: ${{ steps.collect.outputs.actionlint-selected }}
+          CHANGED_FILES_JSON: ${{ steps.collect.outputs.changed-files-json }}
+          PR_OWNER: ${{ steps.collect.outputs.pr-owner }}
+          PR_REPO: ${{ steps.collect.outputs.pr-repo }}
+          PROCESSING_CHECK_EXTERNAL_ID: ${{ steps.collect.outputs.processing-check-external-id }}
+          PROCESSING_CHECK_NAME: ${{ steps.collect.outputs.processing-check-name }}
+          PULL_REQUEST_NUMBER: ${{ steps.collect.outputs.pull-request-number }}
+          SELECTED_LINTERS_JSON: ${{ steps.collect.outputs.selected-linters-json }}
+          SKIP_REASON: ${{ steps.collect.outputs.skip-reason }}
+          SOURCE_HEAD_SHA: ${{ steps.collect.outputs.source-head-sha }}
+          SOURCE_OWNER: ${{ steps.collect.outputs.source-owner }}
+          SOURCE_REPO: ${{ steps.collect.outputs.source-repo }}
+          YAMLLINT_SELECTED: ${{ steps.collect.outputs.yamllint-selected }}
+        run: |
+          {
+            echo "actionlint-selected=$ACTIONLINT_SELECTED"
+            echo "changed-files-json=$CHANGED_FILES_JSON"
+            echo "pr-owner=$PR_OWNER"
+            echo "pr-repo=$PR_REPO"
+            echo "processing-check-external-id=$PROCESSING_CHECK_EXTERNAL_ID"
+            echo "processing-check-name=$PROCESSING_CHECK_NAME"
+            echo "pull-request-number=$PULL_REQUEST_NUMBER"
+            echo "selected-linters-json<<__LINTER_SERVICE_SELECTED_LINTERS__"
+            echo "$SELECTED_LINTERS_JSON"
+            echo "__LINTER_SERVICE_SELECTED_LINTERS__"
+            echo "skip-reason<<__LINTER_SERVICE_SKIP_REASON__"
+            echo "$SKIP_REASON"
+            echo "__LINTER_SERVICE_SKIP_REASON__"
+            echo "source-head-sha=$SOURCE_HEAD_SHA"
+            echo "source-owner=$SOURCE_OWNER"
+            echo "source-repo=$SOURCE_REPO"
+            echo "yamllint-selected=$YAMLLINT_SELECTED"
+          } >> "$GITHUB_OUTPUT"
 
   notify-processing-started:
     needs: detect-targets
