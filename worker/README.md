@@ -128,7 +128,7 @@ Worker は self-webhook を落として二重起動を防ぎます。
 
 - `actionlint` は `.github/actionlint.yaml` / `.yml` を自動で読みます。
 - `yamllint` は `.yamllint` 系 3 形式を順に探します。
-- `zizmor` は `zizmor.yml` / `zizmor.yaml` を入力ディレクトリ、その `.github` 子、親階層（`.git` またはルートまで）から自動探索します。
+- この workflow 呼び出しでは `zizmor.yml` / `zizmor.yaml` / `.github/zizmor.yml` / `.github/zizmor.yaml` の 4 パターンを利用できます。
 - 詳細ログは抑え、結果は PR comment へ集約します。
 
 ## `repository_dispatch` payload
