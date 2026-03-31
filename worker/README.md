@@ -130,6 +130,7 @@ Worker は self-webhook を落として二重起動を防ぎます。
 |--------|---------------------|
 | `actionlint` | `.github/actionlint.yaml` / `.yml` を自動で読みます。 |
 | `ghalint` | `.ghalint.yaml` / `.ghalint.yml` / `ghalint.yaml` / `ghalint.yml` / `.github/ghalint.yaml` / `.github/ghalint.yml` を順に探します。 |
+| `spectral` | `.spectral.yml` / `.spectral.yaml` / `.spectral.json` / `.spectral.js` を読みます。未配置時は `spectral:oas` を使い、unknown format は無視します。 |
 | `yamllint` | `.yamllint` 系 3 形式を順に探します。 |
 | `zizmor` | このリポジトリでは `zizmor.yml` / `zizmor.yaml` / `.github/zizmor.yml` / `.github/zizmor.yaml` を配置先として案内します。 |
 

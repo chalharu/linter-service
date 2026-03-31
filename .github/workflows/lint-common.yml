@@ -100,6 +100,12 @@ jobs:
           repository: ${{ steps.decode_context.outputs.source-owner }}/${{ steps.decode_context.outputs.source-repo }}
           token: ${{ steps.get_source_token.outputs.token }}
 
+      - name: Set up Node.js
+        if: ${{ inputs.linter-name == 'spectral' }}
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: "22"
+
       - name: Set up Python
         if: ${{ inputs.linter-name == 'yamllint' || inputs.linter-name == 'zizmor' }}
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -125,6 +131,9 @@ jobs:
               lower_path = path.lower()
               if linter_name in {"actionlint", "ghalint", "zizmor"}:
                   if lower_path.startswith(".github/workflows/") and lower_path.endswith((".yaml", ".yml")):
+                      print(path)
+              elif linter_name == "spectral":
+                  if lower_path.endswith((".json", ".yaml", ".yml")):
                       print(path)
               elif linter_name == "yamllint":
                   if lower_path.endswith((".yaml", ".yml")):
@@ -158,6 +167,9 @@ jobs:
               tar -xzf "$RUNNER_TEMP/$asset" -C "$RUNNER_TEMP/bin"
               chmod +x "$RUNNER_TEMP/bin/ghalint"
               echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+              ;;
+            spectral)
+              npm install --global @stoplight/spectral-cli
               ;;
             yamllint)
               python -m pip install --upgrade pip yamllint
@@ -212,6 +224,28 @@ jobs:
             done
           }
 
+          resolve_spectral_ruleset() {
+            local default_ruleset="$RUNNER_TEMP/default-spectral-ruleset.yaml"
+            local config_path
+
+            for config_path in \
+              .spectral.yml \
+              .spectral.yaml \
+              .spectral.json \
+              .spectral.js
+            do
+              if [ -f "$config_path" ]; then
+                printf '%s\n' "$config_path"
+                return 0
+              fi
+            done
+
+            printf '%s\n' \
+              'extends:' \
+              '  - spectral:oas' > "$default_ruleset"
+            printf '%s\n' "$default_ruleset"
+          }
+
           case "$LINTER_NAME" in
           actionlint)
             ./actionlint "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
@@ -226,6 +260,15 @@ jobs:
               cd "$temp_repo" || exit 1
               GHALINT_LOG_COLOR=never ghalint run
             ) > "$RUNNER_TEMP/linter-output.txt" 2>&1
+            ;;
+          spectral)
+            spectral_ruleset="$(resolve_spectral_ruleset)"
+            spectral lint \
+              --format text \
+              --ignore-unknown-format \
+              --quiet \
+              --ruleset "$spectral_ruleset" \
+              "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
             ;;
           yamllint)
             yamllint_config=""
@@ -302,6 +345,14 @@ jobs:
                   "no_files": "No matching GitHub Actions workflow files were selected for `ghalint`.",
                   "success": "✅ No issues found in {count} changed GitHub Actions workflow file(s).",
                   "failure": "❌ Issues found in {count} changed GitHub Actions workflow file(s).",
+              },
+              "spectral": {
+                  "details_fallback": "spectral did not produce diagnostic output before the job failed.",
+                  "heading": "### spectral",
+                  "infra_failure": "❌ The `spectral` workflow failed before producing a detailed report. See the workflow logs.",
+                  "no_files": "No matching YAML or JSON files were selected for `spectral`.",
+                  "success": "✅ No issues found in {count} changed YAML or JSON file(s).",
+                  "failure": "❌ Issues found in {count} changed YAML or JSON file(s).",
               },
               "yamllint": {
                   "details_fallback": "yamllint did not produce diagnostic output before the job failed.",
