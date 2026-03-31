@@ -49,8 +49,14 @@ Cloudflare Workers には Secret として、ローカル開発時には `worker
 - `GITHUB_DISPATCH_OWNER`
 - `GITHUB_DISPATCH_REPO`
 - `GITHUB_DISPATCH_EVENT_TYPE` 任意。未指定時は `github_app_webhook`
-- `GITHUB_DISPATCH_INSTALLATION_ID` 任意。dispatch 先が別 installation の場合に上書き
+- `GITHUB_DISPATCH_INSTALLATION_ID` 任意。Webhook を受けた repo の installation とは別の installation で dispatch 先 repo にアクセスする必要がある場合だけ指定
 - `GITHUB_API_BASE_URL` 任意。既定値は `https://api.github.com`
+
+通常必要なのは `GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY` / `GITHUB_WEBHOOK_SECRET` / `GITHUB_DISPATCH_OWNER` / `GITHUB_DISPATCH_REPO` です。
+
+`GITHUB_DISPATCH_EVENT_TYPE` は `repository_dispatch` の `event_type` を上書きしたい場合のためのオプションです。現在の実装では未指定でも `github_app_webhook` が使われるため、通常は不要です。
+
+`GITHUB_DISPATCH_INSTALLATION_ID` は、Webhook 元 repo の `installation.id` では dispatch 先 repo にアクセスできない場合のためのオプションです。例えば、Worker が複数 owner の repo から Webhook を受ける一方で、dispatch 先がこのリポジトリに固定されていて、その repo へアクセスできる GitHub App installation が別にある場合に使います。
 
 デプロイ前には Cloudflare 側へ Secret を登録します。
 
@@ -61,8 +67,9 @@ wrangler secret put GITHUB_APP_PRIVATE_KEY
 wrangler secret put GITHUB_WEBHOOK_SECRET
 wrangler secret put GITHUB_DISPATCH_OWNER
 wrangler secret put GITHUB_DISPATCH_REPO
-wrangler secret put GITHUB_DISPATCH_EVENT_TYPE
-wrangler secret put GITHUB_DISPATCH_INSTALLATION_ID
+# Optional:
+# wrangler secret put GITHUB_DISPATCH_EVENT_TYPE
+# wrangler secret put GITHUB_DISPATCH_INSTALLATION_ID
 ```
 
 ## `repository_dispatch` payload
