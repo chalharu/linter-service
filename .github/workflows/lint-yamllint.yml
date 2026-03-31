@@ -1,0 +1,93 @@
+name: Yamllint
+
+on:
+  workflow_call:
+    inputs:
+      changed-files-json:
+        required: true
+        type: string
+      source-head-sha:
+        required: true
+        type: string
+      source-owner:
+        required: true
+        type: string
+      source-repo:
+        required: true
+        type: string
+    secrets:
+      CHECKER_APP_ID:
+        required: true
+      CHECKER_PRIVATE_KEY:
+        required: true
+
+permissions: {}
+
+jobs:
+  yamllint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get checker token
+        id: get_checker_token
+        uses: actions/create-github-app-token@v3.0.0
+        with:
+          app-id: ${{ secrets.CHECKER_APP_ID }}
+          owner: ${{ inputs.source-owner }}
+          private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
+          repositories: ${{ inputs.source-repo }}
+
+      - name: Check out source repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.source-head-sha }}
+          repository: ${{ inputs.source-owner }}/${{ inputs.source-repo }}
+          token: ${{ steps.get_checker_token.outputs.token }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install yamllint
+        run: python -m pip install --upgrade pip yamllint
+
+      - name: Select YAML files
+        id: select_files
+        env:
+          CHANGED_FILES_JSON: ${{ inputs.changed-files-json }}
+        run: |
+          python3 - <<'PY' > "$RUNNER_TEMP/yamllint-files.txt"
+          import json
+          import os
+
+          for path in json.loads(os.environ["CHANGED_FILES_JSON"]):
+              if path.lower().endswith((".yaml", ".yml")):
+                  print(path)
+          PY
+
+          count=$(wc -l < "$RUNNER_TEMP/yamllint-files.txt" | tr -d ' ')
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+          if [ "$count" -eq 0 ]; then
+            echo "No YAML files matched yamllint."
+          else
+            echo "Yamllint targets:"
+            cat "$RUNNER_TEMP/yamllint-files.txt"
+          fi
+
+      - name: Run yamllint
+        if: ${{ steps.select_files.outputs.count != '0' }}
+        run: |
+          cat > "$RUNNER_TEMP/yamllint.yaml" <<'EOF'
+          extends: default
+          rules:
+            comments-indentation: disable
+            document-start: disable
+            line-length: disable
+            truthy:
+              check-keys: false
+          EOF
+
+          mapfile -t files < "$RUNNER_TEMP/yamllint-files.txt"
+          yamllint -c "$RUNNER_TEMP/yamllint.yaml" "${files[@]}"

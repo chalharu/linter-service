@@ -2,15 +2,26 @@ name: Repository Dispatch
 
 on:
   repository_dispatch:
+    types:
+      - github_app_webhook
 
 permissions: {}
 
 jobs:
-  run-linter-skeleton:
+  detect-targets:
     runs-on: ubuntu-latest
+    outputs:
+      changed-files-json: ${{ steps.collect.outputs.changed-files-json }}
+      run-actionlint: ${{ steps.collect.outputs.run-actionlint }}
+      run-yamllint: ${{ steps.collect.outputs.run-yamllint }}
+      source-head-sha: ${{ steps.collect.outputs.source-head-sha }}
+      source-owner: ${{ steps.collect.outputs.source-owner }}
+      source-repo: ${{ steps.collect.outputs.source-repo }}
     env:
-      SOURCE_REPOSITORY_OWNER: ${{ github.event.client_payload.repository.owner.login }}
+      SOURCE_HEAD_SHA: ${{ github.event.client_payload.pull_request.head.sha || github.event.client_payload.check_run.head_sha }}
+      SOURCE_PR_NUMBER: ${{ github.event.client_payload.pull_request.number }}
       SOURCE_REPOSITORY_NAME: ${{ github.event.client_payload.repository.name }}
+      SOURCE_REPOSITORY_OWNER: ${{ github.event.client_payload.repository.owner.login }}
     steps:
       - name: Validate dispatch metadata
         run: |
@@ -22,20 +33,113 @@ jobs:
             echo "client_payload.repository.name is required" >&2
             exit 1
           }
+          test -n "$SOURCE_HEAD_SHA" || {
+            echo "client_payload pull request head SHA is required" >&2
+            exit 1
+          }
+          case "$SOURCE_PR_NUMBER" in
+            ''|*[!0-9]*)
+              echo "client_payload.pull_request.number must be a positive integer" >&2
+              exit 1
+              ;;
+          esac
+          test "$SOURCE_PR_NUMBER" -gt 0 || {
+            echo "client_payload.pull_request.number must be a positive integer" >&2
+            exit 1
+          }
 
       - name: Get checker token
-        id: get_token
+        id: get_checker_token
         uses: actions/create-github-app-token@v3.0.0
         with:
-          private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           app-id: ${{ secrets.CHECKER_APP_ID }}
           owner: ${{ env.SOURCE_REPOSITORY_OWNER }}
+          private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ env.SOURCE_REPOSITORY_NAME }}
 
-      - name: Print dispatch metadata
+      - name: Collect pull request context
+        id: collect
+        uses: actions/github-script@v7
         env:
-          CLIENT_PAYLOAD: ${{ toJson(github.event.client_payload) }}
+          SOURCE_HEAD_SHA: ${{ env.SOURCE_HEAD_SHA }}
+          SOURCE_PR_NUMBER: ${{ env.SOURCE_PR_NUMBER }}
+          SOURCE_REPOSITORY_NAME: ${{ env.SOURCE_REPOSITORY_NAME }}
+          SOURCE_REPOSITORY_OWNER: ${{ env.SOURCE_REPOSITORY_OWNER }}
+        with:
+          github-token: ${{ steps.get_checker_token.outputs.token }}
+          script: |
+            const owner = process.env.SOURCE_REPOSITORY_OWNER;
+            const repo = process.env.SOURCE_REPOSITORY_NAME;
+            const sourceHeadSha = process.env.SOURCE_HEAD_SHA;
+            const pullNumber = Number(process.env.SOURCE_PR_NUMBER);
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              per_page: 100,
+              pull_number: pullNumber,
+              repo,
+            });
+
+            const currentFiles = files
+              .filter((file) => file.status !== "removed")
+              .map((file) => file.filename);
+
+            const selectors = {
+              actionlint: (path) =>
+                /^\.github\/workflows\/.+\.(?:yaml|yml)$/i.test(path),
+              yamllint: (path) => /\.(?:yaml|yml)$/i.test(path),
+            };
+
+            for (const [name, matches] of Object.entries(selectors)) {
+              core.setOutput(
+                `run-${name}`,
+                String(currentFiles.some((path) => matches(path))),
+              );
+            }
+
+            core.setOutput("changed-files-json", JSON.stringify(currentFiles));
+            core.setOutput("source-head-sha", sourceHeadSha);
+            core.setOutput("source-owner", owner);
+            core.setOutput("source-repo", repo);
+
+      - name: Print routing summary
+        env:
+          CHANGED_FILES_JSON: ${{ steps.collect.outputs.changed-files-json }}
+          RUN_ACTIONLINT: ${{ steps.collect.outputs.run-actionlint }}
+          RUN_YAMLLINT: ${{ steps.collect.outputs.run-yamllint }}
         run: |
-          echo "repository_dispatch action: ${{ github.event.action }}"
-          echo "$CLIENT_PAYLOAD"
-          echo "TODO: execute the shared linter workflow for the requested pull request"
+          echo "Source repository: ${SOURCE_REPOSITORY_OWNER}/${SOURCE_REPOSITORY_NAME}"
+          echo "Pull request: ${SOURCE_PR_NUMBER}"
+          echo "Changed files: ${CHANGED_FILES_JSON}"
+          echo "Run actionlint: ${RUN_ACTIONLINT}"
+          echo "Run yamllint: ${RUN_YAMLLINT}"
+
+  actionlint:
+    needs: detect-targets
+    if: ${{ needs.detect-targets.outputs.run-actionlint == 'true' }}
+    uses: ./.github/workflows/lint-actionlint.yml
+    secrets: inherit
+    with:
+      changed-files-json: ${{ needs.detect-targets.outputs.changed-files-json }}
+      source-head-sha: ${{ needs.detect-targets.outputs.source-head-sha }}
+      source-owner: ${{ needs.detect-targets.outputs.source-owner }}
+      source-repo: ${{ needs.detect-targets.outputs.source-repo }}
+
+  yamllint:
+    needs: detect-targets
+    if: ${{ needs.detect-targets.outputs.run-yamllint == 'true' }}
+    uses: ./.github/workflows/lint-yamllint.yml
+    secrets: inherit
+    with:
+      changed-files-json: ${{ needs.detect-targets.outputs.changed-files-json }}
+      source-head-sha: ${{ needs.detect-targets.outputs.source-head-sha }}
+      source-owner: ${{ needs.detect-targets.outputs.source-owner }}
+      source-repo: ${{ needs.detect-targets.outputs.source-repo }}
+
+  no-linters-needed:
+    needs: detect-targets
+    if: ${{ needs.detect-targets.outputs.run-actionlint != 'true' && needs.detect-targets.outputs.run-yamllint != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report skipped lint execution
+        run: echo "No configured linters matched the changed files in this pull request."

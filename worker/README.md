@@ -101,6 +101,8 @@ wrangler secret put GITHUB_DISPATCH_REPO
 
 workflow は `client_payload.repository.owner.login` と `client_payload.repository.name` を使って、source repository に対する checker App token を取得します。
 
+また `repository_dispatch.yml` は source repository の changed files を取得し、パスに応じて reusable linter workflow を並列実行します。
+
 ## `repository_dispatch` payload
 
 Worker は `client_payload` に以下のような構造を載せます。
