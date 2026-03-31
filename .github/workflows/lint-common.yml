@@ -104,7 +104,7 @@ jobs:
         if: ${{ inputs.linter-name == 'spectral' }}
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: Set up Python
         if: ${{ inputs.linter-name == 'yamllint' || inputs.linter-name == 'zizmor' }}
