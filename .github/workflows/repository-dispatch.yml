@@ -279,11 +279,32 @@ jobs:
           echo "Routing targets resolved."
           echo "Selected linters: ${SELECTED_LINTERS_JSON}"
 
+      - name: Derive artifact passphrase
+        env:
+          CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
+        run: |
+          passphrase="$(bash "$LINTER_SERVICE_PATH/.github/scripts/artifact-passphrase.sh")"
+          echo "::add-mask::$passphrase"
+          echo "ARTIFACT_PASSPHRASE=$passphrase" >> "$GITHUB_ENV"
+
+      - name: Encrypt dispatch context artifact
+        env:
+          CONTEXT_PATH: ${{ steps.collect.outputs.context-path }}
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
+        run: |
+          encrypted_path="$RUNNER_TEMP/detect-targets-context.json.enc"
+          bash "$LINTER_SERVICE_PATH/.github/scripts/secure-artifact.sh" \
+            encrypt \
+            "$CONTEXT_PATH" \
+            "$encrypted_path"
+          rm -f "$CONTEXT_PATH"
+
       - name: Upload dispatch context artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: detect-targets-context
-          path: ${{ steps.collect.outputs.context-path }}
+          path: ${{ runner.temp }}/detect-targets-context.json.enc
           if-no-files-found: error
           retention-days: 1
 
@@ -307,6 +328,27 @@ jobs:
           path: linter-service
           persist-credentials: false
           ref: ${{ github.sha }}
+
+      - name: Derive artifact passphrase
+        env:
+          CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
+        run: |
+          passphrase="$(bash "$LINTER_SERVICE_PATH/.github/scripts/artifact-passphrase.sh")"
+          echo "::add-mask::$passphrase"
+          echo "ARTIFACT_PASSPHRASE=$passphrase" >> "$GITHUB_ENV"
+
+      - name: Decrypt dispatch context artifact
+        env:
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
+        run: |
+          encrypted_path="$RUNNER_TEMP/detect-targets-context/detect-targets-context.json.enc"
+          decrypted_path="$RUNNER_TEMP/detect-targets-context/detect-targets-context.json"
+          bash "$LINTER_SERVICE_PATH/.github/scripts/secure-artifact.sh" \
+            decrypt \
+            "$encrypted_path" \
+            "$decrypted_path"
+          rm -f "$encrypted_path"
 
       - name: Mask repository metadata
         env:
@@ -418,6 +460,27 @@ jobs:
           persist-credentials: false
           ref: ${{ github.sha }}
 
+      - name: Derive artifact passphrase
+        env:
+          CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
+        run: |
+          passphrase="$(bash "$LINTER_SERVICE_PATH/.github/scripts/artifact-passphrase.sh")"
+          echo "::add-mask::$passphrase"
+          echo "ARTIFACT_PASSPHRASE=$passphrase" >> "$GITHUB_ENV"
+
+      - name: Decrypt dispatch context artifact
+        env:
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
+        run: |
+          encrypted_path="$RUNNER_TEMP/detect-targets-context/detect-targets-context.json.enc"
+          decrypted_path="$RUNNER_TEMP/detect-targets-context/detect-targets-context.json"
+          bash "$LINTER_SERVICE_PATH/.github/scripts/secure-artifact.sh" \
+            decrypt \
+            "$encrypted_path" \
+            "$decrypted_path"
+          rm -f "$encrypted_path"
+
       - name: Download linter summary artifacts
         if: ${{ always() }}
         continue-on-error: true
@@ -477,15 +540,6 @@ jobs:
           permission-checks: write
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ steps.decode_repository_context.outputs.source-repo }}
-
-      - name: Derive summary artifact passphrase
-        if: ${{ always() }}
-        env:
-          CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
-        run: |
-          passphrase="$(node -e 'const crypto = require("node:crypto"); process.stdout.write(crypto.createHmac("sha256", process.env.CHECKER_PRIVATE_KEY).update(process.env.GITHUB_RUN_ID).digest("hex"));')"
-          echo "::add-mask::$passphrase"
-          echo "ARTIFACT_PASSPHRASE=$passphrase" >> "$GITHUB_ENV"
 
       - name: Decrypt linter summary artifacts
         id: decrypt_summaries
