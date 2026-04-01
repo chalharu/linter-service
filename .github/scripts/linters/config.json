@@ -37,6 +37,15 @@
       "details_fallback": "yamllint did not produce diagnostic output before the job failed."
     },
     {
+      "name": "shellcheck",
+      "heading": "### shellcheck",
+      "no_files": "No matching shell script files were selected for `shellcheck`.",
+      "success": "✅ No issues found in {count} changed shell script file(s).",
+      "failure": "❌ Issues found in {count} changed shell script file(s).",
+      "infra_failure": "❌ The `shellcheck` workflow failed before producing a detailed report. See the workflow logs.",
+      "details_fallback": "shellcheck did not produce diagnostic output before the job failed."
+    },
+    {
       "name": "zizmor",
       "heading": "### zizmor",
       "no_files": "No matching workflow files were selected for `zizmor`.",
