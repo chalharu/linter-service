@@ -46,6 +46,15 @@
       "details_fallback": "markdownlint-cli2 did not produce diagnostic output before the job failed."
     },
     {
+      "name": "ruff",
+      "heading": "### ruff",
+      "no_files": "No matching Python files were selected for `ruff`.",
+      "success": "✅ No issues found in {count} changed Python file(s).",
+      "failure": "❌ Issues found in {count} changed Python file(s).",
+      "infra_failure": "❌ The `ruff` workflow failed before producing a detailed report. See the workflow logs.",
+      "details_fallback": "ruff did not produce diagnostic output before the job failed."
+    },
+    {
       "name": "taplo",
       "heading": "### taplo",
       "no_files": "No matching TOML files were selected for `taplo`.",
