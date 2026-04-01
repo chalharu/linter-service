@@ -1,0 +1,242 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const test = require("node:test");
+
+const {
+	cleanupTempRepo,
+	makeTempRepo,
+	writeFile,
+} = require("./linters/cargo-linter-test-lib.js");
+const { runFromEnv } = require("./render-linter-report.js");
+
+const configPath = path.join(__dirname, "linters/config.json");
+
+test("lists checked file paths in a successful non-cargo linter report", () => {
+	const context = makeTempRepo("render-linter-report-non-cargo-");
+
+	try {
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "selected-files.txt"),
+			[".github/workflows/ci.yml", ".github/workflows/release.yml"].join("\n") +
+				"\n",
+			"utf8",
+		);
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "linter-result.json"),
+			JSON.stringify({ details: "", exit_code: 0 }),
+			"utf8",
+		);
+
+		const report = runFromEnv(
+			createReportEnv(context, {
+				EXIT_CODE: "0",
+				LINTER_NAME: "actionlint",
+			}),
+		);
+		const summary = readSummary(context.runnerTemp, "actionlint");
+
+		assert.equal(report.conclusion, "success");
+		assert.deepEqual(report.selectedFiles, [
+			".github/workflows/ci.yml",
+			".github/workflows/release.yml",
+		]);
+		assert.match(report.body, /### actionlint/);
+		assert.match(
+			report.body,
+			/✅ No issues were reported for the selected GitHub Actions workflow target\(s\)\./,
+		);
+		assert.match(report.body, /Target file paths:/);
+		assert.match(report.body, /- <code>\.github\/workflows\/ci\.yml<\/code>/);
+		assert.doesNotMatch(report.body, /2 changed GitHub Actions workflow/);
+		assert.equal(summary.comment_body, report.body);
+		assert.equal(summary.conclusion, "success");
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("lists checked Cargo projects alongside changed file paths", () => {
+	const context = makeTempRepo("render-linter-report-cargo-");
+
+	populateCargoRepo(context.repoDir);
+
+	try {
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "selected-files.txt"),
+			["src/lib.rs", "src/main.rs", "crates/member/src/lib.rs"].join("\n") +
+				"\n",
+			"utf8",
+		);
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "linter-result.json"),
+			JSON.stringify({ details: "", exit_code: 0 }),
+			"utf8",
+		);
+
+		const report = runFromEnv(
+			createReportEnv(context, {
+				EXIT_CODE: "0",
+				LINTER_NAME: "cargo-clippy",
+			}),
+		);
+
+		assert.equal(report.conclusion, "success");
+		assert.deepEqual(report.checkedProjects, [
+			"Cargo.toml",
+			"crates/member/Cargo.toml",
+		]);
+		assert.match(
+			report.body,
+			/✅ No issues were reported for the selected Cargo project target\(s\)\./,
+		);
+		assert.match(report.body, /Target file paths:/);
+		assert.match(report.body, /Cargo project targets:/);
+		assert.match(report.body, /- <code>src\/lib\.rs<\/code>/);
+		assert.match(report.body, /- <code>Cargo\.toml<\/code>/);
+		assert.match(report.body, /- <code>crates\/member\/Cargo\.toml<\/code>/);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("includes checked targets before diagnostic details on failure", () => {
+	const context = makeTempRepo("render-linter-report-failure-");
+
+	try {
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "selected-files.txt"),
+			["openapi/spec.yaml"].join("\n") + "\n",
+			"utf8",
+		);
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "linter-result.json"),
+			JSON.stringify({ details: "line 2: unexpected field", exit_code: 1 }),
+			"utf8",
+		);
+
+		const report = runFromEnv(
+			createReportEnv(context, {
+				EXIT_CODE: "1",
+				LINTER_NAME: "spectral",
+			}),
+		);
+
+		assert.equal(report.conclusion, "failure");
+		assert.match(
+			report.body,
+			/❌ Issues were reported for the selected YAML or JSON target\(s\)\./,
+		);
+		assert.match(
+			report.body,
+			/Target file paths:\n- <code>openapi\/spec\.yaml<\/code>\n\n<details><summary>Details<\/summary>/,
+		);
+		assert.match(report.body, /line 2: unexpected field/);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("renders target paths safely when they contain Markdown-breaking backticks", () => {
+	const context = makeTempRepo("render-linter-report-escaped-path-");
+
+	try {
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "selected-files.txt"),
+			["docs/with`tick`.md"].join("\n") + "\n",
+			"utf8",
+		);
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "linter-result.json"),
+			JSON.stringify({ details: "", exit_code: 0 }),
+			"utf8",
+		);
+
+		const report = runFromEnv(
+			createReportEnv(context, {
+				EXIT_CODE: "0",
+				LINTER_NAME: "markdownlint-cli2",
+			}),
+		);
+
+		assert.match(report.body, /Target file paths:/);
+		assert.match(report.body, /<code>docs\/with`tick`\.md<\/code>/);
+		assert.doesNotMatch(report.body, /- `docs\/with`tick`\.md`/);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("keeps no-files reports free from checked target sections", () => {
+	const context = makeTempRepo("render-linter-report-no-files-");
+
+	try {
+		const report = runFromEnv(
+			createReportEnv(context, {
+				LINTER_NAME: "ruff",
+			}),
+		);
+
+		assert.equal(report.conclusion, "success");
+		assert.equal(report.selectedFiles.length, 0);
+		assert.equal(report.checkedProjects.length, 0);
+		assert.match(
+			report.body,
+			/No matching Python files were selected for `ruff`\./,
+		);
+		assert.doesNotMatch(report.body, /Target file paths:/);
+		assert.doesNotMatch(report.body, /Cargo project targets:/);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+function createReportEnv(context, overrides = {}) {
+	return {
+		EXIT_CODE: "",
+		INSTALL_TOOL_OUTCOME: "success",
+		LINTER_CONFIG_PATH: configPath,
+		LINTER_NAME: "actionlint",
+		RESULT_PATH: path.join(context.runnerTemp, "linter-result.json"),
+		RUNNER_TEMP: context.runnerTemp,
+		RUN_LINTER_OUTCOME: "success",
+		SELECTED_FILES_PATH: path.join(context.runnerTemp, "selected-files.txt"),
+		SELECT_FILES_OUTCOME: "success",
+		SOURCE_REPOSITORY_PATH: context.repoDir,
+		...overrides,
+	};
+}
+
+function populateCargoRepo(repoDir) {
+	writeFile(
+		path.join(repoDir, "Cargo.toml"),
+		`[package]
+name = "root"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+	writeFile(path.join(repoDir, "src/lib.rs"), "pub fn root_lib() {}\n");
+	writeFile(path.join(repoDir, "src/main.rs"), "fn main() {}\n");
+	writeFile(
+		path.join(repoDir, "crates/member/Cargo.toml"),
+		`[package]
+name = "member"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+	writeFile(
+		path.join(repoDir, "crates/member/src/lib.rs"),
+		"pub fn member_lib() {}\n",
+	);
+}
+
+function readSummary(runnerTemp, linterName) {
+	return JSON.parse(
+		fs.readFileSync(
+			path.join(runnerTemp, `linter-summary-${linterName}.json`),
+			"utf8",
+		),
+	);
+}
