@@ -3,6 +3,7 @@
 set -euo pipefail
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=../linter-library.sh
 source "$script_dir/../linter-library.sh"
 
 mode=${1-}
