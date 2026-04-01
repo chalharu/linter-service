@@ -1,0 +1,57 @@
+name: Cleanup Workflow Runs
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */6 * * *'
+
+concurrency:
+  group: ${{ format('cleanup-workflow-runs-{0}', github.repository) }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  cleanup:
+    permissions:
+      actions: write
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Delete workflow runs older than 24 hours
+        id: cleanup_runs
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          RETENTION_HOURS: '24'
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const cleanupWorkflowRuns = require(
+              `${process.env.GITHUB_WORKSPACE}/.github/scripts/cleanup-workflow-runs.js`
+            );
+            const result = await cleanupWorkflowRuns({
+              env: {
+                REPOSITORY_NAME: context.repo.repo,
+                REPOSITORY_OWNER: context.repo.owner,
+                RETENTION_HOURS: process.env.RETENTION_HOURS,
+              },
+              github,
+              logger: console,
+            });
+
+            core.setOutput("cutoff-timestamp", result.cutoffTimestamp);
+            core.setOutput("deleted-count", String(result.deletedCount));
+            core.info(JSON.stringify(result, null, 2));
+            await core.summary
+              .addHeading("Workflow run cleanup")
+              .addRaw(
+                `Deleted ${result.deletedCount} completed workflow run(s) updated on or before ${result.cutoffTimestamp}.`,
+                true,
+              )
+              .write();
