@@ -23,6 +23,7 @@ jobs:
       pull-request-number: ${{ steps.collect.outputs.pull-request-number }}
       selected-linters-json: ${{ steps.collect.outputs.selected-linters-json }}
       skip-reason: ${{ steps.collect.outputs.skip-reason }}
+      summary-artifact-passphrase: ${{ steps.generate_summary_artifact_passphrase.outputs.summary-artifact-passphrase }}
     env:
       PR_REPOSITORY_NAME: ${{ github.event_name == 'pull_request' && github.event.repository.name || github.event.client_payload.repository.name }}
       PR_REPOSITORY_OWNER: ${{ github.event_name == 'pull_request' && github.event.repository.owner.login || github.event.client_payload.repository.owner.login }}
@@ -65,6 +66,13 @@ jobs:
           path: linter-service
           persist-credentials: false
           ref: ${{ github.sha }}
+
+      - name: Generate summary artifact passphrase
+        id: generate_summary_artifact_passphrase
+        run: |
+          passphrase="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"
+          echo "summary-artifact-passphrase=$passphrase" >> "$GITHUB_OUTPUT"
+          echo "::add-mask::$passphrase"
 
       - name: Build linter definitions
         id: build_linter_definitions
@@ -389,6 +397,7 @@ jobs:
     secrets:
       CHECKER_APP_ID: ${{ secrets.CHECKER_APP_ID }}
       CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
+      SUMMARY_ARTIFACT_PASSPHRASE: ${{ needs.detect-targets.outputs.summary-artifact-passphrase }}
 
   publish-results:
     needs:
@@ -422,6 +431,13 @@ jobs:
           pattern: linter-summary-*
           merge-multiple: true
           path: ${{ runner.temp }}/linter-summaries
+
+      - name: Mask summary artifact passphrase
+        if: ${{ always() }}
+        env:
+          ARTIFACT_PASSPHRASE: ${{ needs.detect-targets.outputs.summary-artifact-passphrase }}
+        run: |
+          echo "::add-mask::$ARTIFACT_PASSPHRASE"
 
       - name: Mask repository metadata
         env:
@@ -474,10 +490,40 @@ jobs:
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ steps.decode_repository_context.outputs.source-repo }}
 
+      - name: Decrypt linter summary artifacts
+        id: decrypt_summaries
+        if: ${{ always() }}
+        env:
+          ARTIFACT_PASSPHRASE: ${{ needs.detect-targets.outputs.summary-artifact-passphrase }}
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
+        run: |
+          shopt -s nullglob
+          failures=0
+          mkdir -p "$RUNNER_TEMP/linter-summaries-decrypted"
+          encrypted_files=("$RUNNER_TEMP"/linter-summaries/*.enc)
+          if [ "${#encrypted_files[@]}" -eq 0 ]; then
+            exit 0
+          fi
+
+          for encrypted_path in "${encrypted_files[@]}"; do
+            decrypted_path="$RUNNER_TEMP/linter-summaries-decrypted/$(basename "${encrypted_path%.enc}")"
+            if ! bash "$LINTER_SERVICE_PATH/.github/scripts/secure-artifact.sh" \
+              decrypt \
+              "$encrypted_path" \
+              "$decrypted_path"; then
+              echo "::warning::Failed to decrypt $(basename "$encrypted_path")"
+              failures=1
+            fi
+          done
+
+          exit "$failures"
+
       - name: Prepare combined report
         id: prepare_report
+        if: ${{ always() }}
         env:
-          LINTER_SUMMARY_PATH: ${{ runner.temp }}/linter-summaries
+          DECRYPT_SUMMARIES_OUTCOME: ${{ steps.decrypt_summaries.outcome }}
+          LINTER_SUMMARY_PATH: ${{ runner.temp }}/linter-summaries-decrypted
           SELECTED_LINTERS_JSON: ${{ needs.detect-targets.outputs.selected-linters-json }}
         run: |
           python3 - <<'PY'
@@ -486,6 +532,7 @@ jobs:
           from pathlib import Path
 
           selected_linters = json.loads(os.environ["SELECTED_LINTERS_JSON"])
+          decrypt_outcome = os.environ.get("DECRYPT_SUMMARIES_OUTCOME", "")
           runner_temp = Path(os.environ["RUNNER_TEMP"])
           comment_path = runner_temp / "combined-linter-comment.md"
           summary_root = Path(os.environ["LINTER_SUMMARY_PATH"])
@@ -509,10 +556,16 @@ jobs:
               conclusion = str(summary.get("conclusion") or "")
 
               if not section:
-                  section = (
-                      f"### {linter_name}\n\n"
-                      f"❌ The `{linter_name}` workflow failed before producing a detailed report. See the workflow logs."
-                  )
+                  if decrypt_outcome == "failure":
+                      section = (
+                          f"### {linter_name}\n\n"
+                          f"❌ The encrypted `{linter_name}` summary could not be decrypted. See the workflow logs."
+                      )
+                  else:
+                      section = (
+                          f"### {linter_name}\n\n"
+                          f"❌ The `{linter_name}` workflow failed before producing a detailed report. See the workflow logs."
+                      )
 
               if conclusion != "success":
                   failed += 1
@@ -521,9 +574,11 @@ jobs:
                   sections.append(section)
 
           total = len(selected_linters)
-          overall_conclusion = "success" if failed == 0 else "failure"
+          overall_conclusion = "success" if failed == 0 and decrypt_outcome != "failure" else "failure"
 
-          if overall_conclusion == "success":
+          if decrypt_outcome == "failure":
+              overall_summary = "One or more encrypted linter summaries could not be read. See the workflow logs."
+          elif overall_conclusion == "success":
               overall_summary = f"All {total} selected linter(s) completed successfully."
           else:
               overall_summary = f"{failed} of {total} selected linter(s) reported issues or failed."

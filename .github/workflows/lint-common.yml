@@ -6,17 +6,12 @@ on:
       linter-name:
         required: true
         type: string
-    outputs:
-      comment_body_base64:
-        description: Base64-encoded markdown section for this linter
-        value: ${{ jobs.run-linter.outputs.comment_body_base64 }}
-      conclusion:
-        description: success or failure
-        value: ${{ jobs.run-linter.outputs.conclusion }}
     secrets:
       CHECKER_APP_ID:
         required: true
       CHECKER_PRIVATE_KEY:
+        required: true
+      SUMMARY_ARTIFACT_PASSPHRASE:
         required: true
 
 permissions: {}
@@ -27,9 +22,6 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    outputs:
-      comment_body_base64: ${{ steps.prepare_report.outputs.comment_body_base64 }}
-      conclusion: ${{ steps.prepare_report.outputs.conclusion }}
     env:
       LINTER_NAME: ${{ inputs.linter-name }}
       LINTER_CONFIG_PATH: ${{ github.workspace }}/linter-service/.github/scripts/linters/config.json
@@ -48,6 +40,13 @@ jobs:
           path: linter-service
           persist-credentials: false
           ref: ${{ github.sha }}
+
+      - name: Mask summary artifact passphrase
+        if: ${{ always() }}
+        env:
+          ARTIFACT_PASSPHRASE: ${{ secrets.SUMMARY_ARTIFACT_PASSPHRASE }}
+        run: |
+          echo "::add-mask::$ARTIFACT_PASSPHRASE"
 
       - name: Mask repository metadata
         env:
@@ -173,7 +172,6 @@ jobs:
           SELECT_FILES_OUTCOME: ${{ steps.select_files.outcome }}
         run: |
           python3 - <<'PY'
-          import base64
           import json
           import os
           from pathlib import Path
@@ -243,7 +241,6 @@ jobs:
 
           comment_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
           body = comment_path.read_text(encoding="utf-8")
-          encoded_body = base64.b64encode(body.encode("utf-8")).decode("ascii")
           summary_path.write_text(
               json.dumps(
                   {
@@ -254,18 +251,27 @@ jobs:
               ),
               encoding="utf-8",
           )
-
-          output_path = Path(os.environ["GITHUB_OUTPUT"])
-          with output_path.open("a", encoding="utf-8") as fh:
-              fh.write(f"comment_body_base64={encoded_body}\n")
-              fh.write(f"conclusion={conclusion}\n")
           PY
+
+      - name: Encrypt linter summary artifact
+        id: encrypt_summary
+        if: ${{ always() }}
+        env:
+          ARTIFACT_PASSPHRASE: ${{ secrets.SUMMARY_ARTIFACT_PASSPHRASE }}
+        run: |
+          input_path="$RUNNER_TEMP/linter-summary-$LINTER_NAME.json"
+          output_path="$RUNNER_TEMP/linter-summary-$LINTER_NAME.json.enc"
+          bash "$LINTER_SERVICE_PATH/.github/scripts/secure-artifact.sh" \
+            encrypt \
+            "$input_path" \
+            "$output_path"
+          rm -f "$input_path"
 
       - name: Upload linter summary artifact
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: linter-summary-${{ inputs.linter-name }}
-          path: ${{ runner.temp }}/linter-summary-${{ inputs.linter-name }}.json
+          path: ${{ runner.temp }}/linter-summary-${{ inputs.linter-name }}.json.enc
           if-no-files-found: warn
           retention-days: 1
