@@ -4,7 +4,7 @@ set -euo pipefail
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # Shared helpers keep the JSON contract and path handling consistent.
-# shellcheck disable=SC1091
+# shellcheck source=../linter-library.sh
 source "$script_dir/../linter-library.sh"
 
 mode=${1-}
