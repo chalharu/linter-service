@@ -39,6 +39,24 @@ jobs:
           persist-credentials: false
           ref: ${{ github.sha }}
 
+      - name: Derive artifact passphrase
+        env:
+          CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
+        run: |
+          passphrase="$(bash "$LINTER_SERVICE_PATH/.github/scripts/artifact-passphrase.sh")"
+          echo "::add-mask::$passphrase"
+          echo "ARTIFACT_PASSPHRASE=$passphrase" >> "$GITHUB_ENV"
+
+      - name: Decrypt dispatch context artifact
+        run: |
+          encrypted_path="$RUNNER_TEMP/detect-targets-context/detect-targets-context.json.enc"
+          decrypted_path="$RUNNER_TEMP/detect-targets-context/detect-targets-context.json"
+          bash "$LINTER_SERVICE_PATH/.github/scripts/secure-artifact.sh" \
+            decrypt \
+            "$encrypted_path" \
+            "$decrypted_path"
+          rm -f "$encrypted_path"
+
       - name: Mask repository metadata
         env:
           CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
@@ -243,15 +261,6 @@ jobs:
             encoding="utf-8",
           )
           PY
-
-      - name: Derive summary artifact passphrase
-        if: ${{ always() }}
-        env:
-          CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
-        run: |
-          passphrase="$(node -e 'const crypto = require("node:crypto"); process.stdout.write(crypto.createHmac("sha256", process.env.CHECKER_PRIVATE_KEY).update(process.env.GITHUB_RUN_ID).digest("hex"));')"
-          echo "::add-mask::$passphrase"
-          echo "ARTIFACT_PASSPHRASE=$passphrase" >> "$GITHUB_ENV"
 
       - name: Encrypt linter summary artifact
         id: encrypt_summary

@@ -8,17 +8,19 @@ rules:
         - CHECKER_APP_ID
         - CHECKER_PRIVATE_KEY
     ignore:
-      - lint-common.yml:69
-      - lint-common.yml:72
-      - lint-common.yml:250
+      - lint-common.yml:44
+      - lint-common.yml:87
+      - lint-common.yml:90
       - repository-dispatch.yml:121
       - repository-dispatch.yml:124
-      - repository-dispatch.yml:342
-      - repository-dispatch.yml:345
-      - repository-dispatch.yml:394
-      - repository-dispatch.yml:395
+      - repository-dispatch.yml:284
+      - repository-dispatch.yml:334
+      - repository-dispatch.yml:384
+      - repository-dispatch.yml:387
+      - repository-dispatch.yml:436
+      - repository-dispatch.yml:437
       - repository-dispatch.yml:465
-      - repository-dispatch.yml:468
-      - repository-dispatch.yml:475
-      - repository-dispatch.yml:478
-      - repository-dispatch.yml:484
+      - repository-dispatch.yml:528
+      - repository-dispatch.yml:531
+      - repository-dispatch.yml:538
+      - repository-dispatch.yml:541
