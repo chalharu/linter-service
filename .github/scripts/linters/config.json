@@ -37,6 +37,15 @@
       "details_fallback": "yamllint did not produce diagnostic output before the job failed."
     },
     {
+      "name": "markdownlint-cli2",
+      "heading": "### markdownlint-cli2",
+      "no_files": "No matching Markdown files were selected for `markdownlint-cli2`.",
+      "success": "✅ No issues found in {count} changed Markdown file(s).",
+      "failure": "❌ Issues found in {count} changed Markdown file(s).",
+      "infra_failure": "❌ The `markdownlint-cli2` workflow failed before producing a detailed report. See the workflow logs.",
+      "details_fallback": "markdownlint-cli2 did not produce diagnostic output before the job failed."
+    },
+    {
       "name": "taplo",
       "heading": "### taplo",
       "no_files": "No matching TOML files were selected for `taplo`.",

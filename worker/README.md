@@ -135,6 +135,7 @@ Worker は self-webhook を落として二重起動を防ぎます。
 | `ghalint` | `.ghalint.yaml` / `.ghalint.yml` / `ghalint.yaml` / `ghalint.yml` / `.github/ghalint.yaml` / `.github/ghalint.yml` を順に探します。 |
 | `spectral` | `.spectral.yml` / `.spectral.yaml` / `.spectral.json` を読みます。未配置時は `spectral:oas` を使い、unknown format は無視します。 |
 | `yamllint` | `.yamllint` 系 3 形式を順に探します。 |
+| `markdownlint-cli2` | `.markdownlint-cli2.jsonc` / `.yaml` と `.markdownlint.jsonc` / `.json` / `.yaml` / `.yml` の静的 config のみを扱います。`.cjs` / `.mjs` は任意コード実行を避けるため対象外です。共有 workflow は `globs` を使わず変更対象だけを検査します。 |
 | `taplo` | `.taplo.toml` を優先し、なければ `taplo.toml` を repo root で探します。未配置時は既定値で `fmt --check` を行います。 |
 | `biome` | Biome の既定探索で `biome.json` / `biome.jsonc` / `.biome.json` / `.biome.jsonc` を探し、未配置時は既定値を使います。 |
 | `shellcheck` | `.shellcheckrc` / `shellcheckrc` を対象 script の場所から親へ向けて探します。 |
