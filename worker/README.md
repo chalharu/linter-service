@@ -31,9 +31,9 @@ checker App Webhook
 ```
 
 外部リポジトリの PR は Worker 経由で流れます。
-このリポジトリ自身の PR は direct trigger で流れます。
-Worker は self-dispatch と self-webhook を捨てます。
-これで二重起動と再帰起動を防ぎます。
+このリポジトリ自身の PR は `pull_request` で流れます。
+Worker は dispatch 先 repo からの self-webhook を無視します。
+これで二重実行と再帰起動を防ぎます。
 
 ## GitHub Apps
 
@@ -118,7 +118,7 @@ dispatcher App の installation は owner/repo から引きます。
 workflow は `repository_dispatch` と `pull_request` を処理します。
 前者では payload から PR repository を特定します。
 後者では、この repo に install 済みの checker App を使います。
-Worker は self-webhook を落として二重起動を防ぎます。
+Worker は dispatch 先 repo からの self-webhook を無視し、二重実行と再帰起動を防ぎます。
 
 ### router workflow の流れ
 
@@ -129,7 +129,7 @@ Worker は self-webhook を落として二重起動を防ぎます。
 
 ### 共有 linter 一覧の参照先
 
-- 共有 linter の一覧、対象ファイル、設定ファイル / 挙動は repo root の
+- 共有 linter の一覧、対象ファイル、設定ファイル、制限事項は repo root の
   `README.md` を参照してください。
 - `worker/README.md` は Worker の webhook 受信、payload、routing、deploy
   手順に絞って記載します。
