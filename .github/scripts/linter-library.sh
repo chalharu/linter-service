@@ -55,6 +55,76 @@ linter_lib::copy_paths_to_root() {
   done
 }
 
+linter_lib::copy_worktree_without_git() {
+  local target_root=$1
+  local source_root=${2:-.}
+
+  rm -rf "$target_root"
+  mkdir -p "$target_root"
+  tar --exclude=.git -C "$source_root" -cf - . | tar -xf - -C "$target_root"
+}
+
+linter_lib::find_cargo_manifest() {
+  local path=$1
+  local current_dir candidate
+
+  current_dir=$(dirname "$path")
+  while :; do
+    candidate="$current_dir/Cargo.toml"
+    if [ -f "$candidate" ]; then
+      printf '%s\n' "${candidate#./}"
+      return 0
+    fi
+
+    if [ "$current_dir" = "." ] || [ "$current_dir" = "/" ]; then
+      break
+    fi
+
+    current_dir=$(dirname "$current_dir")
+  done
+
+  return 1
+}
+
+linter_lib::collect_cargo_manifests() {
+  local output_file=$1
+  local tool_name=$2
+  local manifests_var=$3
+  shift 3
+
+  local -n manifests_ref="$manifests_var"
+  local -A seen_manifests=()
+  local missing_files=()
+  local path manifest_path
+
+  manifests_ref=()
+
+  for path in "$@"; do
+    if ! manifest_path=$(linter_lib::find_cargo_manifest "$path"); then
+      missing_files+=("$path")
+      continue
+    fi
+
+    if [ -z "${seen_manifests[$manifest_path]+x}" ]; then
+      seen_manifests["$manifest_path"]=1
+      manifests_ref+=("$manifest_path")
+    fi
+  done
+
+  if [ "${#missing_files[@]}" -gt 0 ]; then
+    {
+      printf '%s requires each selected Rust file to belong to a Cargo package.\n' "$tool_name"
+      echo "No Cargo.toml found for:"
+      for path in "${missing_files[@]}"; do
+        printf ' - %s\n' "$path"
+      done
+    } > "$output_file"
+    return 1
+  fi
+
+  return 0
+}
+
 linter_lib::emit_json_result() {
   local exit_code=$1
   local output_file=$2

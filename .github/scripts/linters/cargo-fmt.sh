@@ -21,28 +21,6 @@ cargo_fmt_persist_env() {
   fi
 }
 
-cargo_fmt_find_manifest() {
-  local path=$1
-  local current_dir candidate
-
-  current_dir=$(dirname "$path")
-  while :; do
-    candidate="$current_dir/Cargo.toml"
-    if [ -f "$candidate" ]; then
-      printf '%s\n' "${candidate#./}"
-      return 0
-    fi
-
-    if [ "$current_dir" = "." ] || [ "$current_dir" = "/" ]; then
-      break
-    fi
-
-    current_dir=$(dirname "$current_dir")
-  done
-
-  return 1
-}
-
 mode=${1-}
 if [ "$#" -gt 0 ]; then
   shift
@@ -88,31 +66,7 @@ EOF
     cargo_fmt_prepare_env
     output_file="$RUNNER_TEMP/linter-output.txt"
     manifests=()
-    missing_files=()
-    declare -A seen_manifests=()
-    path=""
-    manifest_path=""
-
-    for path in "$@"; do
-      if ! manifest_path=$(cargo_fmt_find_manifest "$path"); then
-        missing_files+=("$path")
-        continue
-      fi
-
-      if [ -z "${seen_manifests[$manifest_path]+x}" ]; then
-        seen_manifests["$manifest_path"]=1
-        manifests+=("$manifest_path")
-      fi
-    done
-
-    if [ "${#missing_files[@]}" -gt 0 ]; then
-      {
-        echo "Cargo fmt requires each selected Rust file to belong to a Cargo package."
-        echo "No Cargo.toml found for:"
-        for path in "${missing_files[@]}"; do
-          printf ' - %s\n' "$path"
-        done
-      } > "$output_file"
+    if ! linter_lib::collect_cargo_manifests "$output_file" "Cargo fmt" manifests "$@"; then
       linter_lib::emit_json_result 1 "$output_file"
       exit 0
     fi

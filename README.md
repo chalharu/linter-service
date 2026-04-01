@@ -51,7 +51,7 @@ GitHub Actions が共通ルールで lint します。
 | `markdownlint-cli2` | `*.md`, `*.markdown` | `.markdownlint-cli2.jsonc` / `.markdownlint-cli2.yaml` と `.markdownlint.jsonc` / `.markdownlint.json` / `.markdownlint.yaml` / `.markdownlint.yml` の静的 config のみを扱います。`.cjs` / `.mjs` は任意コード実行を避けるため対象外です。共有 workflow は `globs` を使わず、変更対象だけを検査します。 |
 | `ruff` | `*.py`, `*.pyi` | `pyproject.toml` の `[tool.ruff]`、`ruff.toml`、`.ruff.toml` を対象 file ごとに近いものから使います。同一 directory では `.ruff.toml` → `ruff.toml` → `pyproject.toml` の順です。共有 workflow は `--force-exclude` を付け、設定上の除外も尊重します。 |
 | `cargo-fmt` | `*.rs` | changed Rust file ごとに最も近い `Cargo.toml` を探し、重複を除いた package 単位で `cargo fmt --check --manifest-path ...` を実行します。`rustfmt.toml` / `.rustfmt.toml` と `rust-toolchain.toml` / `rust-toolchain` は Cargo / rustup の既定探索を使います。 |
-| `cargo-clippy` | `*.rs` | changed Rust file ごとに最も近い `Cargo.toml` を探し、重複を除いた package 単位で `cargo fetch` の後に `cargo clippy --manifest-path ... --all-targets -- -D warnings` を実行します。Clippy 実行本体は `--network none` 付き Docker container へ隔離し、source checkout は host 側から直接 build させません。private git dependency や認証が必要な registry は現状サポートしません。 |
+| `cargo-clippy` | `*.rs` | changed Rust file ごとに最も近い `Cargo.toml` を探し、重複を除いた package 単位で `cargo fetch` の後に `cargo clippy --manifest-path ... --all-targets -- -D warnings` を実行します。Clippy 実行本体は `--network none` 付き Docker container へ隔離し、source checkout は host 側から直接 build させません。repository-supplied `.cargo/config` / `.cargo/config.toml` は共有 path では未対応です。private git dependency や認証が必要な registry は現状サポートしません。 |
 | `taplo` | `*.toml` | `.taplo.toml` を優先し、なければ `taplo.toml` を repo root で探します。未配置時は既定値で `fmt --check` を行います。 |
 | `biome` | `*.js`, `*.jsx`, `*.ts`, `*.tsx`, `*.json`, `*.jsonc`, `*.cjs`, `*.cts`, `*.mjs`, `*.mts` | Biome の既定探索で `biome.json` / `biome.jsonc` / `.biome.json` / `.biome.jsonc` を探し、未配置時は既定値を使います。 |
 | `shellcheck` | `*.bash`, `*.ksh`, `*.sh` | `.shellcheckrc` / `shellcheckrc` を対象 script の場所から親へ向けて探します。 |
@@ -120,7 +120,7 @@ GitHub Actions が共通ルールで lint します。
    JavaScript のように任意コード実行につながる config は許可せず、
    静的 config のみを受けるか、wrapper で明示的に reject します。
    `markdownlint-cli2.sh` と `spectral.sh` は config 側の実例で、
-   `cargo-clippy` は Docker container 実行側の実例です。
+   `cargo-clippy` は Docker container 実行と `.cargo/config*` reject の実例です。
 
 5. `.github/scripts/linters/config.json` に entry を追加します。
    ここが comment 見出し、成功 / 失敗文言、fallback message の source of truth です。

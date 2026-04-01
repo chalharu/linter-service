@@ -21,23 +21,44 @@ cargo_clippy_require_docker() {
   fi
 }
 
-cargo_clippy_find_manifest() {
-  local path=$1
-  local current_dir candidate
+cargo_clippy_collect_relevant_dirs() {
+  local -A seen=()
+  local manifest_path current_dir
 
-  current_dir=$(dirname "$path")
-  while :; do
-    candidate="$current_dir/Cargo.toml"
-    if [ -f "$candidate" ]; then
-      printf '%s\n' "${candidate#./}"
-      return 0
-    fi
+  seen["."]=1
+  printf '%s\n' "."
 
-    if [ "$current_dir" = "." ] || [ "$current_dir" = "/" ]; then
-      break
-    fi
+  for manifest_path in "$@"; do
+    current_dir=$(dirname "$manifest_path")
 
-    current_dir=$(dirname "$current_dir")
+    while :; do
+      if [ -z "${seen[$current_dir]+x}" ]; then
+        seen["$current_dir"]=1
+        printf '%s\n' "$current_dir"
+      fi
+
+      if [ "$current_dir" = "." ] || [ "$current_dir" = "/" ]; then
+        break
+      fi
+
+      current_dir=$(dirname "$current_dir")
+    done
+  done
+}
+
+cargo_clippy_find_unsupported_config() {
+  local dir candidate
+
+  for dir in "$@"; do
+    for candidate in \
+      "$dir/.cargo/config.toml" \
+      "$dir/.cargo/config"
+    do
+      if [ -f "$candidate" ]; then
+        printf '%s\n' "${candidate#./}"
+        return 0
+      fi
+    done
   done
 
   return 1
@@ -87,31 +108,18 @@ EOF
     cargo_clippy_require_docker
     output_file="$RUNNER_TEMP/linter-output.txt"
     manifests=()
-    missing_files=()
-    declare -A seen_manifests=()
-    path=""
-    manifest_path=""
-
-    for path in "$@"; do
-      if ! manifest_path=$(cargo_clippy_find_manifest "$path"); then
-        missing_files+=("$path")
-        continue
-      fi
-
-      if [ -z "${seen_manifests[$manifest_path]+x}" ]; then
-        seen_manifests["$manifest_path"]=1
-        manifests+=("$manifest_path")
-      fi
-    done
-
-    if [ "${#missing_files[@]}" -gt 0 ]; then
-      {
-        echo "Cargo clippy requires each selected Rust file to belong to a Cargo package."
-        echo "No Cargo.toml found for:"
-        for path in "${missing_files[@]}"; do
-          printf ' - %s\n' "$path"
-        done
-      } > "$output_file"
+    relevant_dirs=()
+    unsupported_config=""
+    if ! linter_lib::collect_cargo_manifests "$output_file" "Cargo clippy" manifests "$@"; then
+      linter_lib::emit_json_result 1 "$output_file"
+      exit 0
+    fi
+    mapfile -t relevant_dirs < <(cargo_clippy_collect_relevant_dirs "${manifests[@]}")
+    if unsupported_config="$(cargo_clippy_find_unsupported_config "${relevant_dirs[@]}")"; then
+      cat > "$output_file" <<EOF
+Repository-supplied \`$unsupported_config\` is not supported in this shared linter service because \`cargo fetch\` for untrusted pull requests cannot safely honor repository-controlled Cargo configuration.
+Use the default Cargo registry configuration for the shared \`cargo-clippy\` path.
+EOF
       linter_lib::emit_json_result 1 "$output_file"
       exit 0
     fi
@@ -125,8 +133,8 @@ EOF
     group_id=$(id -g)
 
     rm -rf "$workspace_root"
-    mkdir -p "$source_root" "$cargo_home" "$target_root"
-    cp -a ./. "$source_root/"
+    mkdir -p "$cargo_home" "$target_root"
+    linter_lib::copy_worktree_without_git "$source_root"
 
     cleanup_workspace() {
       rm -rf "$workspace_root"
