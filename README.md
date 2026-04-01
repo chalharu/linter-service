@@ -50,6 +50,7 @@ GitHub Actions が共通ルールで lint します。
 | `yamllint` | `*.yaml`, `*.yml` | `.yamllint` / `.yamllint.yaml` / `.yamllint.yml` を順に探します。 |
 | `markdownlint-cli2` | `*.md`, `*.markdown` | `.markdownlint-cli2.jsonc` / `.markdownlint-cli2.yaml` と `.markdownlint.jsonc` / `.markdownlint.json` / `.markdownlint.yaml` / `.markdownlint.yml` の静的 config のみを扱います。`.cjs` / `.mjs` は任意コード実行を避けるため対象外です。共有 workflow は `globs` を使わず、変更対象だけを検査します。 |
 | `ruff` | `*.py`, `*.pyi` | `pyproject.toml` の `[tool.ruff]`、`ruff.toml`、`.ruff.toml` を対象 file ごとに近いものから使います。同一 directory では `.ruff.toml` → `ruff.toml` → `pyproject.toml` の順です。共有 workflow は `--force-exclude` を付け、設定上の除外も尊重します。 |
+| `cargo-fmt` | `*.rs` | changed Rust file ごとに最も近い `Cargo.toml` を探し、重複を除いた package 単位で `cargo fmt --check --manifest-path ...` を実行します。`rustfmt.toml` / `.rustfmt.toml` と `rust-toolchain.toml` / `rust-toolchain` は Cargo / rustup の既定探索を使います。 |
 | `taplo` | `*.toml` | `.taplo.toml` を優先し、なければ `taplo.toml` を repo root で探します。未配置時は既定値で `fmt --check` を行います。 |
 | `biome` | `*.js`, `*.jsx`, `*.ts`, `*.tsx`, `*.json`, `*.jsonc`, `*.cjs`, `*.cts`, `*.mjs`, `*.mts` | Biome の既定探索で `biome.json` / `biome.jsonc` / `.biome.json` / `.biome.jsonc` を探し、未配置時は既定値を使います。 |
 | `shellcheck` | `*.bash`, `*.ksh`, `*.sh` | `.shellcheckrc` / `shellcheckrc` を対象 script の場所から親へ向けて探します。 |
