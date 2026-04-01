@@ -127,13 +127,14 @@ EOF
     workspace_root="$RUNNER_TEMP/cargo-clippy-workspace"
     source_root="$workspace_root/source"
     cargo_home="$workspace_root/cargo-home"
+    rustup_root="$workspace_root/rustup-home"
     target_root="$workspace_root/cargo-target"
     image_ref=$(cargo_clippy_image_ref)
     user_id=$(id -u)
     group_id=$(id -g)
 
     rm -rf "$workspace_root"
-    mkdir -p "$cargo_home" "$target_root"
+    mkdir -p "$cargo_home" "$rustup_root" "$target_root"
     linter_lib::copy_worktree_without_git "$source_root"
 
     cleanup_workspace() {
@@ -141,6 +142,25 @@ EOF
     }
 
     trap cleanup_workspace EXIT
+
+    seed_writable_rustup_home() {
+      if [ -f "$rustup_root/settings.toml" ]; then
+        return 0
+      fi
+
+      printf '==> docker run seed writable rustup home\n'
+      docker run \
+        --rm \
+        --cap-drop ALL \
+        --security-opt no-new-privileges \
+        --read-only \
+        --tmpfs /tmp \
+        --user "$user_id:$group_id" \
+        --mount "type=bind,src=$rustup_root,dst=/rustup-home" \
+        "$image_ref" \
+        sh -ceu 'tar -C /usr/local/rustup -cf - . | tar -xf - -C /rustup-home'
+      echo
+    }
 
     docker_run_common=(
       --rm
@@ -152,6 +172,7 @@ EOF
       --workdir /work
       --mount "type=bind,src=$source_root,dst=/work"
       --mount "type=bind,src=$cargo_home,dst=/cargo-home"
+      --mount "type=bind,src=$rustup_root,dst=/usr/local/rustup"
       --mount "type=bind,src=$target_root,dst=/cargo-target"
       --env CARGO_HOME=/cargo-home
       --env CARGO_TARGET_DIR=/cargo-target
@@ -162,6 +183,10 @@ EOF
     run_cargo_clippy() {
       local failure=0
       local current_manifest
+
+      if ! seed_writable_rustup_home; then
+        return 1
+      fi
 
       for current_manifest in "${manifests[@]}"; do
         printf '==> docker run cargo fetch --manifest-path %s\n' "$current_manifest"
