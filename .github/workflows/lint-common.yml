@@ -23,13 +23,17 @@ permissions: {}
 
 jobs:
   run-linter:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
-      comment_body_base64: ${{ steps.publish_outputs.outputs.comment_body_base64 }}
-      conclusion: ${{ steps.publish_outputs.outputs.conclusion }}
+      comment_body_base64: ${{ steps.prepare_report.outputs.comment_body_base64 }}
+      conclusion: ${{ steps.prepare_report.outputs.conclusion }}
     env:
       LINTER_NAME: ${{ inputs.linter-name }}
+      LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
+      SOURCE_REPOSITORY_PATH: ${{ github.workspace }}/source-repo
     steps:
       - name: Download dispatch context artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -37,50 +41,35 @@ jobs:
           name: detect-targets-context
           path: ${{ runner.temp }}/detect-targets-context
 
+      - name: Check out linter-service repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          path: linter-service
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
       - name: Mask repository metadata
         env:
           CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
         run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
-          source_owner = context["source_owner"]
-          source_repo = context["source_repo"]
-          source_head_sha = context["source_head_sha"]
-
-          for value in (source_owner, source_repo, source_head_sha):
-              if value:
-                  print(f"::add-mask::{value}")
-
-          if source_owner and source_repo:
-              print(f"::add-mask::{source_owner}/{source_repo}")
-          PY
+          python3 "$LINTER_SERVICE_PATH/.github/scripts/context-artifact.py" \
+            mask \
+            "$CONTEXT_PATH" \
+            source_owner \
+            source_repo \
+            source_head_sha
 
       - name: Decode repository metadata
         id: decode_context
         env:
           CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
         run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
-          values = {
-              "source-head-sha": context["source_head_sha"],
-              "source-owner": context["source_owner"],
-              "source-repo": context["source_repo"],
-          }
-
-          output_path = Path(os.environ["GITHUB_OUTPUT"])
-          with output_path.open("a", encoding="utf-8") as fh:
-              for key, value in values.items():
-                  fh.write(f"{key}={value}\n")
-          PY
+          python3 "$LINTER_SERVICE_PATH/.github/scripts/context-artifact.py" \
+            outputs \
+            "$CONTEXT_PATH" \
+            source_head_sha=source-head-sha \
+            source_owner=source-owner \
+            source_repo=source-repo
 
       - name: Get source repository checker token
         id: get_source_token
@@ -95,51 +84,37 @@ jobs:
       - name: Check out source repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
+          path: source-repo
           persist-credentials: false
           ref: ${{ steps.decode_context.outputs.source-head-sha }}
           repository: ${{ steps.decode_context.outputs.source-owner }}/${{ steps.decode_context.outputs.source-repo }}
           token: ${{ steps.get_source_token.outputs.token }}
 
-      - name: Set up Node.js
-        if: ${{ inputs.linter-name == 'spectral' }}
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
-        with:
-          node-version: "22"
-
-      - name: Set up Python
-        if: ${{ inputs.linter-name == 'yamllint' || inputs.linter-name == 'zizmor' }}
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.x"
-
       - name: Select lint target files
         id: select_files
         env:
           CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
-          LINTER_NAME: ${{ inputs.linter-name }}
+          PATTERN_PATH: ${{ runner.temp }}/linter-patterns.txt
         run: |
+          script_path="$LINTER_SERVICE_PATH/.github/scripts/linters/$LINTER_NAME.sh"
+          bash "$script_path" patterns > "$PATTERN_PATH"
+
           python3 - <<'PY' > "$RUNNER_TEMP/selected-files.txt"
           import json
           import os
+          import re
           from pathlib import Path
 
-          linter_name = os.environ["LINTER_NAME"]
           context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
-          files = context["changed_files"]
+          patterns = [
+              re.compile(line.strip(), re.IGNORECASE)
+              for line in Path(os.environ["PATTERN_PATH"]).read_text(encoding="utf-8").splitlines()
+              if line.strip()
+          ]
 
-          for path in files:
-              lower_path = path.lower()
-              if linter_name in {"actionlint", "ghalint", "zizmor"}:
-                  if lower_path.startswith(".github/workflows/") and lower_path.endswith((".yaml", ".yml")):
-                      print(path)
-              elif linter_name == "spectral":
-                  if lower_path.endswith((".json", ".yaml", ".yml")):
-                      print(path)
-              elif linter_name == "yamllint":
-                  if lower_path.endswith((".yaml", ".yml")):
-                      print(path)
-              else:
-                  raise SystemExit(f"unsupported linter: {linter_name}")
+          for path in context["changed_files"]:
+              if any(pattern.search(path) for pattern in patterns):
+                  print(path)
           PY
 
           count=$(wc -l < "$RUNNER_TEMP/selected-files.txt" | tr -d ' ')
@@ -148,174 +123,57 @@ jobs:
       - name: Install linter tool
         id: install_tool
         if: ${{ steps.select_files.outputs.count != '0' }}
-        env:
-          LINTER_NAME: ${{ inputs.linter-name }}
         run: |
-          case "$LINTER_NAME" in
-            actionlint)
-              curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash \
-                -o "$RUNNER_TEMP/download-actionlint.bash"
-              bash "$RUNNER_TEMP/download-actionlint.bash" latest
-              ;;
-            ghalint)
-              release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/suzuki-shunsuke/ghalint/releases/latest)"
-              version="$(basename "$release_url")"
-              version_number="$(printf '%s' "$version" | sed 's/^v//')"
-              asset="ghalint_${version_number}_linux_amd64.tar.gz"
-              mkdir -p "$RUNNER_TEMP/bin"
-              curl -fsSL "https://github.com/suzuki-shunsuke/ghalint/releases/download/$version/$asset" -o "$RUNNER_TEMP/$asset"
-              tar -xzf "$RUNNER_TEMP/$asset" -C "$RUNNER_TEMP/bin"
-              chmod +x "$RUNNER_TEMP/bin/ghalint"
-              echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-              ;;
-            spectral)
-              npm install --global @stoplight/spectral-cli
-              ;;
-            yamllint)
-              python -m pip install --upgrade pip yamllint
-              ;;
-            zizmor)
-              python -m pip install --upgrade pip zizmor
-              ;;
-            *)
-              echo "unsupported linter: $LINTER_NAME" >&2
-              exit 1
-              ;;
-          esac
+          script_path="$LINTER_SERVICE_PATH/.github/scripts/linters/$LINTER_NAME.sh"
+          (
+            cd "$LINTER_SERVICE_PATH" || exit 1
+            bash "$script_path" install
+          )
 
       - name: Run linter
         id: run_linter
         if: ${{ steps.select_files.outputs.count != '0' }}
         env:
-          LINTER_NAME: ${{ inputs.linter-name }}
+          RESULT_PATH: ${{ runner.temp }}/linter-result.json
         run: |
-          set +e
+          script_path="$LINTER_SERVICE_PATH/.github/scripts/linters/$LINTER_NAME.sh"
           mapfile -t files < "$RUNNER_TEMP/selected-files.txt"
+          (
+            cd "$SOURCE_REPOSITORY_PATH" || exit 1
+            bash "$script_path" run "${files[@]}" > "$RESULT_PATH"
+          )
 
-          copy_selected_files_to_root() {
-            local target_root=$1
-            shift
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
 
-            for file in "$@"; do
-              local destination="$target_root/$file"
-              mkdir -p "$(dirname "$destination")"
-              cp "$file" "$destination"
-            done
-          }
+          result = json.loads(Path(os.environ["RESULT_PATH"]).read_text(encoding="utf-8"))
+          exit_code = result.get("exit_code")
 
-          copy_ghalint_config() {
-            local target_root=$1
-            local config_path
+          if not isinstance(exit_code, int):
+              raise SystemExit("linter result JSON must include integer exit_code")
 
-            for config_path in \
-              .ghalint.yaml \
-              .ghalint.yml \
-              ghalint.yaml \
-              ghalint.yml \
-              .github/ghalint.yaml \
-              .github/ghalint.yml
-            do
-              if [ -f "$config_path" ]; then
-                local destination="$target_root/$config_path"
-                mkdir -p "$(dirname "$destination")"
-                cp "$config_path" "$destination"
-                return 0
-              fi
-            done
-          }
-
-          resolve_spectral_ruleset() {
-            local default_ruleset="$RUNNER_TEMP/default-spectral-ruleset.yaml"
-            local config_path
-
-            for config_path in \
-              .spectral.yml \
-              .spectral.yaml \
-              .spectral.json \
-              .spectral.js
-            do
-              if [ -f "$config_path" ]; then
-                printf '%s\n' "$config_path"
-                return 0
-              fi
-            done
-
-            printf '%s\n' \
-              'extends:' \
-              '  - spectral:oas' > "$default_ruleset"
-            printf '%s\n' "$default_ruleset"
-          }
-
-          case "$LINTER_NAME" in
-          actionlint)
-            ./actionlint "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
-            ;;
-          ghalint)
-            temp_repo="$RUNNER_TEMP/ghalint-repo"
-            rm -rf "$temp_repo"
-            mkdir -p "$temp_repo"
-            copy_selected_files_to_root "$temp_repo" "${files[@]}"
-            copy_ghalint_config "$temp_repo"
-            (
-              cd "$temp_repo" || exit 1
-              GHALINT_LOG_COLOR=never ghalint run
-            ) > "$RUNNER_TEMP/linter-output.txt" 2>&1
-            ;;
-          spectral)
-            spectral_ruleset="$(resolve_spectral_ruleset)"
-            spectral lint \
-              --format text \
-              --ignore-unknown-format \
-              --quiet \
-              --ruleset "$spectral_ruleset" \
-              "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
-            ;;
-          yamllint)
-            yamllint_config=""
-            for candidate in ".yamllint" ".yamllint.yaml" ".yamllint.yml"; do
-              if [ -f "$candidate" ]; then
-                yamllint_config="$candidate"
-                break
-              fi
-            done
-            if [ -z "$yamllint_config" ]; then
-              cat > "$RUNNER_TEMP/yamllint.yaml" <<'EOF'
-          extends: default
-          rules:
-            comments-indentation: disable
-            document-start: disable
-            line-length: disable
-            truthy:
-              check-keys: false
-          EOF
-              yamllint_config="$RUNNER_TEMP/yamllint.yaml"
-            fi
-            yamllint -c "$yamllint_config" "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
-            ;;
-          zizmor)
-            zizmor --offline --color=never --format=plain "${files[@]}" > "$RUNNER_TEMP/linter-output.txt" 2>&1
-            ;;
-          *)
-            echo "unsupported linter: $LINTER_NAME" >&2
-            exit 1
-            ;;
-          esac
-
-          status=$?
-          echo "exit_code=$status" >> "$GITHUB_OUTPUT"
-          exit 0
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          with output_path.open("a", encoding="utf-8") as fh:
+              fh.write(f"exit_code={exit_code}\n")
+          PY
 
       - name: Prepare linter report
+        id: prepare_report
         if: ${{ always() }}
         env:
           FILE_COUNT: ${{ steps.select_files.outputs.count }}
           EXIT_CODE: ${{ steps.run_linter.outputs.exit_code }}
           INSTALL_TOOL_OUTCOME: ${{ steps.install_tool.outcome }}
           LINTER_NAME: ${{ inputs.linter-name }}
+          RESULT_PATH: ${{ runner.temp }}/linter-result.json
           RUN_LINTER_OUTCOME: ${{ steps.run_linter.outcome }}
           SELECT_FILES_OUTCOME: ${{ steps.select_files.outcome }}
         run: |
           python3 - <<'PY'
+          import base64
+          import json
           import os
           from pathlib import Path
 
@@ -325,8 +183,8 @@ jobs:
           select_outcome = os.environ.get("SELECT_FILES_OUTCOME", "")
           install_outcome = os.environ.get("INSTALL_TOOL_OUTCOME", "")
           run_outcome = os.environ.get("RUN_LINTER_OUTCOME", "")
+          result_path = Path(os.environ["RESULT_PATH"])
           runner_temp = Path(os.environ["RUNNER_TEMP"])
-          output_path = runner_temp / "linter-output.txt"
           comment_path = runner_temp / "linter-comment.md"
 
           config = {
@@ -379,19 +237,24 @@ jobs:
           lines = [linter_config["heading"], ""]
           has_step_failure = "failure" in {select_outcome, install_outcome, run_outcome}
           success = (not has_step_failure) and (file_count == 0 or exit_code_raw == "0")
+          conclusion = "success" if success else "failure"
 
-          if has_step_failure and not output_path.exists():
+          if has_step_failure and not result_path.exists():
               lines.append(linter_config["infra_failure"])
           elif file_count == 0 and exit_code_raw == "":
               lines.append(linter_config["no_files"])
           elif success:
               lines.append(linter_config["success"].format(count=file_count))
           else:
-              details = (
-                  output_path.read_text(encoding="utf-8").strip()
-                  if output_path.exists()
-                  else linter_config["details_fallback"]
-              )
+              details = linter_config["details_fallback"]
+              if result_path.exists():
+                  try:
+                      result = json.loads(result_path.read_text(encoding="utf-8"))
+                  except json.JSONDecodeError:
+                      result = {}
+
+                  details = str(result.get("details") or "").strip() or details
+
               if len(details) > 60000:
                   details = f"{details[:60000]}\n... truncated ..."
 
@@ -409,37 +272,7 @@ jobs:
               )
 
           comment_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-          PY
-
-      - name: Publish workflow outputs
-        id: publish_outputs
-        if: ${{ always() }}
-        env:
-          FILE_COUNT: ${{ steps.select_files.outputs.count }}
-          EXIT_CODE: ${{ steps.run_linter.outputs.exit_code }}
-          INSTALL_TOOL_OUTCOME: ${{ steps.install_tool.outcome }}
-          RUN_LINTER_OUTCOME: ${{ steps.run_linter.outcome }}
-          SELECT_FILES_OUTCOME: ${{ steps.select_files.outcome }}
-        run: |
-          python3 - <<'PY'
-          import base64
-          import os
-          from pathlib import Path
-
-          file_count = int(os.environ.get("FILE_COUNT", "0") or "0")
-          exit_code_raw = os.environ.get("EXIT_CODE", "")
-          select_outcome = os.environ.get("SELECT_FILES_OUTCOME", "")
-          install_outcome = os.environ.get("INSTALL_TOOL_OUTCOME", "")
-          run_outcome = os.environ.get("RUN_LINTER_OUTCOME", "")
-          has_step_failure = "failure" in {select_outcome, install_outcome, run_outcome}
-          conclusion = (
-              "success"
-              if (not has_step_failure) and (file_count == 0 or exit_code_raw == "0")
-              else "failure"
-          )
-
-          comment_path = Path(os.environ["RUNNER_TEMP"]) / "linter-comment.md"
-          body = comment_path.read_text(encoding="utf-8") if comment_path.exists() else ""
+          body = comment_path.read_text(encoding="utf-8")
           encoded_body = base64.b64encode(body.encode("utf-8")).decode("ascii")
 
           output_path = Path(os.environ["GITHUB_OUTPUT"])

@@ -32,7 +32,8 @@ GitHub Actions が共通ルールで lint します。
 | パス | 役割 |
 |------|------|
 | `.github/workflows/repository-dispatch.yml` | router workflow |
-| `.github/workflows/lint-*.yml` | linter ごとの reusable workflow |
+| `.github/workflows/lint-common.yml` | 共通 reusable workflow |
+| `.github/scripts/linters/*.sh` | linter ごとの実装 |
 | `.github/workflows/ci.yml` | `worker/` の型検査・lint・テスト |
 | `worker/` | Webhook を受ける Cloudflare Worker |
 
@@ -40,3 +41,4 @@ GitHub Actions が共通ルールで lint します。
 
 - Worker の設定と運用は `worker/README.md` を参照してください。
 - 共有 lint の入口は `repository-dispatch.yml` です。
+- 実処理は `lint-common.yml` と shell script に集約しています。

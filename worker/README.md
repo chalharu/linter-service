@@ -21,9 +21,12 @@ checker App Webhook
  repository-dispatch.yml
         |
         v
- reusable workflows
-        |
-        v
+ lint-common.yml
+         |
+         v
+ linter shell scripts
+         |
+         v
  PR comment / check run 更新
 ```
 
@@ -99,7 +102,7 @@ dispatcher App の installation は owner/repo から引きます。
 | `GITHUB_CHECKER_WEBHOOK_SECRET` | ✅ | checker App の webhook secret |
 | `GITHUB_DISPATCH_OWNER` | ✅ | dispatch 先 owner |
 | `GITHUB_DISPATCH_REPO` | ✅ | dispatch 先 repository 名 |
-| `GITHUB_API_BASE_URL` | 任意 | 既定値は `https://api.github.com` |
+| `GITHUB_API_BASE_URL` | 任意 | 既定値は `https://api.github.com`。指定時は HTTPS のみ許可します。 |
 
 - `event_type` は `github_app_webhook` で固定です。
 - PEM は RSA 形式と PKCS#8 形式の両方に対応します。
@@ -121,7 +124,7 @@ Worker は self-webhook を落として二重起動を防ぎます。
 
 1. changed files と linter 定義を評価する
 2. 共通の in-progress check run を作る
-3. reusable linter workflow を並列実行する
+3. `lint-common.yml` を linter 名ごとに並列実行する
 4. 結果を PR comment と check run に集約する
 
 ### linter ごとの扱い
@@ -130,11 +133,13 @@ Worker は self-webhook を落として二重起動を防ぎます。
 |--------|---------------------|
 | `actionlint` | `.github/actionlint.yaml` / `.yml` を自動で読みます。 |
 | `ghalint` | `.ghalint.yaml` / `.ghalint.yml` / `ghalint.yaml` / `ghalint.yml` / `.github/ghalint.yaml` / `.github/ghalint.yml` を順に探します。 |
-| `spectral` | `.spectral.yml` / `.spectral.yaml` / `.spectral.json` / `.spectral.js` を読みます。未配置時は `spectral:oas` を使い、unknown format は無視します。 |
+| `spectral` | `.spectral.yml` / `.spectral.yaml` / `.spectral.json` を読みます。未配置時は `spectral:oas` を使い、unknown format は無視します。 |
 | `yamllint` | `.yamllint` 系 3 形式を順に探します。 |
 | `zizmor` | このリポジトリでは `zizmor.yml` / `zizmor.yaml` / `.github/zizmor.yml` / `.github/zizmor.yaml` を配置先として案内します。 |
 
+- 実装本体は `.github/scripts/linters/*.sh` に分割しています。
 - 詳細ログは抑え、結果は PR comment へ集約します。
+- `.spectral.js` は任意コード実行を避けるため対象外です。
 
 ## `repository_dispatch` payload
 
