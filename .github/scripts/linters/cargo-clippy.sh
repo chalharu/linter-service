@@ -183,32 +183,73 @@ EOF
     run_cargo_clippy() {
       local failure=0
       local current_manifest
+      local fetch_failures_path="$cargo_home/fetch-failed-manifests.txt"
+      local clippy_manifests=()
+      local -A failed_fetches=()
 
       if ! seed_writable_rustup_home; then
         return 1
       fi
 
+      rm -f "$fetch_failures_path"
+
+      if ! docker run \
+        "${docker_run_common[@]}" \
+        --env LINTER_SERVICE_BATCH_MODE=fetch \
+        "$image_ref" \
+        sh -ceu '
+          failed_path=/cargo-home/fetch-failed-manifests.txt
+          : > "$failed_path"
+          for manifest_path in "$@"; do
+            printf "==> docker run cargo fetch --manifest-path %s\n" "$manifest_path"
+            if ! cargo fetch --manifest-path "$manifest_path"; then
+              printf "%s\n" "$manifest_path" >> "$failed_path"
+            fi
+            echo
+          done
+        ' sh "${manifests[@]}"; then
+        return 1
+      fi
+
+      if [ -s "$fetch_failures_path" ]; then
+        failure=1
+        while IFS= read -r current_manifest; do
+          if [ -n "$current_manifest" ]; then
+            failed_fetches["$current_manifest"]=1
+          fi
+        done < "$fetch_failures_path"
+      fi
+
       for current_manifest in "${manifests[@]}"; do
-        printf '==> docker run cargo fetch --manifest-path %s\n' "$current_manifest"
-        if ! docker run \
-          "${docker_run_common[@]}" \
-          "$image_ref" \
-          cargo fetch --manifest-path "$current_manifest"; then
-          failure=1
-          echo
+        if [ -n "${failed_fetches[$current_manifest]+x}" ]; then
+          printf '==> skip cargo clippy --manifest-path %s because cargo fetch failed\n\n' "$current_manifest"
           continue
         fi
-
-        printf '==> docker run cargo clippy --manifest-path %s --all-targets -- -D warnings\n' "$current_manifest"
-        if ! docker run \
-          "${docker_run_common[@]}" \
-          --network=none \
-          "$image_ref" \
-          cargo clippy --manifest-path "$current_manifest" --all-targets -- -D warnings; then
-          failure=1
-        fi
-        echo
+        clippy_manifests+=("$current_manifest")
       done
+
+      if [ "${#clippy_manifests[@]}" -eq 0 ]; then
+        return "$failure"
+      fi
+
+      if ! docker run \
+        "${docker_run_common[@]}" \
+        --env LINTER_SERVICE_BATCH_MODE=clippy \
+        --network=none \
+        "$image_ref" \
+        sh -ceu '
+          failure=0
+          for manifest_path in "$@"; do
+            printf "==> docker run cargo clippy --manifest-path %s --all-targets -- -D warnings\n" "$manifest_path"
+            if ! cargo clippy --manifest-path "$manifest_path" --all-targets -- -D warnings; then
+              failure=1
+            fi
+            echo
+          done
+          exit "$failure"
+        ' sh "${clippy_manifests[@]}"; then
+        failure=1
+      fi
 
       return "$failure"
     }
