@@ -56,6 +56,89 @@ GitHub Actions が共通ルールで lint します。
 | `shellcheck` | `*.bash`, `*.ksh`, `*.sh` | `.shellcheckrc` / `shellcheckrc` を対象 script の場所から親へ向けて探します。 |
 | `zizmor` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | `zizmor.yml` / `zizmor.yaml` / `.github/zizmor.yml` / `.github/zizmor.yaml` を配置先として案内します。 |
 
+## 共有 linter の追加方法
+
+新しい共有 linter は、通常は workflow を追加せずに data-driven な定義だけを足します。
+基本的には `.github/scripts/linters/` と `.github/scripts/linters/config.json` と
+この `README.md` を更新すれば済みます。
+
+1. `.github/scripts/linters/<name>.sh` を追加します。
+   `patterns`, `install`, `run` の 3 mode を実装してください。
+   `repository-dispatch.yml` は `patterns` の regex で対象 linter を選び、
+   `lint-common.yml` は一致した changed file path を `run` に渡します。
+
+   ```bash
+   #!/usr/bin/env bash
+   set -euo pipefail
+
+   script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+   # shellcheck source=../linter-library.sh
+   source "$script_dir/../linter-library.sh"
+
+   mode=${1-}
+   if [ "$#" -gt 0 ]; then
+     shift
+   fi
+
+   case "$mode" in
+     patterns)
+       cat <<'EOF'
+   \.(?:ext)$
+   EOF
+       ;;
+     install)
+       : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
+       # tool install
+       ;;
+     run)
+       : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
+       output_file="$RUNNER_TEMP/linter-output.txt"
+       linter_lib::run_and_emit_json "$output_file" your-linter "$@"
+       ;;
+     *)
+       echo "usage: $0 {patterns|install|run}" >&2
+       exit 1
+       ;;
+   esac
+   ```
+
+2. `install` は runner 既定 tool を再利用できるならそれを優先し、
+   足りない場合だけ `$RUNNER_TEMP` 配下へ install して
+   `linter_lib::add_path` で PATH に追加します。
+   単純な例は `actionlint.sh` や `taplo.sh`、
+   repository ごとの解決が必要な例は `cargo-fmt.sh` を参照してください。
+
+3. `run` は changed file path をそのまま tool に渡せるかを先に確認します。
+   そのまま扱えない場合は wrapper 側で package / workspace / temp repo に
+   変換します。`cargo-fmt.sh` は Cargo package 単位へまとめ、
+   `markdownlint-cli2.sh` は temp repo を組み立てて changed file だけを検査します。
+
+4. 利用 repository 側の config を読む linter は、
+   untrusted pull request でも安全に扱えることを確認してください。
+   JavaScript のように任意コード実行につながる config は許可せず、
+   静的 config のみを受けるか、wrapper で明示的に reject します。
+   `markdownlint-cli2.sh` と `spectral.sh` はその実例です。
+
+5. `.github/scripts/linters/config.json` に entry を追加します。
+   ここが comment 見出し、成功 / 失敗文言、fallback message の source of truth です。
+   通常は linter を増やすために `repository-dispatch.yml` や
+   `lint-common.yml` を個別修正する必要はありません。
+
+6. この `README.md` の「共有 linter 一覧」に、
+   対象ファイルと config 探索 / 挙動を 1 行追記します。
+
+7. wrapper に path 解決、config 探索、package grouping のような
+   非自明な処理がある場合は、
+   `.github/scripts/linters/<name>.test.js` のような focused test を追加します。
+   単純な wrapper でも `shellcheck -x -P SCRIPTDIR` は通してください。
+
+8. 変更後は、触った面に応じて既存の validation を実行します。
+   例:
+   - `node --test .github/scripts/linters/<name>.test.js`
+   - `shellcheck -x -P SCRIPTDIR .github/scripts/linters/<name>.sh`
+   - `markdownlint-cli2 --no-globs :README.md`
+   - `git diff --check`
+
 ## 詳細
 
 - Worker の設定と運用は `worker/README.md` を参照してください。
