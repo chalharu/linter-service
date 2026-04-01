@@ -1,0 +1,49 @@
+{
+  "linters": [
+    {
+      "name": "actionlint",
+      "heading": "### actionlint",
+      "no_files": "No matching workflow files were selected for `actionlint`.",
+      "success": "✅ No issues found in {count} changed GitHub Actions workflow file(s).",
+      "failure": "❌ Issues found in {count} changed GitHub Actions workflow file(s).",
+      "infra_failure": "❌ The `actionlint` workflow failed before producing a detailed report. See the workflow logs.",
+      "details_fallback": "actionlint did not produce diagnostic output before the job failed."
+    },
+    {
+      "name": "ghalint",
+      "heading": "### ghalint",
+      "no_files": "No matching GitHub Actions workflow files were selected for `ghalint`.",
+      "success": "✅ No issues found in {count} changed GitHub Actions workflow file(s).",
+      "failure": "❌ Issues found in {count} changed GitHub Actions workflow file(s).",
+      "infra_failure": "❌ The `ghalint` workflow failed before producing a detailed report. See the workflow logs.",
+      "details_fallback": "ghalint did not produce diagnostic output before the job failed."
+    },
+    {
+      "name": "spectral",
+      "heading": "### spectral",
+      "no_files": "No matching YAML or JSON files were selected for `spectral`.",
+      "success": "✅ No issues found in {count} changed YAML or JSON file(s).",
+      "failure": "❌ Issues found in {count} changed YAML or JSON file(s).",
+      "infra_failure": "❌ The `spectral` workflow failed before producing a detailed report. See the workflow logs.",
+      "details_fallback": "spectral did not produce diagnostic output before the job failed."
+    },
+    {
+      "name": "yamllint",
+      "heading": "### yamllint",
+      "no_files": "No matching YAML files were selected for `yamllint`.",
+      "success": "✅ No issues found in {count} changed YAML file(s).",
+      "failure": "❌ Issues found in {count} changed YAML file(s).",
+      "infra_failure": "❌ The `yamllint` workflow failed before producing a detailed report. See the workflow logs.",
+      "details_fallback": "yamllint did not produce diagnostic output before the job failed."
+    },
+    {
+      "name": "zizmor",
+      "heading": "### zizmor",
+      "no_files": "No matching workflow files were selected for `zizmor`.",
+      "success": "✅ No security issues found in {count} changed GitHub Actions workflow file(s).",
+      "failure": "❌ Security issues found in {count} changed GitHub Actions workflow file(s).",
+      "infra_failure": "❌ The `zizmor` workflow failed before producing a detailed report. See the workflow logs.",
+      "details_fallback": "zizmor did not produce diagnostic output before the job failed."
+    }
+  ]
+}

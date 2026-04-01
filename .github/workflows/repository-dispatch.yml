@@ -20,14 +20,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
-      actionlint-selected: ${{ steps.collect.outputs.actionlint-selected }}
-      ghalint-selected: ${{ steps.collect.outputs.ghalint-selected }}
       pull-request-number: ${{ steps.collect.outputs.pull-request-number }}
-      spectral-selected: ${{ steps.collect.outputs.spectral-selected }}
       selected-linters-json: ${{ steps.collect.outputs.selected-linters-json }}
       skip-reason: ${{ steps.collect.outputs.skip-reason }}
-      yamllint-selected: ${{ steps.collect.outputs.yamllint-selected }}
-      zizmor-selected: ${{ steps.collect.outputs.zizmor-selected }}
     env:
       PR_REPOSITORY_NAME: ${{ github.event_name == 'pull_request' && github.event.repository.name || github.event.client_payload.repository.name }}
       PR_REPOSITORY_OWNER: ${{ github.event_name == 'pull_request' && github.event.repository.owner.login || github.event.client_payload.repository.owner.login }}
@@ -74,6 +69,7 @@ jobs:
       - name: Build linter definitions
         id: build_linter_definitions
         env:
+          LINTER_CONFIG_PATH: ${{ github.workspace }}/linter-service/.github/scripts/linters/config.json
           LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
         run: |
           python3 - <<'PY'
@@ -82,11 +78,20 @@ jobs:
           import subprocess
           from pathlib import Path
 
-          linter_names = ["actionlint", "ghalint", "spectral", "yamllint", "zizmor"]
+          config_path = Path(os.environ["LINTER_CONFIG_PATH"])
+          config_data = json.loads(config_path.read_text(encoding="utf-8"))
+          linters = config_data.get("linters", [])
           script_root = Path(os.environ["LINTER_SERVICE_PATH"]) / ".github" / "scripts" / "linters"
           definitions = []
 
-          for linter_name in linter_names:
+          if not isinstance(linters, list):
+              raise SystemExit("linter config must include a linters array")
+
+          for item in linters:
+              if not isinstance(item, dict) or not isinstance(item.get("name"), str):
+                  raise SystemExit("each linter config entry must include a name")
+
+              linter_name = item["name"]
               script_path = script_root / f"{linter_name}.sh"
               result = subprocess.run(
                   ["bash", str(script_path), "patterns"],
@@ -186,14 +191,9 @@ jobs:
               };
 
               writeContext(contextValues);
-              core.setOutput("actionlint-selected", "false");
-              core.setOutput("ghalint-selected", "false");
               core.setOutput("pull-request-number", String(pullNumber));
-              core.setOutput("spectral-selected", "false");
               core.setOutput("selected-linters-json", JSON.stringify([]));
               core.setOutput("skip-reason", skipReason);
-              core.setOutput("yamllint-selected", "false");
-              core.setOutput("zizmor-selected", "false");
               return;
             }
 
@@ -264,29 +264,9 @@ jobs:
               source_owner: sourceOwner,
               source_repo: sourceRepo,
             });
-            core.setOutput(
-              "actionlint-selected",
-              String(selectedLinters.includes("actionlint")),
-            );
             core.setOutput("pull-request-number", String(pullNumber));
             core.setOutput("selected-linters-json", JSON.stringify(selectedLinters));
             core.setOutput("skip-reason", "");
-            core.setOutput(
-              "ghalint-selected",
-              String(selectedLinters.includes("ghalint")),
-            );
-            core.setOutput(
-              "spectral-selected",
-              String(selectedLinters.includes("spectral")),
-            );
-            core.setOutput(
-              "yamllint-selected",
-              String(selectedLinters.includes("yamllint")),
-            );
-            core.setOutput(
-              "zizmor-selected",
-              String(selectedLinters.includes("zizmor")),
-            );
 
       - name: Report routing status
         env:
@@ -391,72 +371,21 @@ jobs:
             );
             await upsertCheckRun({ github, env: process.env });
 
-  actionlint:
+  run-linters:
+    name: ${{ matrix.linter }}
     needs:
       - detect-targets
       - notify-processing-started
-    if: ${{ needs.detect-targets.outputs.actionlint-selected == 'true' }}
+    if: ${{ needs.detect-targets.outputs.selected-linters-json != '[]' }}
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        linter: ${{ fromJSON(needs.detect-targets.outputs.selected-linters-json) }}
     uses: ./.github/workflows/lint-common.yml
     with:
-      linter-name: actionlint
-    secrets:
-      CHECKER_APP_ID: ${{ secrets.CHECKER_APP_ID }}
-      CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
-
-  ghalint:
-    needs:
-      - detect-targets
-      - notify-processing-started
-    if: ${{ needs.detect-targets.outputs.ghalint-selected == 'true' }}
-    permissions:
-      contents: read
-    uses: ./.github/workflows/lint-common.yml
-    with:
-      linter-name: ghalint
-    secrets:
-      CHECKER_APP_ID: ${{ secrets.CHECKER_APP_ID }}
-      CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
-
-  spectral:
-    needs:
-      - detect-targets
-      - notify-processing-started
-    if: ${{ needs.detect-targets.outputs.spectral-selected == 'true' }}
-    permissions:
-      contents: read
-    uses: ./.github/workflows/lint-common.yml
-    with:
-      linter-name: spectral
-    secrets:
-      CHECKER_APP_ID: ${{ secrets.CHECKER_APP_ID }}
-      CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
-
-  yamllint:
-    needs:
-      - detect-targets
-      - notify-processing-started
-    if: ${{ needs.detect-targets.outputs.yamllint-selected == 'true' }}
-    permissions:
-      contents: read
-    uses: ./.github/workflows/lint-common.yml
-    with:
-      linter-name: yamllint
-    secrets:
-      CHECKER_APP_ID: ${{ secrets.CHECKER_APP_ID }}
-      CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
-
-  zizmor:
-    needs:
-      - detect-targets
-      - notify-processing-started
-    if: ${{ needs.detect-targets.outputs.zizmor-selected == 'true' }}
-    permissions:
-      contents: read
-    uses: ./.github/workflows/lint-common.yml
-    with:
-      linter-name: zizmor
+      linter-name: ${{ matrix.linter }}
     secrets:
       CHECKER_APP_ID: ${{ secrets.CHECKER_APP_ID }}
       CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
@@ -465,11 +394,7 @@ jobs:
     needs:
       - detect-targets
       - notify-processing-started
-      - actionlint
-      - ghalint
-      - spectral
-      - yamllint
-      - zizmor
+      - run-linters
     if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
     permissions:
       contents: read
@@ -488,6 +413,15 @@ jobs:
           path: linter-service
           persist-credentials: false
           ref: ${{ github.sha }}
+
+      - name: Download linter summary artifacts
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: linter-summary-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/linter-summaries
 
       - name: Mask repository metadata
         env:
@@ -540,103 +474,103 @@ jobs:
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ steps.decode_repository_context.outputs.source-repo }}
 
+      - name: Derive summary artifact passphrase
+        if: ${{ always() }}
+        env:
+          CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
+        run: |
+          passphrase="$(node -e 'const crypto = require("node:crypto"); process.stdout.write(crypto.createHmac("sha256", process.env.CHECKER_PRIVATE_KEY).update(process.env.GITHUB_RUN_ID).digest("hex"));')"
+          echo "::add-mask::$passphrase"
+          echo "ARTIFACT_PASSPHRASE=$passphrase" >> "$GITHUB_ENV"
+
+      - name: Decrypt linter summary artifacts
+        id: decrypt_summaries
+        if: ${{ always() }}
+        env:
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
+        run: |
+          shopt -s nullglob
+          failures=0
+          mkdir -p "$RUNNER_TEMP/linter-summaries-decrypted"
+          encrypted_files=("$RUNNER_TEMP"/linter-summaries/*.enc)
+          if [ "${#encrypted_files[@]}" -eq 0 ]; then
+            exit 0
+          fi
+
+          for encrypted_path in "${encrypted_files[@]}"; do
+            decrypted_path="$RUNNER_TEMP/linter-summaries-decrypted/$(basename "${encrypted_path%.enc}")"
+            if ! bash "$LINTER_SERVICE_PATH/.github/scripts/secure-artifact.sh" \
+              decrypt \
+              "$encrypted_path" \
+              "$decrypted_path"; then
+              echo "::warning::Failed to decrypt $(basename "$encrypted_path")"
+              failures=1
+            fi
+          done
+
+          exit "$failures"
+
       - name: Prepare combined report
         id: prepare_report
+        if: ${{ always() }}
         env:
-          ACTIONLINT_COMMENT_BODY_BASE64: ${{ needs.actionlint.outputs.comment_body_base64 }}
-          ACTIONLINT_CONCLUSION: ${{ needs.actionlint.outputs.conclusion }}
-          ACTIONLINT_JOB_RESULT: ${{ needs.actionlint.result }}
-          GHALINT_COMMENT_BODY_BASE64: ${{ needs.ghalint.outputs.comment_body_base64 }}
-          GHALINT_CONCLUSION: ${{ needs.ghalint.outputs.conclusion }}
-          GHALINT_JOB_RESULT: ${{ needs.ghalint.result }}
-          SPECTRAL_COMMENT_BODY_BASE64: ${{ needs.spectral.outputs.comment_body_base64 }}
-          SPECTRAL_CONCLUSION: ${{ needs.spectral.outputs.conclusion }}
-          SPECTRAL_JOB_RESULT: ${{ needs.spectral.result }}
+          DECRYPT_SUMMARIES_OUTCOME: ${{ steps.decrypt_summaries.outcome }}
+          LINTER_SUMMARY_PATH: ${{ runner.temp }}/linter-summaries-decrypted
           SELECTED_LINTERS_JSON: ${{ needs.detect-targets.outputs.selected-linters-json }}
-          YAMLLINT_COMMENT_BODY_BASE64: ${{ needs.yamllint.outputs.comment_body_base64 }}
-          YAMLLINT_CONCLUSION: ${{ needs.yamllint.outputs.conclusion }}
-          YAMLLINT_JOB_RESULT: ${{ needs.yamllint.result }}
-          ZIZMOR_COMMENT_BODY_BASE64: ${{ needs.zizmor.outputs.comment_body_base64 }}
-          ZIZMOR_CONCLUSION: ${{ needs.zizmor.outputs.conclusion }}
-          ZIZMOR_JOB_RESULT: ${{ needs.zizmor.result }}
         run: |
           python3 - <<'PY'
-          import base64
           import json
           import os
           from pathlib import Path
 
           selected_linters = json.loads(os.environ["SELECTED_LINTERS_JSON"])
+          decrypt_outcome = os.environ.get("DECRYPT_SUMMARIES_OUTCOME", "")
           runner_temp = Path(os.environ["RUNNER_TEMP"])
           comment_path = runner_temp / "combined-linter-comment.md"
-          env_map = {
-              "actionlint": {
-                  "comment_body_base64": os.environ.get("ACTIONLINT_COMMENT_BODY_BASE64", ""),
-                  "conclusion": os.environ.get("ACTIONLINT_CONCLUSION", ""),
-                  "job_result": os.environ.get("ACTIONLINT_JOB_RESULT", ""),
-              },
-              "ghalint": {
-                  "comment_body_base64": os.environ.get("GHALINT_COMMENT_BODY_BASE64", ""),
-                  "conclusion": os.environ.get("GHALINT_CONCLUSION", ""),
-                  "job_result": os.environ.get("GHALINT_JOB_RESULT", ""),
-              },
-              "spectral": {
-                  "comment_body_base64": os.environ.get("SPECTRAL_COMMENT_BODY_BASE64", ""),
-                  "conclusion": os.environ.get("SPECTRAL_CONCLUSION", ""),
-                  "job_result": os.environ.get("SPECTRAL_JOB_RESULT", ""),
-              },
-              "yamllint": {
-                  "comment_body_base64": os.environ.get("YAMLLINT_COMMENT_BODY_BASE64", ""),
-                  "conclusion": os.environ.get("YAMLLINT_CONCLUSION", ""),
-                  "job_result": os.environ.get("YAMLLINT_JOB_RESULT", ""),
-              },
-              "zizmor": {
-                  "comment_body_base64": os.environ.get("ZIZMOR_COMMENT_BODY_BASE64", ""),
-                  "conclusion": os.environ.get("ZIZMOR_CONCLUSION", ""),
-                  "job_result": os.environ.get("ZIZMOR_JOB_RESULT", ""),
-              },
-          }
+          summary_root = Path(os.environ["LINTER_SUMMARY_PATH"])
+          summaries = {}
+          for summary_path in sorted(summary_root.glob("linter-summary-*.json")):
+              try:
+                  summary = json.loads(summary_path.read_text(encoding="utf-8"))
+              except json.JSONDecodeError:
+                  continue
+
+              linter_name = summary.get("linter_name")
+              if isinstance(linter_name, str):
+                  summaries[linter_name] = summary
 
           sections = []
-          passed = 0
           failed = 0
 
           for linter_name in selected_linters:
-              linter_env = env_map.get(linter_name, {})
-              encoded_body = linter_env.get("comment_body_base64", "")
-              job_result = linter_env.get("job_result", "")
-              conclusion = linter_env.get("conclusion", "")
+              summary = summaries.get(linter_name, {})
+              section = str(summary.get("comment_body") or "").strip()
+              conclusion = str(summary.get("conclusion") or "")
 
-              if encoded_body:
-                  section = base64.b64decode(encoded_body).decode("utf-8").strip()
-              else:
-                  section = ""
+              if not section:
+                  if decrypt_outcome == "failure":
+                      section = (
+                          f"### {linter_name}\n\n"
+                          f"❌ The encrypted `{linter_name}` summary could not be decrypted. See the workflow logs."
+                      )
+                  else:
+                      section = (
+                          f"### {linter_name}\n\n"
+                          f"❌ The `{linter_name}` workflow failed before producing a detailed report. See the workflow logs."
+                      )
 
-              if job_result == "failure" and not section:
-                  section = (
-                      f"### {linter_name}\n\n"
-                      f"❌ The `{linter_name}` workflow failed before producing a detailed report. See the workflow logs."
-                  )
-              elif job_result == "cancelled" and not section:
-                  section = (
-                      f"### {linter_name}\n\n"
-                      f"❌ The `{linter_name}` workflow was cancelled before producing a detailed report."
-                  )
-
-              is_success = job_result not in {"failure", "cancelled"} and conclusion == "success"
-
-              if is_success:
-                  passed += 1
-              else:
+              if conclusion != "success":
                   failed += 1
 
               if section:
                   sections.append(section)
 
           total = len(selected_linters)
-          overall_conclusion = "success" if failed == 0 else "failure"
+          overall_conclusion = "success" if failed == 0 and decrypt_outcome != "failure" else "failure"
 
-          if overall_conclusion == "success":
+          if decrypt_outcome == "failure":
+              overall_summary = "One or more encrypted linter summaries could not be read. See the workflow logs."
+          elif overall_conclusion == "success":
               overall_summary = f"All {total} selected linter(s) completed successfully."
           else:
               overall_summary = f"{failed} of {total} selected linter(s) reported issues or failed."

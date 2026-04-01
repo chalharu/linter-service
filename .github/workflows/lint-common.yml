@@ -6,13 +6,6 @@ on:
       linter-name:
         required: true
         type: string
-    outputs:
-      comment_body_base64:
-        description: Base64-encoded markdown section for this linter
-        value: ${{ jobs.run-linter.outputs.comment_body_base64 }}
-      conclusion:
-        description: success or failure
-        value: ${{ jobs.run-linter.outputs.conclusion }}
     secrets:
       CHECKER_APP_ID:
         required: true
@@ -27,11 +20,9 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    outputs:
-      comment_body_base64: ${{ steps.prepare_report.outputs.comment_body_base64 }}
-      conclusion: ${{ steps.prepare_report.outputs.conclusion }}
     env:
       LINTER_NAME: ${{ inputs.linter-name }}
+      LINTER_CONFIG_PATH: ${{ github.workspace }}/linter-service/.github/scripts/linters/config.json
       LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
       SOURCE_REPOSITORY_PATH: ${{ github.workspace }}/source-repo
     steps:
@@ -172,7 +163,6 @@ jobs:
           SELECT_FILES_OUTCOME: ${{ steps.select_files.outcome }}
         run: |
           python3 - <<'PY'
-          import base64
           import json
           import os
           from pathlib import Path
@@ -186,48 +176,17 @@ jobs:
           result_path = Path(os.environ["RESULT_PATH"])
           runner_temp = Path(os.environ["RUNNER_TEMP"])
           comment_path = runner_temp / "linter-comment.md"
+          summary_path = runner_temp / f"linter-summary-{linter_name}.json"
+          config_path = Path(os.environ["LINTER_CONFIG_PATH"])
 
+          config_data = json.loads(config_path.read_text(encoding="utf-8"))
+          linters = config_data.get("linters", [])
+          if not isinstance(linters, list):
+              raise SystemExit("linter config must include a linters array")
           config = {
-              "actionlint": {
-                  "details_fallback": "actionlint did not produce diagnostic output before the job failed.",
-                  "heading": "### actionlint",
-                  "infra_failure": "❌ The `actionlint` workflow failed before producing a detailed report. See the workflow logs.",
-                  "no_files": "No matching workflow files were selected for `actionlint`.",
-                  "success": "✅ No issues found in {count} changed GitHub Actions workflow file(s).",
-                  "failure": "❌ Issues found in {count} changed GitHub Actions workflow file(s).",
-              },
-              "ghalint": {
-                  "details_fallback": "ghalint did not produce diagnostic output before the job failed.",
-                  "heading": "### ghalint",
-                  "infra_failure": "❌ The `ghalint` workflow failed before producing a detailed report. See the workflow logs.",
-                  "no_files": "No matching GitHub Actions workflow files were selected for `ghalint`.",
-                  "success": "✅ No issues found in {count} changed GitHub Actions workflow file(s).",
-                  "failure": "❌ Issues found in {count} changed GitHub Actions workflow file(s).",
-              },
-              "spectral": {
-                  "details_fallback": "spectral did not produce diagnostic output before the job failed.",
-                  "heading": "### spectral",
-                  "infra_failure": "❌ The `spectral` workflow failed before producing a detailed report. See the workflow logs.",
-                  "no_files": "No matching YAML or JSON files were selected for `spectral`.",
-                  "success": "✅ No issues found in {count} changed YAML or JSON file(s).",
-                  "failure": "❌ Issues found in {count} changed YAML or JSON file(s).",
-              },
-              "yamllint": {
-                  "details_fallback": "yamllint did not produce diagnostic output before the job failed.",
-                  "heading": "### yamllint",
-                  "infra_failure": "❌ The `yamllint` workflow failed before producing a detailed report. See the workflow logs.",
-                  "no_files": "No matching YAML files were selected for `yamllint`.",
-                  "success": "✅ No issues found in {count} changed YAML file(s).",
-                  "failure": "❌ Issues found in {count} changed YAML file(s).",
-              },
-              "zizmor": {
-                  "details_fallback": "zizmor did not produce diagnostic output before the job failed.",
-                  "heading": "### zizmor",
-                  "infra_failure": "❌ The `zizmor` workflow failed before producing a detailed report. See the workflow logs.",
-                  "no_files": "No matching workflow files were selected for `zizmor`.",
-                  "success": "✅ No security issues found in {count} changed GitHub Actions workflow file(s).",
-                  "failure": "❌ Security issues found in {count} changed GitHub Actions workflow file(s).",
-              },
+              item["name"]: item
+              for item in linters
+              if isinstance(item, dict) and isinstance(item.get("name"), str)
           }
 
           if linter_name not in config:
@@ -273,10 +232,44 @@ jobs:
 
           comment_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
           body = comment_path.read_text(encoding="utf-8")
-          encoded_body = base64.b64encode(body.encode("utf-8")).decode("ascii")
-
-          output_path = Path(os.environ["GITHUB_OUTPUT"])
-          with output_path.open("a", encoding="utf-8") as fh:
-              fh.write(f"comment_body_base64={encoded_body}\n")
-              fh.write(f"conclusion={conclusion}\n")
+          summary_path.write_text(
+              json.dumps(
+                  {
+                      "comment_body": body,
+                      "conclusion": conclusion,
+                      "linter_name": linter_name,
+                  }
+            ),
+            encoding="utf-8",
+          )
           PY
+
+      - name: Derive summary artifact passphrase
+        if: ${{ always() }}
+        env:
+          CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
+        run: |
+          passphrase="$(node -e 'const crypto = require("node:crypto"); process.stdout.write(crypto.createHmac("sha256", process.env.CHECKER_PRIVATE_KEY).update(process.env.GITHUB_RUN_ID).digest("hex"));')"
+          echo "::add-mask::$passphrase"
+          echo "ARTIFACT_PASSPHRASE=$passphrase" >> "$GITHUB_ENV"
+
+      - name: Encrypt linter summary artifact
+        id: encrypt_summary
+        if: ${{ always() }}
+        run: |
+          input_path="$RUNNER_TEMP/linter-summary-$LINTER_NAME.json"
+          output_path="$RUNNER_TEMP/linter-summary-$LINTER_NAME.json.enc"
+          bash "$LINTER_SERVICE_PATH/.github/scripts/secure-artifact.sh" \
+            encrypt \
+            "$input_path" \
+            "$output_path"
+          rm -f "$input_path"
+
+      - name: Upload linter summary artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linter-summary-${{ inputs.linter-name }}
+          path: ${{ runner.temp }}/linter-summary-${{ inputs.linter-name }}.json.enc
+          if-no-files-found: warn
+          retention-days: 1
