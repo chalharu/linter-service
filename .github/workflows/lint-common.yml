@@ -11,8 +11,6 @@ on:
         required: true
       CHECKER_PRIVATE_KEY:
         required: true
-      SUMMARY_ARTIFACT_PASSPHRASE:
-        required: true
 
 permissions: {}
 
@@ -41,12 +39,14 @@ jobs:
           persist-credentials: false
           ref: ${{ github.sha }}
 
-      - name: Mask summary artifact passphrase
+      - name: Derive summary artifact passphrase
         if: ${{ always() }}
         env:
-          ARTIFACT_PASSPHRASE: ${{ secrets.SUMMARY_ARTIFACT_PASSPHRASE }}
+          CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
         run: |
-          echo "::add-mask::$ARTIFACT_PASSPHRASE"
+          passphrase="$(node -e 'const crypto = require(\"node:crypto\"); process.stdout.write(crypto.createHmac(\"sha256\", process.env.CHECKER_PRIVATE_KEY).update(process.env.GITHUB_RUN_ID).digest(\"hex\"));')"
+          echo "::add-mask::$passphrase"
+          echo "ARTIFACT_PASSPHRASE=$passphrase" >> "$GITHUB_ENV"
 
       - name: Mask repository metadata
         env:
@@ -256,8 +256,6 @@ jobs:
       - name: Encrypt linter summary artifact
         id: encrypt_summary
         if: ${{ always() }}
-        env:
-          ARTIFACT_PASSPHRASE: ${{ secrets.SUMMARY_ARTIFACT_PASSPHRASE }}
         run: |
           input_path="$RUNNER_TEMP/linter-summary-$LINTER_NAME.json"
           output_path="$RUNNER_TEMP/linter-summary-$LINTER_NAME.json.enc"

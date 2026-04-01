@@ -16,7 +16,7 @@ rules:
       - repository-dispatch.yml:349
       - repository-dispatch.yml:398
       - repository-dispatch.yml:399
-      - repository-dispatch.yml:477
+      - repository-dispatch.yml:470
+      - repository-dispatch.yml:473
       - repository-dispatch.yml:480
-      - repository-dispatch.yml:487
-      - repository-dispatch.yml:490
+      - repository-dispatch.yml:483

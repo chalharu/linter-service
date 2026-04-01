@@ -23,7 +23,6 @@ jobs:
       pull-request-number: ${{ steps.collect.outputs.pull-request-number }}
       selected-linters-json: ${{ steps.collect.outputs.selected-linters-json }}
       skip-reason: ${{ steps.collect.outputs.skip-reason }}
-      summary-artifact-passphrase: ${{ steps.generate_summary_artifact_passphrase.outputs.summary-artifact-passphrase }}
     env:
       PR_REPOSITORY_NAME: ${{ github.event_name == 'pull_request' && github.event.repository.name || github.event.client_payload.repository.name }}
       PR_REPOSITORY_OWNER: ${{ github.event_name == 'pull_request' && github.event.repository.owner.login || github.event.client_payload.repository.owner.login }}
@@ -66,13 +65,6 @@ jobs:
           path: linter-service
           persist-credentials: false
           ref: ${{ github.sha }}
-
-      - name: Generate summary artifact passphrase
-        id: generate_summary_artifact_passphrase
-        run: |
-          passphrase="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"
-          echo "summary-artifact-passphrase=$passphrase" >> "$GITHUB_OUTPUT"
-          echo "::add-mask::$passphrase"
 
       - name: Build linter definitions
         id: build_linter_definitions
@@ -397,7 +389,6 @@ jobs:
     secrets:
       CHECKER_APP_ID: ${{ secrets.CHECKER_APP_ID }}
       CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
-      SUMMARY_ARTIFACT_PASSPHRASE: ${{ needs.detect-targets.outputs.summary-artifact-passphrase }}
 
   publish-results:
     needs:
@@ -432,12 +423,14 @@ jobs:
           merge-multiple: true
           path: ${{ runner.temp }}/linter-summaries
 
-      - name: Mask summary artifact passphrase
+      - name: Derive summary artifact passphrase
         if: ${{ always() }}
         env:
-          ARTIFACT_PASSPHRASE: ${{ needs.detect-targets.outputs.summary-artifact-passphrase }}
+          CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
         run: |
-          echo "::add-mask::$ARTIFACT_PASSPHRASE"
+          passphrase="$(node -e 'const crypto = require(\"node:crypto\"); process.stdout.write(crypto.createHmac(\"sha256\", process.env.CHECKER_PRIVATE_KEY).update(process.env.GITHUB_RUN_ID).digest(\"hex\"));')"
+          echo "::add-mask::$passphrase"
+          echo "ARTIFACT_PASSPHRASE=$passphrase" >> "$GITHUB_ENV"
 
       - name: Mask repository metadata
         env:
@@ -494,7 +487,6 @@ jobs:
         id: decrypt_summaries
         if: ${{ always() }}
         env:
-          ARTIFACT_PASSPHRASE: ${{ needs.detect-targets.outputs.summary-artifact-passphrase }}
           LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
         run: |
           shopt -s nullglob
