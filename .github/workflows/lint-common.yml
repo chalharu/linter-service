@@ -39,15 +39,6 @@ jobs:
           persist-credentials: false
           ref: ${{ github.sha }}
 
-      - name: Derive summary artifact passphrase
-        if: ${{ always() }}
-        env:
-          CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
-        run: |
-          passphrase="$(node -e 'const crypto = require(\"node:crypto\"); process.stdout.write(crypto.createHmac(\"sha256\", process.env.CHECKER_PRIVATE_KEY).update(process.env.GITHUB_RUN_ID).digest(\"hex\"));')"
-          echo "::add-mask::$passphrase"
-          echo "ARTIFACT_PASSPHRASE=$passphrase" >> "$GITHUB_ENV"
-
       - name: Mask repository metadata
         env:
           CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
@@ -248,10 +239,19 @@ jobs:
                       "conclusion": conclusion,
                       "linter_name": linter_name,
                   }
-              ),
-              encoding="utf-8",
+            ),
+            encoding="utf-8",
           )
           PY
+
+      - name: Derive summary artifact passphrase
+        if: ${{ always() }}
+        env:
+          CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
+        run: |
+          passphrase="$(node -e 'const crypto = require("node:crypto"); process.stdout.write(crypto.createHmac("sha256", process.env.CHECKER_PRIVATE_KEY).update(process.env.GITHUB_RUN_ID).digest("hex"));')"
+          echo "::add-mask::$passphrase"
+          echo "ARTIFACT_PASSPHRASE=$passphrase" >> "$GITHUB_ENV"
 
       - name: Encrypt linter summary artifact
         id: encrypt_summary
