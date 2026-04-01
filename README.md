@@ -25,7 +25,7 @@ GitHub Actions が共通ルールで lint します。
 
 - 外部リポジトリの PR は Worker 経由で処理します。
 - このリポジトリ自身の PR は `pull_request` で処理します。
-- Worker は self-dispatch を送らず、二重実行を防ぎます。
+- Worker は dispatch 先 repo からの self-webhook を無視し、二重実行と再帰起動を防ぎます。
 
 ## 主な場所
 
@@ -42,21 +42,21 @@ GitHub Actions が共通ルールで lint します。
 `repository-dispatch.yml` は changed file path から対象 linter を選びます。
 一致した linter にだけ、対応する changed file を渡します。
 
-| linter | 対象ファイル | 設定ファイル / 挙動 |
-|--------|--------------|---------------------|
-| `actionlint` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | `.github/actionlint.yaml` / `.github/actionlint.yml` を自動で読みます。 |
-| `ghalint` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | `.ghalint.yaml` / `.ghalint.yml` / `ghalint.yaml` / `ghalint.yml` / `.github/ghalint.yaml` / `.github/ghalint.yml` を順に探します。 |
-| `hadolint` | `Dockerfile`, `Dockerfile.*`, `Containerfile`, `Containerfile.*`, `*.dockerfile`, `*.containerfile` | 対象 file の directory から親へ向けて `.hadolint.yaml` / `.hadolint.yml` を探し、見つかれば `--config` で明示します。未配置時は hadolint の既定値を使います。 |
-| `spectral` | `*.json`, `*.yaml`, `*.yml` | `.spectral.yml` / `.spectral.yaml` / `.spectral.json` を読みます。未配置時は `spectral:oas` を使い、unknown format は無視します。`.spectral.js` は任意コード実行を避けるため対象外です。 |
-| `yamllint` | `*.yaml`, `*.yml` | `.yamllint` / `.yamllint.yaml` / `.yamllint.yml` を順に探します。 |
-| `markdownlint-cli2` | `*.md`, `*.markdown` | `.markdownlint-cli2.jsonc` / `.markdownlint-cli2.yaml` と `.markdownlint.jsonc` / `.markdownlint.json` / `.markdownlint.yaml` / `.markdownlint.yml` の静的 config のみを扱います。`.cjs` / `.mjs` は任意コード実行を避けるため対象外です。共有 workflow は `globs` を使わず、変更対象だけを検査します。 |
-| `ruff` | `*.py`, `*.pyi` | `pyproject.toml` の `[tool.ruff]`、`ruff.toml`、`.ruff.toml` を対象 file ごとに近いものから使います。同一 directory では `.ruff.toml` → `ruff.toml` → `pyproject.toml` の順です。共有 workflow は `--force-exclude` を付け、設定上の除外も尊重します。 |
-| `cargo-fmt` | `*.rs` | changed Rust file ごとに最も近い `Cargo.toml` を探し、重複を除いた package 単位で `cargo fmt --check --manifest-path ...` を実行します。`rustfmt.toml` / `.rustfmt.toml` と `rust-toolchain.toml` / `rust-toolchain` は Cargo / rustup の既定探索を使います。 |
-| `cargo-clippy` | `*.rs` | changed Rust file ごとに最も近い `Cargo.toml` を探し、重複を除いた package 単位で `cargo fetch` の後に `cargo clippy --manifest-path ... --all-targets -- -D warnings` を実行します。Clippy 実行本体は `--network none` 付き Docker container へ隔離し、source checkout は host 側から直接 build させません。rustup state は writable mount へ seed してから使うため、read-only container 内でも `rust-toolchain.toml` / `rust-toolchain` に従えます。repository-supplied `.cargo/config` / `.cargo/config.toml` は共有 path では未対応です。private git dependency や認証が必要な registry は現状サポートしません。 |
-| `taplo` | `*.toml` | `.taplo.toml` を優先し、なければ `taplo.toml` を repo root で探します。未配置時は既定値で `fmt --check` を行います。 |
-| `biome` | `*.js`, `*.jsx`, `*.ts`, `*.tsx`, `*.json`, `*.jsonc`, `*.cjs`, `*.cts`, `*.mjs`, `*.mts` | Biome の既定探索で `biome.json` / `biome.jsonc` / `.biome.json` / `.biome.jsonc` を探し、未配置時は既定値を使います。 |
-| `shellcheck` | `*.bash`, `*.ksh`, `*.sh` | `.shellcheckrc` / `shellcheckrc` を対象 script の場所から親へ向けて探します。 |
-| `zizmor` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | `zizmor.yml` / `zizmor.yaml` / `.github/zizmor.yml` / `.github/zizmor.yaml` を配置先として案内します。 |
+| linter | 対象ファイル | 設定ファイル | 制限事項 |
+|--------|--------------|--------------|----------|
+| `actionlint` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | `.github/actionlint.yaml` / `.github/actionlint.yml` | - |
+| `ghalint` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | `.ghalint.yaml` → `.ghalint.yml` → `ghalint.yaml` → `ghalint.yml` → `.github/ghalint.yaml` → `.github/ghalint.yml` | - |
+| `hadolint` | `Dockerfile`, `Dockerfile.*`, `Containerfile`, `Containerfile.*`, `*.dockerfile`, `*.containerfile` | 対象ファイルの directory から親へ向けて `.hadolint.yaml` / `.hadolint.yml` を探し、見つかれば `--config` で明示します。 | 未配置時は既定値を使います。 |
+| `spectral` | `*.json`, `*.yaml`, `*.yml` | `.spectral.yml` / `.spectral.yaml` / `.spectral.json` | 未配置時は `spectral:oas` を使い、unknown format は無視します。`.spectral.js` は任意コード実行を避けるため対象外です。 |
+| `yamllint` | `*.yaml`, `*.yml` | `.yamllint` → `.yamllint.yaml` → `.yamllint.yml` | - |
+| `markdownlint-cli2` | `*.md`, `*.markdown` | `.markdownlint-cli2.jsonc` / `.markdownlint-cli2.yaml` / `.markdownlint.jsonc` / `.markdownlint.json` / `.markdownlint.yaml` / `.markdownlint.yml` | 静的 config のみを扱います。`.cjs` / `.mjs` は任意コード実行を避けるため対象外です。共有 workflow は `globs` を使わず、変更対象だけを検査します。 |
+| `ruff` | `*.py`, `*.pyi` | 対象ファイルごとに近い `pyproject.toml` の `[tool.ruff]` / `ruff.toml` / `.ruff.toml` を使い、同一 directory では `.ruff.toml` → `ruff.toml` → `pyproject.toml` の順です。 | 共有 workflow は `--force-exclude` を付け、設定上の除外も尊重します。 |
+| `cargo-fmt` | `*.rs` | `rustfmt.toml` / `.rustfmt.toml` と `rust-toolchain.toml` / `rust-toolchain` は Cargo / rustup の既定探索を使います。 | 変更された Rust ファイルごとに最も近い `Cargo.toml` を基準に、重複を除いた package 単位で `cargo fmt --check --manifest-path ...` を実行します。 |
+| `cargo-clippy` | `*.rs` | `clippy.toml` / `.clippy.toml` と `rust-toolchain.toml` / `rust-toolchain` は tool の既定探索を使います。 | 変更された Rust ファイルごとに最も近い `Cargo.toml` を基準に、重複を除いた package 単位で `cargo fetch` の後に `cargo clippy --manifest-path ... --all-targets -- -D warnings` を実行します。Clippy 実行本体は `--network none` 付き Docker container へ隔離し、rustup state は writable mount へ seed してから使います。repository-supplied `.cargo/config` / `.cargo/config.toml` は共有 path では未対応です。private git dependency や認証が必要な registry は現状サポートしません。 |
+| `taplo` | `*.toml` | `.taplo.toml` を優先し、なければ repo root の `taplo.toml` を使います。 | 未配置時は既定値で `fmt --check` を行います。 |
+| `biome` | `*.js`, `*.jsx`, `*.ts`, `*.tsx`, `*.json`, `*.jsonc`, `*.cjs`, `*.cts`, `*.mjs`, `*.mts` | Biome の既定探索で `biome.json` / `biome.jsonc` / `.biome.json` / `.biome.jsonc` を探します。 | 未配置時は既定値を使います。 |
+| `shellcheck` | `*.bash`, `*.ksh`, `*.sh` | 対象 script の場所から親へ向けて `.shellcheckrc` / `shellcheckrc` を探します。 | - |
+| `zizmor` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | `zizmor.yml` / `zizmor.yaml` / `.github/zizmor.yml` / `.github/zizmor.yaml` | 共有 workflow は `--offline` で実行します。 |
 
 ## 共有 linter の追加方法
 
@@ -129,7 +129,7 @@ GitHub Actions が共通ルールで lint します。
    `lint-common.yml` を個別修正する必要はありません。
 
 6. この `README.md` の「共有 linter 一覧」に、
-   対象ファイルと config 探索 / 挙動を 1 行追記します。
+   対象ファイル、設定ファイル、制限事項を 1 行追記します。
 
 7. wrapper に path 解決、config 探索、package grouping のような
    非自明な処理がある場合は、
@@ -146,6 +146,6 @@ GitHub Actions が共通ルールで lint します。
 ## 詳細
 
 - Worker の設定と運用は `worker/README.md` を参照してください。
-- 共有 linter の一覧、対象ファイル、設定ファイル / 挙動は上の表を参照してください。
+- 共有 linter の一覧、対象ファイル、設定ファイル、制限事項は上の表を参照してください。
 - 共有 lint の入口は `repository-dispatch.yml` です。
 - 実処理は `lint-common.yml` と shell script に集約しています。
