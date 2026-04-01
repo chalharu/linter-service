@@ -66,7 +66,7 @@ GitHub Actions が共通ルールで lint します。
 1. `.github/scripts/linters/<name>.sh` を追加します。
    `patterns`, `install`, `run` の 3 mode を実装してください。
    `repository-dispatch.yml` は `patterns` の regex で対象 linter を選び、
-   reusable workflow は一致した changed file path を `run` に渡します。
+   `lint-common.yml` は一致した changed file path を `run` に渡します。
 
    ```bash
    #!/usr/bin/env bash
@@ -125,7 +125,7 @@ GitHub Actions が共通ルールで lint します。
 5. `.github/scripts/linters/config.json` に entry を追加します。
    ここが comment 見出し、成功 / 失敗文言、fallback message の source of truth です。
    通常は linter を増やすために `repository-dispatch.yml` や
-   reusable workflow 群を個別修正する必要はありません。
+   `lint-common.yml` を個別修正する必要はありません。
 
 6. この `README.md` の「共有 linter 一覧」に、
    対象ファイルと config 探索 / 挙動を 1 行追記します。
