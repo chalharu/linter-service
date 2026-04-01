@@ -11,6 +11,10 @@ on:
     types:
       - github_app_webhook
 
+concurrency:
+  group: ${{ format('repository-dispatch-{0}-{1}', github.event_name == 'pull_request' && github.repository || github.event.client_payload.repository.full_name || github.repository, github.event_name == 'pull_request' && github.event.pull_request.number || github.event.client_payload.pull_request.number || github.run_id) }}
+  cancel-in-progress: false
+
 permissions: {}
 
 jobs:
@@ -602,53 +606,17 @@ jobs:
         env:
           COMMENT_FILE: ${{ runner.temp }}/combined-linter-comment.md
           COMMENT_MARKER: '<!-- linter-service:results -->'
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
           PR_NUMBER: ${{ needs.detect-targets.outputs.pull-request-number }}
           PR_OWNER: ${{ steps.decode_repository_context.outputs.pr-owner }}
           PR_REPO: ${{ steps.decode_repository_context.outputs.pr-repo }}
         with:
           github-token: ${{ steps.get_pr_token.outputs.token }}
           script: |
-            const fs = require("node:fs");
-
-            const body = fs.existsSync(process.env.COMMENT_FILE)
-              ? fs.readFileSync(process.env.COMMENT_FILE, "utf8")
-              : [
-                  process.env.COMMENT_MARKER,
-                  "## linter-service",
-                  "",
-                  "❌ The linter-service workflow failed to generate a combined report. See the workflow logs.",
-                  "",
-                ].join("\n");
-            const marker = process.env.COMMENT_MARKER;
-            const owner = process.env.PR_OWNER;
-            const repo = process.env.PR_REPO;
-            const issueNumber = Number(process.env.PR_NUMBER);
-
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              owner,
-              repo,
-              issue_number: issueNumber,
-              per_page: 100,
-            });
-
-            const existing = comments.find((comment) => comment.body?.includes(marker));
-
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner,
-                repo,
-                comment_id: existing.id,
-                body,
-              });
-              return;
-            }
-
-            await github.rest.issues.createComment({
-              owner,
-              repo,
-              issue_number: issueNumber,
-              body,
-            });
+            const upsertPullRequestComment = require(
+              `${process.env.LINTER_SERVICE_PATH}/.github/scripts/upsert-pr-comment.js`,
+            );
+            await upsertPullRequestComment({ github, env: process.env });
 
       - name: Finalize processing check run
         if: ${{ always() }}
