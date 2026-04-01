@@ -64,6 +64,15 @@
       "details_fallback": "cargo-fmt did not produce diagnostic output before the job failed."
     },
     {
+      "name": "cargo-clippy",
+      "heading": "### cargo-clippy",
+      "no_files": "No matching Rust files were selected for `cargo-clippy`.",
+      "success": "✅ No Clippy issues found in Cargo package(s) containing {count} changed Rust file(s).",
+      "failure": "❌ Clippy issues found in Cargo package(s) containing {count} changed Rust file(s).",
+      "infra_failure": "❌ The `cargo-clippy` workflow failed before producing a detailed report. See the workflow logs.",
+      "details_fallback": "cargo-clippy did not produce diagnostic output before the job failed."
+    },
+    {
       "name": "taplo",
       "heading": "### taplo",
       "no_files": "No matching TOML files were selected for `taplo`.",
