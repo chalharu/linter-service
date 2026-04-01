@@ -46,6 +46,7 @@ GitHub Actions が共通ルールで lint します。
 |--------|--------------|---------------------|
 | `actionlint` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | `.github/actionlint.yaml` / `.github/actionlint.yml` を自動で読みます。 |
 | `ghalint` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | `.ghalint.yaml` / `.ghalint.yml` / `ghalint.yaml` / `ghalint.yml` / `.github/ghalint.yaml` / `.github/ghalint.yml` を順に探します。 |
+| `hadolint` | `Dockerfile`, `Dockerfile.*`, `Containerfile`, `Containerfile.*`, `*.dockerfile`, `*.containerfile` | 対象 file の directory から親へ向けて `.hadolint.yaml` / `.hadolint.yml` を探し、見つかれば `--config` で明示します。未配置時は hadolint の既定値を使います。 |
 | `spectral` | `*.json`, `*.yaml`, `*.yml` | `.spectral.yml` / `.spectral.yaml` / `.spectral.json` を読みます。未配置時は `spectral:oas` を使い、unknown format は無視します。`.spectral.js` は任意コード実行を避けるため対象外です。 |
 | `yamllint` | `*.yaml`, `*.yml` | `.yamllint` / `.yamllint.yaml` / `.yamllint.yml` を順に探します。 |
 | `markdownlint-cli2` | `*.md`, `*.markdown` | `.markdownlint-cli2.jsonc` / `.markdownlint-cli2.yaml` と `.markdownlint.jsonc` / `.markdownlint.json` / `.markdownlint.yaml` / `.markdownlint.yml` の静的 config のみを扱います。`.cjs` / `.mjs` は任意コード実行を避けるため対象外です。共有 workflow は `globs` を使わず、変更対象だけを検査します。 |

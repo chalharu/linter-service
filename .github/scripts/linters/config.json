@@ -19,6 +19,15 @@
       "details_fallback": "ghalint did not produce diagnostic output before the job failed."
     },
     {
+      "name": "hadolint",
+      "heading": "### hadolint",
+      "no_files": "No matching Dockerfile or Containerfile files were selected for `hadolint`.",
+      "success": "✅ No issues found in {count} changed Dockerfile or Containerfile file(s).",
+      "failure": "❌ Issues found in {count} changed Dockerfile or Containerfile file(s).",
+      "infra_failure": "❌ The `hadolint` workflow failed before producing a detailed report. See the workflow logs.",
+      "details_fallback": "hadolint did not produce diagnostic output before the job failed."
+    },
+    {
       "name": "spectral",
       "heading": "### spectral",
       "no_files": "No matching YAML or JSON files were selected for `spectral`.",
