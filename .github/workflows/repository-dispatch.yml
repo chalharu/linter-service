@@ -396,6 +396,8 @@ jobs:
       - detect-targets
       - notify-processing-started
     if: ${{ needs.detect-targets.outputs.actionlint-selected == 'true' }}
+    permissions:
+      contents: read
     uses: ./.github/workflows/lint-common.yml
     with:
       linter-name: actionlint
@@ -408,6 +410,8 @@ jobs:
       - detect-targets
       - notify-processing-started
     if: ${{ needs.detect-targets.outputs.ghalint-selected == 'true' }}
+    permissions:
+      contents: read
     uses: ./.github/workflows/lint-common.yml
     with:
       linter-name: ghalint
@@ -420,6 +424,8 @@ jobs:
       - detect-targets
       - notify-processing-started
     if: ${{ needs.detect-targets.outputs.spectral-selected == 'true' }}
+    permissions:
+      contents: read
     uses: ./.github/workflows/lint-common.yml
     with:
       linter-name: spectral
@@ -432,6 +438,8 @@ jobs:
       - detect-targets
       - notify-processing-started
     if: ${{ needs.detect-targets.outputs.yamllint-selected == 'true' }}
+    permissions:
+      contents: read
     uses: ./.github/workflows/lint-common.yml
     with:
       linter-name: yamllint
@@ -444,6 +452,8 @@ jobs:
       - detect-targets
       - notify-processing-started
     if: ${{ needs.detect-targets.outputs.zizmor-selected == 'true' }}
+    permissions:
+      contents: read
     uses: ./.github/workflows/lint-common.yml
     with:
       linter-name: zizmor

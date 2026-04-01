@@ -14,7 +14,7 @@ rules:
       - repository-dispatch.yml:115
       - repository-dispatch.yml:358
       - repository-dispatch.yml:361
-      - repository-dispatch.yml:517
-      - repository-dispatch.yml:520
       - repository-dispatch.yml:527
       - repository-dispatch.yml:530
+      - repository-dispatch.yml:537
+      - repository-dispatch.yml:540
