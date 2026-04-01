@@ -135,6 +135,7 @@ Worker は self-webhook を落として二重起動を防ぎます。
 | `ghalint` | `.ghalint.yaml` / `.ghalint.yml` / `ghalint.yaml` / `ghalint.yml` / `.github/ghalint.yaml` / `.github/ghalint.yml` を順に探します。 |
 | `spectral` | `.spectral.yml` / `.spectral.yaml` / `.spectral.json` を読みます。未配置時は `spectral:oas` を使い、unknown format は無視します。 |
 | `yamllint` | `.yamllint` 系 3 形式を順に探します。 |
+| `biome` | Biome の既定探索で `biome.json` / `biome.jsonc` / `.biome.json` / `.biome.jsonc` を探し、未配置時は既定値を使います。 |
 | `shellcheck` | `.shellcheckrc` / `shellcheckrc` を対象 script の場所から親へ向けて探します。 |
 | `zizmor` | このリポジトリでは `zizmor.yml` / `zizmor.yaml` / `.github/zizmor.yml` / `.github/zizmor.yaml` を配置先として案内します。 |
 

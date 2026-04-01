@@ -37,6 +37,15 @@
       "details_fallback": "yamllint did not produce diagnostic output before the job failed."
     },
     {
+      "name": "biome",
+      "heading": "### biome",
+      "no_files": "No matching JavaScript, TypeScript, or JSON/JSONC files were selected for `biome`.",
+      "success": "✅ No issues found in {count} changed JavaScript, TypeScript, or JSON/JSONC file(s).",
+      "failure": "❌ Issues found in {count} changed JavaScript, TypeScript, or JSON/JSONC file(s).",
+      "infra_failure": "❌ The `biome` workflow failed before producing a detailed report. See the workflow logs.",
+      "details_fallback": "biome did not produce diagnostic output before the job failed."
+    },
+    {
       "name": "shellcheck",
       "heading": "### shellcheck",
       "no_files": "No matching shell script files were selected for `shellcheck`.",
