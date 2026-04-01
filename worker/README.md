@@ -127,24 +127,12 @@ Worker は self-webhook を落として二重起動を防ぎます。
 3. `lint-common.yml` を linter 名ごとに並列実行する
 4. 結果を PR comment と check run に集約する
 
-### linter ごとの扱い
+### 共有 linter 一覧の参照先
 
-| linter | 設定ファイル / 挙動 |
-|--------|---------------------|
-| `actionlint` | `.github/actionlint.yaml` / `.yml` を自動で読みます。 |
-| `ghalint` | `.ghalint.yaml` / `.ghalint.yml` / `ghalint.yaml` / `ghalint.yml` / `.github/ghalint.yaml` / `.github/ghalint.yml` を順に探します。 |
-| `spectral` | `.spectral.yml` / `.spectral.yaml` / `.spectral.json` を読みます。未配置時は `spectral:oas` を使い、unknown format は無視します。 |
-| `yamllint` | `.yamllint` 系 3 形式を順に探します。 |
-| `markdownlint-cli2` | `.markdownlint-cli2.jsonc` / `.yaml` と `.markdownlint.jsonc` / `.json` / `.yaml` / `.yml` の静的 config のみを扱います。`.cjs` / `.mjs` は任意コード実行を避けるため対象外です。共有 workflow は `globs` を使わず変更対象だけを検査します。 |
-| `ruff` | `pyproject.toml` の `[tool.ruff]`、`ruff.toml`、`.ruff.toml` を対象 file ごとに近いものから使います。同一 directory では `.ruff.toml` → `ruff.toml` → `pyproject.toml` の順です。共有 workflow は `--force-exclude` を付け、設定上の除外も尊重します。 |
-| `taplo` | `.taplo.toml` を優先し、なければ `taplo.toml` を repo root で探します。未配置時は既定値で `fmt --check` を行います。 |
-| `biome` | Biome の既定探索で `biome.json` / `biome.jsonc` / `.biome.json` / `.biome.jsonc` を探し、未配置時は既定値を使います。 |
-| `shellcheck` | `.shellcheckrc` / `shellcheckrc` を対象 script の場所から親へ向けて探します。 |
-| `zizmor` | このリポジトリでは `zizmor.yml` / `zizmor.yaml` / `.github/zizmor.yml` / `.github/zizmor.yaml` を配置先として案内します。 |
-
-- 実装本体は `.github/scripts/linters/*.sh` に分割しています。
-- 詳細ログは抑え、結果は PR comment へ集約します。
-- `.spectral.js` は任意コード実行を避けるため対象外です。
+- 共有 linter の一覧、対象ファイル、設定ファイル / 挙動は repo root の
+  `README.md` を参照してください。
+- `worker/README.md` は Worker の webhook 受信、payload、routing、deploy
+  手順に絞って記載します。
 
 ## `repository_dispatch` payload
 
