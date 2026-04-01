@@ -55,6 +55,7 @@ GitHub Actions が共通ルールで lint します。
 | `cargo-clippy` | `*.rs` | `clippy.toml` / `.clippy.toml` と `rust-toolchain.toml` / `rust-toolchain` は tool の既定探索を使います。 | 変更された Rust ファイルごとに最も近い `Cargo.toml` を基準に、重複を除いた package 単位で `cargo fetch` の後に `cargo clippy --manifest-path ... --all-targets -- -D warnings` を実行します。Clippy 実行本体は `--network none` 付き Docker container へ隔離し、rustup state は writable mount へ seed してから使います。repository-supplied `.cargo/config` / `.cargo/config.toml` は共有 path では未対応です。private git dependency や認証が必要な registry は現状サポートしません。 |
 | `taplo` | `*.toml` | `.taplo.toml` を優先し、なければ repo root の `taplo.toml` を使います。 | 未配置時は既定値で `fmt --check` を行います。 |
 | `biome` | `*.js`, `*.jsx`, `*.ts`, `*.tsx`, `*.json`, `*.jsonc`, `*.cjs`, `*.cts`, `*.mjs`, `*.mts` | Biome の既定探索で `biome.json` / `biome.jsonc` / `.biome.json` / `.biome.jsonc` を探します。 | 未配置時は既定値を使います。 |
+| `editorconfig-checker` | ほぼ全ファイルのうち、upstream documented default exclude（lock / binary / generated asset など）に当たらない path | 対象ファイルの親 directory ごとの `.editorconfig` と、repo root の `.editorconfig-checker.json` / `.ecrc` を使います。 | 共有 workflow は changed file を `PassedFiles` で限定し、`NoColor` を強制します。repository-supplied `Version` pinning は共有 path では未対応です。 |
 | `shellcheck` | `*.bash`, `*.ksh`, `*.sh` | 対象 script の場所から親へ向けて `.shellcheckrc` / `shellcheckrc` を探します。 | - |
 | `zizmor` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | `zizmor.yml` / `zizmor.yaml` / `.github/zizmor.yml` / `.github/zizmor.yaml` | 共有 workflow は `--offline` で実行します。 |
 
