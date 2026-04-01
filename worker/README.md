@@ -136,6 +136,7 @@ Worker は self-webhook を落として二重起動を防ぎます。
 | `spectral` | `.spectral.yml` / `.spectral.yaml` / `.spectral.json` を読みます。未配置時は `spectral:oas` を使い、unknown format は無視します。 |
 | `yamllint` | `.yamllint` 系 3 形式を順に探します。 |
 | `markdownlint-cli2` | `.markdownlint-cli2.jsonc` / `.yaml` と `.markdownlint.jsonc` / `.json` / `.yaml` / `.yml` の静的 config のみを扱います。`.cjs` / `.mjs` は任意コード実行を避けるため対象外です。共有 workflow は `globs` を使わず変更対象だけを検査します。 |
+| `ruff` | `pyproject.toml` の `[tool.ruff]`、`ruff.toml`、`.ruff.toml` を対象 file ごとに近いものから使います。同一 directory では `.ruff.toml` → `ruff.toml` → `pyproject.toml` の順です。共有 workflow は `--force-exclude` を付け、設定上の除外も尊重します。 |
 | `taplo` | `.taplo.toml` を優先し、なければ `taplo.toml` を repo root で探します。未配置時は既定値で `fmt --check` を行います。 |
 | `biome` | Biome の既定探索で `biome.json` / `biome.jsonc` / `.biome.json` / `.biome.jsonc` を探し、未配置時は既定値を使います。 |
 | `shellcheck` | `.shellcheckrc` / `shellcheckrc` を対象 script の場所から親へ向けて探します。 |
