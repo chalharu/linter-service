@@ -172,95 +172,15 @@ jobs:
         id: prepare_report
         if: ${{ always() }}
         env:
-          FILE_COUNT: ${{ steps.select_files.outputs.count }}
           EXIT_CODE: ${{ steps.run_linter.outputs.exit_code }}
           INSTALL_TOOL_OUTCOME: ${{ steps.install_tool.outcome }}
           LINTER_NAME: ${{ inputs.linter-name }}
           RESULT_PATH: ${{ runner.temp }}/linter-result.json
           RUN_LINTER_OUTCOME: ${{ steps.run_linter.outcome }}
+          SELECTED_FILES_PATH: ${{ runner.temp }}/selected-files.txt
           SELECT_FILES_OUTCOME: ${{ steps.select_files.outcome }}
         run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          linter_name = os.environ["LINTER_NAME"]
-          file_count = int(os.environ.get("FILE_COUNT", "0") or "0")
-          exit_code_raw = os.environ.get("EXIT_CODE", "")
-          select_outcome = os.environ.get("SELECT_FILES_OUTCOME", "")
-          install_outcome = os.environ.get("INSTALL_TOOL_OUTCOME", "")
-          run_outcome = os.environ.get("RUN_LINTER_OUTCOME", "")
-          result_path = Path(os.environ["RESULT_PATH"])
-          runner_temp = Path(os.environ["RUNNER_TEMP"])
-          comment_path = runner_temp / "linter-comment.md"
-          summary_path = runner_temp / f"linter-summary-{linter_name}.json"
-          config_path = Path(os.environ["LINTER_CONFIG_PATH"])
-
-          config_data = json.loads(config_path.read_text(encoding="utf-8"))
-          linters = config_data.get("linters", [])
-          if not isinstance(linters, list):
-              raise SystemExit("linter config must include a linters array")
-          config = {
-              item["name"]: item
-              for item in linters
-              if isinstance(item, dict) and isinstance(item.get("name"), str)
-          }
-
-          if linter_name not in config:
-              raise SystemExit(f"unsupported linter: {linter_name}")
-
-          linter_config = config[linter_name]
-          lines = [linter_config["heading"], ""]
-          has_step_failure = "failure" in {select_outcome, install_outcome, run_outcome}
-          success = (not has_step_failure) and (file_count == 0 or exit_code_raw == "0")
-          conclusion = "success" if success else "failure"
-
-          if has_step_failure and not result_path.exists():
-              lines.append(linter_config["infra_failure"])
-          elif file_count == 0 and exit_code_raw == "":
-              lines.append(linter_config["no_files"])
-          elif success:
-              lines.append(linter_config["success"].format(count=file_count))
-          else:
-              details = linter_config["details_fallback"]
-              if result_path.exists():
-                  try:
-                      result = json.loads(result_path.read_text(encoding="utf-8"))
-                  except json.JSONDecodeError:
-                      result = {}
-
-                  details = str(result.get("details") or "").strip() or details
-
-              if len(details) > 60000:
-                  details = f"{details[:60000]}\n... truncated ..."
-
-              lines.extend(
-                  [
-                      linter_config["failure"].format(count=file_count),
-                      "",
-                      "<details><summary>Details</summary>",
-                      "",
-                      "```text",
-                      details,
-                      "```",
-                      "</details>",
-                  ]
-              )
-
-          comment_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-          body = comment_path.read_text(encoding="utf-8")
-          summary_path.write_text(
-              json.dumps(
-                  {
-                      "comment_body": body,
-                      "conclusion": conclusion,
-                      "linter_name": linter_name,
-                  }
-            ),
-            encoding="utf-8",
-          )
-          PY
+          node "$LINTER_SERVICE_PATH/.github/scripts/render-linter-report.js"
 
       - name: Encrypt linter summary artifact
         id: encrypt_summary
