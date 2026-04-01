@@ -82,6 +82,7 @@ interface GitHubCheckRun {
 
 interface PullRequestEventPayload {
 	action: string;
+	changes?: JsonRecord;
 	installation?: GitHubInstallation;
 	repository: GitHubRepository;
 	pull_request: GitHubPullRequest;
@@ -98,6 +99,14 @@ interface CheckRunEventPayload {
 
 const DEFAULT_API_BASE_URL = "https://api.github.com";
 const DISPATCH_EVENT_TYPE = "github_app_webhook";
+const FORWARDED_PULL_REQUEST_ACTIONS = new Set([
+	"opened",
+	"ready_for_review",
+	"reopened",
+	"synchronize",
+]);
+const CHECK_RUN_SKIP_REASON =
+	"check_run events are not forwarded because pull_request events are authoritative";
 const GITHUB_API_VERSION = "2022-11-28";
 const MANAGED_CHECK_RUN_EXTERNAL_ID_PREFIX = "linter-service:";
 const SELF_WEBHOOK_SKIP_REASON =
@@ -183,6 +192,12 @@ async function handlePullRequestEvent(
 	deliveryId: string,
 	env: Env,
 ): Promise<Response> {
+	if (!isForwardedPullRequestEvent(payload)) {
+		return skippedResponse(
+			`pull_request action is not forwarded: ${payload.action}`,
+		);
+	}
+
 	if (isDispatchTargetRepository(payload.repository, env)) {
 		return skippedResponse(SELF_WEBHOOK_SKIP_REASON);
 	}
@@ -196,7 +211,6 @@ async function handlePullRequestEvent(
 		buildClientPayload({
 			action: payload.action,
 			deliveryId,
-			eventName: "pull_request",
 			pullRequest: normalizePullRequest(payload.pull_request),
 			repository: payload.repository,
 			sender: payload.sender,
@@ -213,7 +227,7 @@ async function handlePullRequestEvent(
 
 async function handleCheckRunEvent(
 	payload: CheckRunEventPayload,
-	deliveryId: string,
+	_deliveryId: string,
 	env: Env,
 ): Promise<Response> {
 	if (isManagedLinterCheckRun(payload.check_run)) {
@@ -224,60 +238,19 @@ async function handleCheckRunEvent(
 		return skippedResponse(SELF_WEBHOOK_SKIP_REASON);
 	}
 
-	const sourceInstallationId = getSourceInstallationId(payload.installation);
-	const pullRequestNumber = resolveAssociatedPullRequestNumber(
-		payload.check_run,
-	);
-
-	if (!pullRequestNumber) {
-		return json(
-			{
-				ok: true,
-				dispatched: false,
-				skipped: true,
-				reason: "check_run is not associated with a pull request",
-			},
-			202,
-		);
-	}
-
-	const dispatchToken = await createDispatchInstallationToken(env);
-
-	await sendRepositoryDispatch(
-		env,
-		dispatchToken,
-		buildClientPayload({
-			action: payload.action,
-			checkRun: payload.check_run,
-			deliveryId,
-			eventName: "check_run",
-			pullRequest: normalizePullRequestReference(pullRequestNumber),
-			repository: payload.repository,
-			sender: payload.sender,
-			sourceInstallationId,
-		}),
-	);
-
-	return dispatchedResponse({
-		head_sha: payload.check_run.head_sha ?? null,
-		number: pullRequestNumber,
-	});
+	return skippedResponse(CHECK_RUN_SKIP_REASON);
 }
 
 function buildClientPayload({
 	action,
-	checkRun,
 	deliveryId,
-	eventName,
 	pullRequest,
 	repository,
 	sender,
 	sourceInstallationId,
 }: {
 	action: string;
-	checkRun?: GitHubCheckRun;
 	deliveryId: string;
-	eventName: "pull_request" | "check_run";
 	pullRequest: JsonRecord;
 	repository: GitHubRepository;
 	sender?: GitHubUser;
@@ -286,17 +259,13 @@ function buildClientPayload({
 	const payload: JsonRecord = {
 		action,
 		delivery_id: deliveryId,
-		event_name: eventName,
+		event_name: "pull_request",
 		pull_request: pullRequest,
 		received_at: new Date().toISOString(),
 		repository: normalizeRepository(repository),
 		sender: normalizeUser(sender),
 		source_installation_id: sourceInstallationId,
 	};
-
-	if (checkRun) {
-		payload.check_run = normalizeCheckRun(checkRun);
-	}
 
 	return payload;
 }
@@ -324,28 +293,6 @@ function isDispatchTargetRepository(
 		repository.owner?.login?.toLowerCase() === dispatchOwner &&
 		repository.name?.toLowerCase() === dispatchRepo
 	);
-}
-
-function resolveAssociatedPullRequestNumber(
-	checkRun: GitHubCheckRun,
-): number | null {
-	const associatedPullRequests =
-		checkRun.pull_requests && checkRun.pull_requests.length > 0
-			? checkRun.pull_requests
-			: (checkRun.check_suite?.pull_requests ?? []);
-
-	if (associatedPullRequests.length === 0) {
-		return null;
-	}
-
-	const pullRequestNumber = associatedPullRequests[0]?.number;
-
-	assertPositiveInteger(
-		pullRequestNumber,
-		"check_run payload must include a positive pull request number",
-	);
-
-	return pullRequestNumber;
 }
 
 async function createDispatchInstallationToken(env: Env): Promise<string> {
@@ -566,12 +513,6 @@ function normalizePullRequest(pullRequest: GitHubPullRequest): JsonRecord {
 	};
 }
 
-function normalizePullRequestReference(pullRequestNumber: number): JsonRecord {
-	return {
-		number: pullRequestNumber,
-	};
-}
-
 function normalizePullRequestBranch(
 	branch: GitHubPullRequestBranch,
 ): JsonRecord {
@@ -580,27 +521,6 @@ function normalizePullRequestBranch(
 		ref: branch.ref ?? null,
 		repo: normalizeRepository(branch.repo),
 		sha: branch.sha ?? null,
-	};
-}
-
-function normalizeCheckRun(checkRun: GitHubCheckRun): JsonRecord {
-	return {
-		app: checkRun.app
-			? {
-					id: checkRun.app.id ?? null,
-					name: checkRun.app.name ?? null,
-					owner: normalizeUser(checkRun.app.owner),
-					slug: checkRun.app.slug ?? null,
-				}
-			: null,
-		conclusion: checkRun.conclusion ?? null,
-		details_url: checkRun.details_url ?? null,
-		external_id: checkRun.external_id ?? null,
-		head_sha: checkRun.head_sha ?? null,
-		html_url: checkRun.html_url ?? null,
-		id: checkRun.id ?? null,
-		name: checkRun.name ?? null,
-		status: checkRun.status ?? null,
 	};
 }
 
@@ -832,6 +752,30 @@ function isManagedLinterCheckRun(checkRun: GitHubCheckRun): boolean {
 	return (
 		typeof checkRun.external_id === "string" &&
 		checkRun.external_id.startsWith(MANAGED_CHECK_RUN_EXTERNAL_ID_PREFIX)
+	);
+}
+
+function isForwardedPullRequestEvent(
+	payload: PullRequestEventPayload,
+): boolean {
+	return (
+		FORWARDED_PULL_REQUEST_ACTIONS.has(payload.action) ||
+		hasPullRequestBaseChange(payload)
+	);
+}
+
+function hasPullRequestBaseChange(payload: PullRequestEventPayload): boolean {
+	if (payload.action !== "edited") {
+		return false;
+	}
+
+	const changes = payload.changes;
+
+	return (
+		isRecord(changes) &&
+		isRecord(changes.base) &&
+		isRecord(changes.base.ref) &&
+		typeof changes.base.ref.from === "string"
 	);
 }
 
