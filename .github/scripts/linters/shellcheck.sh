@@ -3,7 +3,7 @@
 set -euo pipefail
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-# shellcheck source=../linter-library.sh
+# shellcheck disable=SC1091
 source "$script_dir/../linter-library.sh"
 
 mode=${1-}
