@@ -28,6 +28,15 @@
       "details_fallback": "hadolint did not produce diagnostic output before the job failed."
     },
     {
+      "name": "dotenv-linter",
+      "heading": "### dotenv-linter",
+      "no_files": "No matching .env files were selected for `dotenv-linter`.",
+      "success": "✅ No issues were reported for the selected .env file target(s).",
+      "failure": "❌ Issues were reported for the selected .env file target(s).",
+      "infra_failure": "❌ The `dotenv-linter` workflow failed before producing a detailed report. See the workflow logs.",
+      "details_fallback": "dotenv-linter did not produce diagnostic output before the job failed."
+    },
+    {
       "name": "spectral",
       "heading": "### spectral",
       "no_files": "No matching YAML or JSON files were selected for `spectral`.",
