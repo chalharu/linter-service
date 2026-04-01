@@ -55,6 +55,15 @@
       "details_fallback": "ruff did not produce diagnostic output before the job failed."
     },
     {
+      "name": "cargo-fmt",
+      "heading": "### cargo-fmt",
+      "no_files": "No matching Rust files were selected for `cargo-fmt`.",
+      "success": "✅ No formatting issues found in Cargo package(s) containing {count} changed Rust file(s).",
+      "failure": "❌ Formatting issues found in Cargo package(s) containing {count} changed Rust file(s).",
+      "infra_failure": "❌ The `cargo-fmt` workflow failed before producing a detailed report. See the workflow logs.",
+      "details_fallback": "cargo-fmt did not produce diagnostic output before the job failed."
+    },
+    {
       "name": "taplo",
       "heading": "### taplo",
       "no_files": "No matching TOML files were selected for `taplo`.",
