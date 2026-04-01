@@ -351,7 +351,44 @@ describe("github webhook proxy worker", () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
-	it("dispatches check_run payloads without fetching source pull request details", async () => {
+	it("skips pull_request actions that do not change lint routing inputs", async () => {
+		const fetchMock = vi.mocked(fetch);
+
+		const request = createWebhookRequest(
+			"pull_request",
+			{
+				action: "labeled",
+				installation: { id: 987 },
+				pull_request: {
+					base: { ref: "main" },
+					head: { ref: "feature/example", sha: "abc123" },
+					number: 42,
+				},
+				repository: {
+					full_name: "acme/source-repo",
+				},
+			},
+			baseEnv.GITHUB_CHECKER_WEBHOOK_SECRET,
+		);
+
+		const response = await worker.fetch(request, baseEnv);
+		const responseJson = await response.json<{
+			dispatched: boolean;
+			reason: string;
+			skipped: boolean;
+		}>();
+
+		expect(response.status).toBe(202);
+		expect(responseJson).toEqual({
+			dispatched: false,
+			ok: true,
+			reason: "pull_request action is not forwarded: labeled",
+			skipped: true,
+		});
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it("dispatches pull_request edits when the base branch changes", async () => {
 		const fetchMock = vi.mocked(fetch);
 
 		fetchMock
@@ -373,11 +410,90 @@ describe("github webhook proxy worker", () => {
 			.mockResolvedValueOnce(new Response(null, { status: 204 }));
 
 		const request = createWebhookRequest(
+			"pull_request",
+			{
+				action: "edited",
+				changes: {
+					base: {
+						ref: {
+							from: "main",
+						},
+					},
+				},
+				installation: { id: 987 },
+				pull_request: {
+					base: { ref: "release/1.x", sha: "def456" },
+					head: { ref: "feature/example", sha: "abc123" },
+					number: 42,
+				},
+				repository: {
+					full_name: "acme/source-repo",
+				},
+			},
+			baseEnv.GITHUB_CHECKER_WEBHOOK_SECRET,
+		);
+
+		const response = await worker.fetch(request, baseEnv);
+		const responseJson = await response.json<{
+			dispatched: boolean;
+			pull_request: { head_ref: string; number: number };
+		}>();
+
+		expect(response.status).toBe(200);
+		expect(responseJson.dispatched).toBe(true);
+		expect(responseJson.pull_request).toEqual({
+			head_ref: "feature/example",
+			head_sha: "abc123",
+			number: 42,
+		});
+		expect(fetchMock).toHaveBeenCalledTimes(3);
+	});
+
+	it("skips pull_request edits that do not change the base branch", async () => {
+		const fetchMock = vi.mocked(fetch);
+
+		const request = createWebhookRequest(
+			"pull_request",
+			{
+				action: "edited",
+				installation: { id: 987 },
+				pull_request: {
+					base: { ref: "main" },
+					head: { ref: "feature/example", sha: "abc123" },
+					number: 42,
+				},
+				repository: {
+					full_name: "acme/source-repo",
+				},
+			},
+			baseEnv.GITHUB_CHECKER_WEBHOOK_SECRET,
+		);
+
+		const response = await worker.fetch(request, baseEnv);
+		const responseJson = await response.json<{
+			dispatched: boolean;
+			reason: string;
+			skipped: boolean;
+		}>();
+
+		expect(response.status).toBe(202);
+		expect(responseJson).toEqual({
+			dispatched: false,
+			ok: true,
+			reason: "pull_request action is not forwarded: edited",
+			skipped: true,
+		});
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it("skips pull-request-associated check_run events to avoid duplicate lint runs", async () => {
+		const fetchMock = vi.mocked(fetch);
+
+		const request = createWebhookRequest(
 			"check_run",
 			{
 				action: "completed",
 				check_run: {
-					app: { id: 12, name: "GitHub Actions", slug: "github-actions" },
 					conclusion: "success",
 					head_sha: "abc123",
 					id: 77,
@@ -388,10 +504,6 @@ describe("github webhook proxy worker", () => {
 				installation: { id: 123 },
 				repository: {
 					full_name: "acme/source-repo",
-					id: 10,
-					name: "source-repo",
-					owner: { id: 1, login: "acme", type: "Organization" },
-					private: false,
 				},
 			},
 			baseEnv.GITHUB_CHECKER_WEBHOOK_SECRET,
@@ -400,41 +512,19 @@ describe("github webhook proxy worker", () => {
 		const response = await worker.fetch(request, baseEnv);
 		const responseJson = await response.json<{
 			dispatched: boolean;
-			pull_request: { head_sha: string; number: number };
+			reason: string;
+			skipped: boolean;
 		}>();
 
-		expect(response.status).toBe(200);
-		expect(responseJson.dispatched).toBe(true);
-		expect(responseJson.pull_request).toEqual({
-			head_sha: "abc123",
-			number: 42,
+		expect(response.status).toBe(202);
+		expect(responseJson).toEqual({
+			dispatched: false,
+			ok: true,
+			reason:
+				"check_run events are not forwarded because pull_request events are authoritative",
+			skipped: true,
 		});
-		expect(fetchMock).toHaveBeenCalledTimes(3);
-		expect(fetchMock.mock.calls[0]?.[0]).toBe(
-			"https://api.github.com/repos/chalharu/linter-service/installation",
-		);
-		expect(fetchMock.mock.calls[1]?.[0]).toBe(
-			"https://api.github.com/app/installations/456/access_tokens",
-		);
-		expect(fetchMock.mock.calls[2]?.[0]).toBe(
-			"https://api.github.com/repos/chalharu/linter-service/dispatches",
-		);
-
-		const dispatchBody = JSON.parse(
-			(fetchMock.mock.calls[2]?.[1] as RequestInit).body as string,
-		) as {
-			client_payload: {
-				check_run: {
-					name: string;
-				};
-				pull_request: {
-					number: number;
-				};
-			};
-		};
-
-		expect(dispatchBody.client_payload.pull_request.number).toBe(42);
-		expect(dispatchBody.client_payload.check_run.name).toBe("ci / test");
+		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
 	it("skips check_run events generated by linter-service notifications", async () => {
@@ -549,13 +639,14 @@ describe("github webhook proxy worker", () => {
 		expect(responseJson).toEqual({
 			dispatched: false,
 			ok: true,
-			reason: "check_run is not associated with a pull request",
+			reason:
+				"check_run events are not forwarded because pull_request events are authoritative",
 			skipped: true,
 		});
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
-	it("rejects check_run payloads with invalid pull request numbers", async () => {
+	it("skips check_run payloads with invalid pull request numbers", async () => {
 		const fetchMock = vi.mocked(fetch);
 
 		const request = createWebhookRequest(
@@ -578,12 +669,20 @@ describe("github webhook proxy worker", () => {
 		);
 
 		const response = await worker.fetch(request, baseEnv);
-		const responseJson = await response.json<{ error: string }>();
+		const responseJson = await response.json<{
+			dispatched: boolean;
+			reason: string;
+			skipped: boolean;
+		}>();
 
-		expect(response.status).toBe(400);
-		expect(responseJson.error).toBe(
-			"check_run payload must include a positive pull request number",
-		);
+		expect(response.status).toBe(202);
+		expect(responseJson).toEqual({
+			dispatched: false,
+			ok: true,
+			reason:
+				"check_run events are not forwarded because pull_request events are authoritative",
+			skipped: true,
+		});
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
