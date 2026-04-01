@@ -44,6 +44,8 @@ case "$command" in
     manifest=""
     prev=""
     is_clippy=0
+    is_rustup_seed=0
+    has_rustup_runtime_mount=0
     work_mount_src=""
     for arg in "$@"; do
       if [ "$prev" = "--manifest-path" ]; then
@@ -58,17 +60,34 @@ case "$command" in
             work_mount_src="\${arg#*src=}"
             work_mount_src="\${work_mount_src%%,*}"
             ;;
+          *"dst=/usr/local/rustup"*|*"target=/usr/local/rustup"*)
+            has_rustup_runtime_mount=1
+            ;;
         esac
       fi
       prev="$arg"
     done
     printf '%s\\n' "$*" >> "$DOCKER_RUN_ARGS_LOG"
+    case "$*" in
+      *"tar -C /usr/local/rustup -cf - . | tar -xf - -C /rustup-home"*)
+        is_rustup_seed=1
+        ;;
+    esac
+    if [ "$is_rustup_seed" -eq 1 ]; then
+      : > "$RUSTUP_STATE_FILE"
+      exit 0
+    fi
     if [ -n "$work_mount_src" ]; then
       if [ -e "$work_mount_src/.git" ]; then
         printf 'present\\n' >> "$WORKTREE_GIT_LOG"
       else
         printf 'absent\\n' >> "$WORKTREE_GIT_LOG"
       fi
+    fi
+    if [ -n "\${REQUIRE_WRITABLE_RUSTUP_HOME:-}" ] && { [ "$has_rustup_runtime_mount" -ne 1 ] || [ ! -f "$RUSTUP_STATE_FILE" ]; }; then
+      printf 'info: syncing channel updates for 1.94-x86_64-unknown-linux-gnu\\n' >&2
+      printf 'error: could not create temp file /usr/local/rustup/tmp/test_file: Read-only file system (os error 30)\\n' >&2
+      exit 1
     fi
     if [ "$is_clippy" -eq 1 ]; then
       printf '%s\\n' "$manifest" >> "$DOCKER_MANIFEST_LOG"
@@ -106,6 +125,7 @@ function setupDockerTooling(context) {
 		dockerManifestLog: path.join(context.tempDir, "docker-manifests.log"),
 		dockerRunArgsLog: path.join(context.tempDir, "docker-run-args.log"),
 		dockerfileCopy: path.join(context.tempDir, "Dockerfile.copy"),
+		rustupStateFile: path.join(context.tempDir, "rustup-state"),
 		worktreeGitLog: path.join(context.tempDir, "worktree-git.log"),
 	};
 
@@ -119,6 +139,7 @@ function setupDockerTooling(context) {
 			DOCKER_MANIFEST_LOG: tooling.dockerManifestLog,
 			DOCKER_RUN_ARGS_LOG: tooling.dockerRunArgsLog,
 			DOCKERFILE_COPY: tooling.dockerfileCopy,
+			RUSTUP_STATE_FILE: tooling.rustupStateFile,
 			WORKTREE_GIT_LOG: tooling.worktreeGitLog,
 		},
 	};
@@ -196,6 +217,10 @@ defineCommonCargoManifestTests({
 			fs.readFileSync(tooling.dockerRunArgsLog, "utf8"),
 			/CARGO_HOME=\/cargo-home/,
 		);
+		assert.match(
+			fs.readFileSync(tooling.dockerRunArgsLog, "utf8"),
+			/dst=\/usr\/local\/rustup/,
+		);
 		assert.deepEqual(
 			fs.readFileSync(tooling.worktreeGitLog, "utf8").trim().split("\n"),
 			["absent", "absent", "absent", "absent"],
@@ -231,6 +256,54 @@ defineCommonCargoManifestTests({
 			/--network=none localhost\/linter-service-cargo-clippy:rust-1-bookworm cargo clippy --manifest-path crates\/member\/Cargo\.toml --all-targets -- -D warnings/,
 		);
 	},
+});
+
+test("cargo-clippy.sh seeds writable rustup state before cargo fetch", () => {
+	const context = makeTempRepo("cargo-clippy-rustup-home-");
+	const tooling = setupDockerTooling(context);
+
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		`[package]
+name = "root"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+	writeFile(path.join(context.repoDir, "src/lib.rs"), "pub fn root_lib() {}\n");
+	writeFile(
+		path.join(context.repoDir, "rust-toolchain.toml"),
+		`[toolchain]
+channel = "1.94"
+`,
+	);
+
+	try {
+		const output = execFileSync("bash", [scriptPath, "run", "src/lib.rs"], {
+			cwd: context.repoDir,
+			encoding: "utf8",
+			env: {
+				...process.env,
+				...tooling.env,
+				PATH: `${context.binDir}:${process.env.PATH}`,
+				REQUIRE_WRITABLE_RUSTUP_HOME: "1",
+				RUNNER_TEMP: context.runnerTemp,
+			},
+		});
+		const result = JSON.parse(output);
+		const runArgs = fs.readFileSync(tooling.dockerRunArgsLog, "utf8");
+
+		assert.equal(result.exit_code, 0);
+		assert.equal(fs.existsSync(tooling.rustupStateFile), true);
+		assert.match(
+			runArgs,
+			/sh -ceu tar -C \/usr\/local\/rustup -cf - \. \| tar -xf - -C \/rustup-home/,
+		);
+		assert.match(runArgs, /dst=\/rustup-home/);
+		assert.match(runArgs, /dst=\/usr\/local\/rustup/);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
 });
 
 test("cargo-clippy.sh rejects repository-supplied Cargo config on the shared path", () => {
