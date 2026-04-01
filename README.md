@@ -47,6 +47,7 @@ GitHub Actions が共通ルールで lint します。
 | `actionlint` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | `.github/actionlint.yaml` / `.github/actionlint.yml` | - |
 | `ghalint` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | `.ghalint.yaml` → `.ghalint.yml` → `ghalint.yaml` → `ghalint.yml` → `.github/ghalint.yaml` → `.github/ghalint.yml` | - |
 | `hadolint` | `Dockerfile`, `Dockerfile.*`, `Containerfile`, `Containerfile.*`, `*.dockerfile`, `*.containerfile` | 対象ファイルの directory から親へ向けて `.hadolint.yaml` / `.hadolint.yml` を探し、見つかれば `--config` で明示します。 | 未配置時は既定値を使います。 |
+| `dotenv-linter` | `.env`, `.env.*` | なし | shared workflow は upstream default checks を changed `.env` file に直接適用します。`--schema` や ignore-checks の注入は現状未対応です。 |
 | `spectral` | `*.json`, `*.yaml`, `*.yml` | `.spectral.yml` / `.spectral.yaml` / `.spectral.json` | 未配置時は `spectral:oas` を使い、unknown format は無視します。`.spectral.js` は任意コード実行を避けるため対象外です。 |
 | `yamllint` | `*.yaml`, `*.yml` | `.yamllint` → `.yamllint.yaml` → `.yamllint.yml` | - |
 | `markdownlint-cli2` | `*.md`, `*.markdown` | `.markdownlint-cli2.jsonc` / `.markdownlint-cli2.yaml` / `.markdownlint.jsonc` / `.markdownlint.json` / `.markdownlint.yaml` / `.markdownlint.yml` | 静的 config のみを扱います。`.cjs` / `.mjs` は任意コード実行を避けるため対象外です。共有 workflow は `globs` を使わず、変更対象だけを検査します。 |
