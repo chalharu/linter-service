@@ -10,12 +10,24 @@ const {
 const { runFromEnv } = require("./render-linter-sarif.js");
 
 const configPath = path.join(__dirname, "linters/config.json");
-const details = "config.yaml is not properly formatted";
+const details = "config.yaml:7: yamlfmt would reformat this file";
 
 test("emits SARIF for yamlfmt diagnostics", () => {
 	const context = makeTempRepo("render-linter-sarif-yamlfmt-");
 
-	writeFile(path.join(context.repoDir, "config.yaml"), "a:  b\n");
+	writeFile(
+		path.join(context.repoDir, "config.yaml"),
+		[
+			"service:",
+			"  name: demo",
+			"  metadata:",
+			"    owner: platform",
+			"    labels:",
+			"      env: dev",
+			"      team:  core",
+			"",
+		].join("\n"),
+	);
 	writeFile(
 		path.join(context.runnerTemp, "selected-files.txt"),
 		"config.yaml\n",
@@ -48,6 +60,11 @@ test("emits SARIF for yamlfmt diagnostics", () => {
 			report.sarif.runs[0].results[0].locations[0].physicalLocation
 				.artifactLocation.uri,
 			"config.yaml",
+		);
+		assert.equal(
+			report.sarif.runs[0].results[0].locations[0].physicalLocation.region
+				.startLine,
+			7,
 		);
 	} finally {
 		cleanupTempRepo(context.tempDir);
