@@ -149,6 +149,79 @@ cargo_deny_collect_manifests() {
   return 0
 }
 
+cargo_deny_resolve_workspace_manifest() {
+  local source_root=$1
+  local manifest_path=$2
+  local metadata_json relative_manifest
+
+  if ! metadata_json="$(
+    cd "$source_root" &&
+      cargo metadata --format-version 1 --no-deps --manifest-path "$manifest_path" 2>/dev/null
+  )"; then
+    printf '%s\n' "$manifest_path"
+    return 0
+  fi
+
+  if ! relative_manifest="$(
+    printf '%s' "$metadata_json" | node -e '
+const fs = require("node:fs");
+const path = require("node:path");
+
+const sourceRoot = process.argv[1];
+const data = JSON.parse(fs.readFileSync(0, "utf8"));
+
+if (typeof data.workspace_root !== "string" || data.workspace_root.length === 0) {
+  process.exit(1);
+}
+
+const manifestPath = path.join(data.workspace_root, "Cargo.toml");
+const relativePath = path.relative(sourceRoot, manifestPath);
+
+if (relativePath.length === 0) {
+  process.stdout.write("Cargo.toml");
+  process.exit(0);
+}
+
+if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+  process.exit(1);
+}
+
+process.stdout.write(relativePath.split(path.sep).join("/"));
+    ' "$source_root"
+  )"; then
+    printf '%s\n' "$manifest_path"
+    return 0
+  fi
+
+  printf '%s\n' "$relative_manifest"
+}
+
+cargo_deny_collect_run_targets() {
+  local source_root=$1
+  shift
+
+  local -A seen_targets=()
+  local original_manifest workspace_manifest config_path key
+
+  for original_manifest in "$@"; do
+    workspace_manifest=$(cargo_deny_resolve_workspace_manifest "$source_root" "$original_manifest")
+    config_path=""
+    if config_path=$(cargo_deny_find_config "$original_manifest"); then
+      :
+    else
+      config_path=""
+    fi
+
+    key="$workspace_manifest"$'\t'"$config_path"
+    if [ -n "${seen_targets[$key]+x}" ]; then
+      continue
+    fi
+
+    seen_targets["$key"]=1
+    printf '%s\t%s\n' "$workspace_manifest" "$config_path"
+  done
+}
+
 mode=${1-}
 if [ "$#" -gt 0 ]; then
   shift
@@ -212,9 +285,13 @@ EOF
     output_file="$RUNNER_TEMP/linter-output.txt"
     result_json_file="$RUNNER_TEMP/cargo-deny-result.json"
     manifest_list_file="$RUNNER_TEMP/cargo-deny-manifests.txt"
+    run_target_list_file="$RUNNER_TEMP/cargo-deny-run-targets.tsv"
     run_entries_dir="$RUNNER_TEMP/cargo-deny-runs"
     manifests=()
+    normalized_manifests=()
+    declare -A seen_normalized_manifests=()
     relevant_dirs=()
+    run_targets=()
     unsupported_config=""
     if ! cargo_deny_collect_manifests "$output_file" "$@" > "$manifest_list_file"; then
       linter_lib::emit_json_result 1 "$output_file"
@@ -222,16 +299,6 @@ EOF
     fi
     mapfile -t manifests < "$manifest_list_file"
     rm -f "$manifest_list_file"
-
-    mapfile -t relevant_dirs < <(linter_lib::collect_cargo_relevant_dirs "${manifests[@]}")
-    if unsupported_config="$(linter_lib::find_unsupported_cargo_config "${relevant_dirs[@]}")"; then
-      cat > "$output_file" <<EOF
-Repository-supplied \`$unsupported_config\` is not supported in this shared linter service because \`cargo metadata\` / \`cargo deny check\` for untrusted pull requests cannot safely honor repository-controlled Cargo configuration.
-Use the default Cargo registry configuration for the shared \`cargo-deny\` path.
-EOF
-      linter_lib::emit_json_result 1 "$output_file"
-      exit 0
-    fi
 
     workspace_root="$RUNNER_TEMP/cargo-deny-workspace"
     source_root="$workspace_root/source"
@@ -246,9 +313,31 @@ EOF
 
     trap cleanup_workspace EXIT
 
+    cargo_deny_collect_run_targets "$source_root" "${manifests[@]}" > "$run_target_list_file"
+    mapfile -t run_targets < "$run_target_list_file"
+    rm -f "$run_target_list_file"
+
+    for run_target in "${run_targets[@]}"; do
+      IFS=$'\t' read -r current_manifest _ <<< "$run_target"
+      if [ -z "${seen_normalized_manifests[$current_manifest]+x}" ]; then
+        seen_normalized_manifests["$current_manifest"]=1
+        normalized_manifests+=("$current_manifest")
+      fi
+    done
+
+    mapfile -t relevant_dirs < <(linter_lib::collect_cargo_relevant_dirs "${normalized_manifests[@]}")
+    if unsupported_config="$(linter_lib::find_unsupported_cargo_config "${relevant_dirs[@]}")"; then
+      cat > "$output_file" <<EOF
+Repository-supplied \`$unsupported_config\` is not supported in this shared linter service because \`cargo metadata\` / \`cargo deny check\` for untrusted pull requests cannot safely honor repository-controlled Cargo configuration.
+Use the default Cargo registry configuration for the shared \`cargo-deny\` path.
+EOF
+      linter_lib::emit_json_result 1 "$output_file"
+      exit 0
+    fi
+
     run_cargo_deny() {
       local failure=0
-      local current_manifest config_path command_line run_dir run_exit
+      local current_manifest config_path command_line run_dir run_exit run_target
       local run_index=0
 
       cd "$source_root"
@@ -256,13 +345,13 @@ EOF
       rm -rf "$run_entries_dir"
       mkdir -p "$run_entries_dir"
 
-      for current_manifest in "${manifests[@]}"; do
+      for run_target in "${run_targets[@]}"; do
         run_index=$((run_index + 1))
         run_dir=$(printf '%s/%04d' "$run_entries_dir" "$run_index")
         mkdir -p "$run_dir"
-        config_path=""
+        IFS=$'\t' read -r current_manifest config_path <<< "$run_target"
 
-        if config_path=$(cargo_deny_find_config "$current_manifest"); then
+        if [ -n "$config_path" ]; then
           command_line="cargo-deny --format json --color never --log-level warn --all-features --manifest-path $current_manifest check --audit-compatible-output --config $config_path"
           set +e
           cargo-deny \

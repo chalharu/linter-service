@@ -124,7 +124,66 @@ esac
 	);
 }
 
+function createCargoStub(binDir) {
+	writeExecutable(
+		path.join(binDir, "cargo"),
+		`#!/usr/bin/env bash
+set -euo pipefail
+if [ "\${1-}" = "--version" ]; then
+  echo "cargo 0.0.0"
+  exit 0
+fi
+if [ "\${1-}" != "metadata" ]; then
+  echo "unexpected cargo command: $*" >&2
+  exit 1
+fi
+shift
+manifest=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --manifest-path|--format-version)
+      if [ "$1" = "--manifest-path" ]; then
+        manifest="$2"
+      fi
+      shift 2
+      ;;
+    --no-deps)
+      shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+if [ -z "$manifest" ]; then
+  echo "missing --manifest-path" >&2
+  exit 1
+fi
+current_dir=$(dirname "$manifest")
+workspace_dir="$current_dir"
+search_dir="$current_dir"
+while :; do
+  candidate="$search_dir/Cargo.toml"
+  if [ -f "$candidate" ] && grep -Eq '^\\[workspace\\]' "$candidate"; then
+    workspace_dir="$search_dir"
+    break
+  fi
+  if [ "$search_dir" = "." ] || [ "$search_dir" = "/" ]; then
+    break
+  fi
+  search_dir=$(dirname "$search_dir")
+done
+workspace_root=$(cd "$workspace_dir" && pwd)
+node - "$workspace_root" <<'NODE'
+const [workspaceRoot] = process.argv.slice(2);
+process.stdout.write(JSON.stringify({ workspace_root: workspaceRoot }));
+NODE
+`,
+	);
+}
+
 function createCargoDenyStub(binDir) {
+	createCargoStub(binDir);
 	writeExecutable(
 		path.join(binDir, "cargo-deny"),
 		`#!/usr/bin/env bash
@@ -359,6 +418,61 @@ edition = "2021"
 		assert.match(
 			result.details,
 			/cargo-deny --format json --color never --log-level warn --all-features --manifest-path crates\/member\/Cargo\.toml check --audit-compatible-output --config crates\/member\/deny\.toml/,
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("cargo-deny.sh collapses workspace members to a single workspace-root run", () => {
+	const context = makeTempRepo("cargo-deny-workspace-root-");
+	const argsLog = path.join(context.tempDir, "cargo-deny-args.log");
+
+	createCargoDenyStub(context.binDir);
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		`[workspace]
+members = ["crates/member"]
+resolver = "2"
+`,
+	);
+	writeFile(path.join(context.repoDir, "Cargo.lock"), "version = 3\n");
+	writeFile(
+		path.join(context.repoDir, "deny.toml"),
+		"[graph]\nall-features = true\n",
+	);
+	writeFile(
+		path.join(context.repoDir, "crates/member/Cargo.toml"),
+		`[package]
+name = "member"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+
+	try {
+		const output = execFileSync(
+			"bash",
+			[scriptPath, "run", "Cargo.lock", "crates/member/Cargo.toml"],
+			{
+				cwd: context.repoDir,
+				encoding: "utf8",
+				env: createEnv(context, {
+					CARGO_DENY_ARGS_LOG: argsLog,
+				}),
+			},
+		);
+		const result = JSON.parse(output);
+
+		assert.equal(result.exit_code, 0);
+		assert.equal(result.cargo_deny_runs.length, 1);
+		assert.equal(result.cargo_deny_runs[0].manifest_path, "Cargo.toml");
+		assert.deepEqual(fs.readFileSync(argsLog, "utf8").trim().split("\n"), [
+			"--format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output --config deny.toml",
+		]);
+		assert.doesNotMatch(
+			result.details,
+			/--manifest-path crates\/member\/Cargo\.toml check --audit-compatible-output/,
 		);
 	} finally {
 		cleanupTempRepo(context.tempDir);
