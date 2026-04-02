@@ -1,16 +1,12 @@
 name: Cleanup Workflow Runs
-
 on:
   workflow_dispatch:
   schedule:
     - cron: '17 */6 * * *'
-
 concurrency:
   group: ${{ format('cleanup-workflow-runs-{0}', github.repository) }}
   cancel-in-progress: false
-
 permissions: {}
-
 jobs:
   cleanup:
     permissions:
@@ -23,7 +19,6 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
-
       - name: Delete workflow runs older than 24 hours
         id: cleanup_runs
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
