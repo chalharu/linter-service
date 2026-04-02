@@ -7,11 +7,14 @@ on:
       - reopened
       - synchronize
       - ready_for_review
+  push:
+    branches:
+      - '**'
   repository_dispatch:
     types:
       - github_app_webhook
 concurrency:
-  group: ${{ format('repository-dispatch-{0}-{1}', github.event_name == 'pull_request' && github.repository || github.event.client_payload.repository.full_name || github.repository, github.event_name == 'pull_request' && github.event.pull_request.number || github.event.client_payload.pull_request.number || github.run_id) }}
+  group: ${{ format('repository-dispatch-{0}-{1}', github.event_name == 'repository_dispatch' && github.event.client_payload.repository.full_name || github.repository, github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.event_name == 'push' && format('push-{0}', github.ref) || github.event.client_payload.event_name == 'pull_request' && format('pr-{0}', github.event.client_payload.pull_request.number) || github.event.client_payload.event_name == 'push' && format('push-{0}', github.event.client_payload.push.ref) || github.run_id) }}
   cancel-in-progress: false
 permissions: {}
 jobs:
@@ -25,37 +28,57 @@ jobs:
       selected-linters-json: ${{ steps.collect.outputs.selected-linters-json }}
       skip-reason: ${{ steps.collect.outputs.skip-reason }}
     env:
-      PR_REPOSITORY_NAME: ${{ github.event_name == 'pull_request' && github.event.repository.name || github.event.client_payload.repository.name }}
-      PR_REPOSITORY_OWNER: ${{ github.event_name == 'pull_request' && github.event.repository.owner.login || github.event.client_payload.repository.owner.login }}
-      PULL_REQUEST_NUMBER: ${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.event.client_payload.pull_request.number }}
-      SOURCE_HEAD_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.event.client_payload.pull_request.head.ref }}
-      SOURCE_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.event.client_payload.pull_request.head.sha }}
+      PULL_REQUEST_NUMBER: ${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.event_name == 'repository_dispatch' && github.event.client_payload.pull_request.number || '' }}
+      ROUTED_EVENT_NAME: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.event_name || github.event_name }}
+      SOURCE_DEFAULT_BRANCH: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.repository.default_branch || github.event.repository.default_branch }}
+      SOURCE_HEAD_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.event_name == 'push' && github.ref_name || github.event_name == 'repository_dispatch' && github.event.client_payload.event_name == 'push' && github.event.client_payload.push.ref_name || github.event.client_payload.pull_request.head.ref || '' }}
+      SOURCE_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.event_name == 'push' && github.sha || github.event_name == 'repository_dispatch' && github.event.client_payload.event_name == 'push' && github.event.client_payload.push.after || github.event.client_payload.pull_request.head.sha || '' }}
+      TARGET_REPOSITORY_NAME: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.repository.name || github.event.repository.name }}
+      TARGET_REPOSITORY_OWNER: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.repository.owner.login || github.event.repository.owner.login }}
     steps:
-      - name: Validate pull request metadata
+      - name: Validate routed event metadata
         run: |
-          test -n "$PR_REPOSITORY_OWNER" || {
-            echo "PR_REPOSITORY_OWNER is required" >&2
+          test -n "$TARGET_REPOSITORY_OWNER" || {
+            echo "TARGET_REPOSITORY_OWNER is required" >&2
             exit 1
           }
-          test -n "$PR_REPOSITORY_NAME" || {
-            echo "PR_REPOSITORY_NAME is required" >&2
+          test -n "$TARGET_REPOSITORY_NAME" || {
+            echo "TARGET_REPOSITORY_NAME is required" >&2
             exit 1
           }
-          case "$PULL_REQUEST_NUMBER" in
-            ''|*[!0-9]*)
-              echo "PULL_REQUEST_NUMBER must be a positive integer" >&2
+          case "$ROUTED_EVENT_NAME" in
+            pull_request)
+              case "$PULL_REQUEST_NUMBER" in
+                ''|*[!0-9]*)
+                  echo "PULL_REQUEST_NUMBER must be a positive integer" >&2
+                  exit 1
+                  ;;
+              esac
+              test "$PULL_REQUEST_NUMBER" -gt 0 || {
+                echo "PULL_REQUEST_NUMBER must be a positive integer" >&2
+                exit 1
+              }
+              ;;
+            push)
+              test -n "$SOURCE_HEAD_REF" || {
+                echo "SOURCE_HEAD_REF is required for push events" >&2
+                exit 1
+              }
+              test -n "$SOURCE_HEAD_SHA" || {
+                echo "SOURCE_HEAD_SHA is required for push events" >&2
+                exit 1
+              }
+              ;;
+            *)
+              echo "Unsupported routed event: $ROUTED_EVENT_NAME" >&2
               exit 1
               ;;
           esac
-          test "$PULL_REQUEST_NUMBER" -gt 0 || {
-            echo "PULL_REQUEST_NUMBER must be a positive integer" >&2
-            exit 1
-          }
       - name: Mask repository metadata
         run: |
-          echo "::add-mask::$PR_REPOSITORY_OWNER"
-          echo "::add-mask::$PR_REPOSITORY_NAME"
-          echo "::add-mask::$PR_REPOSITORY_OWNER/$PR_REPOSITORY_NAME"
+          echo "::add-mask::$TARGET_REPOSITORY_OWNER"
+          echo "::add-mask::$TARGET_REPOSITORY_NAME"
+          echo "::add-mask::$TARGET_REPOSITORY_OWNER/$TARGET_REPOSITORY_NAME"
           if [ -n "$SOURCE_HEAD_SHA" ]; then
             echo "::add-mask::$SOURCE_HEAD_SHA"
           fi
@@ -113,27 +136,46 @@ jobs:
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
-          owner: ${{ env.PR_REPOSITORY_OWNER }}
+          owner: ${{ env.TARGET_REPOSITORY_OWNER }}
+          permission-contents: read
           permission-pull-requests: read
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
-          repositories: ${{ env.PR_REPOSITORY_NAME }}
-      - name: Collect pull request context
+          repositories: ${{ env.TARGET_REPOSITORY_NAME }}
+      - name: Check out source repository for push routing
+        if: ${{ env.ROUTED_EVENT_NAME == 'push' }}
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          path: source-routing-repo
+          persist-credentials: false
+          ref: ${{ env.SOURCE_HEAD_SHA }}
+          repository: ${{ env.TARGET_REPOSITORY_OWNER }}/${{ env.TARGET_REPOSITORY_NAME }}
+          token: ${{ steps.get_checker_token.outputs.token }}
+      - name: Collect lint targets context
         id: collect
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           LINTER_DEFINITIONS_PATH: ${{ steps.build_linter_definitions.outputs.path }}
-          PR_REPOSITORY_NAME: ${{ env.PR_REPOSITORY_NAME }}
-          PR_REPOSITORY_OWNER: ${{ env.PR_REPOSITORY_OWNER }}
           PULL_REQUEST_NUMBER: ${{ env.PULL_REQUEST_NUMBER }}
+          ROUTED_EVENT_NAME: ${{ env.ROUTED_EVENT_NAME }}
+          SOURCE_DEFAULT_BRANCH: ${{ env.SOURCE_DEFAULT_BRANCH }}
+          SOURCE_HEAD_REF: ${{ env.SOURCE_HEAD_REF }}
           SOURCE_HEAD_SHA: ${{ env.SOURCE_HEAD_SHA }}
+          SOURCE_REPOSITORY_PATH: ${{ github.workspace }}/source-routing-repo
+          TARGET_REPOSITORY_NAME: ${{ env.TARGET_REPOSITORY_NAME }}
+          TARGET_REPOSITORY_OWNER: ${{ env.TARGET_REPOSITORY_OWNER }}
         with:
           github-token: ${{ steps.get_checker_token.outputs.token }}
           script: |
+            const childProcess = require("node:child_process");
             const fs = require("node:fs");
             const path = require("node:path");
-            const owner = process.env.PR_REPOSITORY_OWNER;
-            const repo = process.env.PR_REPOSITORY_NAME;
-            const pullNumber = Number(process.env.PULL_REQUEST_NUMBER);
+            const owner = process.env.TARGET_REPOSITORY_OWNER;
+            const repo = process.env.TARGET_REPOSITORY_NAME;
+            const routedEventName = process.env.ROUTED_EVENT_NAME;
+            const pullNumberText = process.env.PULL_REQUEST_NUMBER || "";
+            const pullNumber = pullNumberText ? Number(pullNumberText) : null;
+            const sourceDefaultBranch = process.env.SOURCE_DEFAULT_BRANCH || "";
+            const sourceHeadRefFromPayload = process.env.SOURCE_HEAD_REF || "";
             const sourceHeadShaFromPayload = process.env.SOURCE_HEAD_SHA || "";
             const definitions = JSON.parse(
               fs.readFileSync(process.env.LINTER_DEFINITIONS_PATH, "utf8"),
@@ -149,6 +191,65 @@ jobs:
                 "utf8",
               );
               core.setOutput("context-path", contextPath);
+            };
+            const finalizeOutputs = ({ pullRequestNumber = pullNumberText, selectedLinters, skipReason }) => {
+              core.setOutput("pull-request-number", pullRequestNumber);
+              core.setOutput("selected-linters-json", JSON.stringify(selectedLinters));
+              core.setOutput("skip-reason", skipReason);
+            };
+            const buildPatterns = (definition) =>
+              definition.patterns.map((pattern) => {
+                if (typeof pattern !== "string") {
+                  throw new Error("Linter patterns must be strings");
+                }
+
+                return new RegExp(pattern, "i");
+              });
+            const selectLinters = (targetFiles) => {
+              const selectedLinters = [];
+
+              for (const definition of definitions) {
+                const patterns = buildPatterns(definition);
+                const selected = targetFiles.some((candidatePath) =>
+                  patterns.some((pattern) => pattern.test(candidatePath)),
+                );
+
+                if (selected) {
+                  selectedLinters.push(definition.name);
+                }
+              }
+
+              return selectedLinters;
+            };
+            const writeSkipContext = ({
+              commentEnabled,
+              pullRequestNumber = pullNumberText,
+              skipReason,
+              sourceHeadRef = sourceHeadRefFromPayload,
+              sourceHeadSha = sourceHeadShaFromPayload,
+              sourceOwner = owner,
+              sourceRepo = repo,
+            }) => {
+              writeContext({
+                changed_files: [],
+                comment_enabled: commentEnabled,
+                event_name: routedEventName,
+                pr_owner: owner,
+                pr_repo: repo,
+                processing_check_external_id: "",
+                processing_check_name: "linter-service",
+                selected_linters: [],
+                skip_reason: skipReason,
+                source_head_ref: sourceHeadRef,
+                source_head_sha: sourceHeadSha,
+                source_owner: sourceOwner,
+                source_repo: sourceRepo,
+              });
+              finalizeOutputs({
+                pullRequestNumber,
+                selectedLinters: [],
+                skipReason,
+              });
             };
             const isSelfRepositoryDispatch =
               context.eventName === "repository_dispatch" &&
@@ -178,129 +279,145 @@ jobs:
               const skipReason =
                 "Skipping pull_request edited event because it did not change the base branch.";
 
-              const contextValues = {
-                changed_files: [],
-                pr_owner: owner,
-                pr_repo: repo,
-                processing_check_external_id: "",
-                processing_check_name: "linter-service",
-                selected_linters: [],
-                skip_reason: skipReason,
-                source_head_ref: process.env.SOURCE_HEAD_REF || "",
-                source_head_sha: sourceHeadShaFromPayload,
-                source_owner: owner,
-                source_repo: repo,
-              };
-
-              writeContext(contextValues);
-              core.setOutput("pull-request-number", String(pullNumber));
-              core.setOutput("selected-linters-json", JSON.stringify([]));
-              core.setOutput("skip-reason", skipReason);
+              writeSkipContext({
+                commentEnabled: "true",
+                skipReason,
+              });
               return;
             }
 
             if (isSelfRepositoryDispatch) {
               const skipReason =
-                "Skipping repository_dispatch for this repository because local pull requests are handled by the direct pull_request trigger.";
+                "Skipping repository_dispatch for this repository because local events are handled by direct workflow triggers.";
 
-              const contextValues = {
-                changed_files: [],
-                pr_owner: owner,
-                pr_repo: repo,
-                processing_check_external_id: "",
-                processing_check_name: "linter-service",
-                selected_linters: [],
-                skip_reason: skipReason,
-                source_head_ref: process.env.SOURCE_HEAD_REF || "",
-                source_head_sha: sourceHeadShaFromPayload,
-                source_owner: owner,
-                source_repo: repo,
-              };
-
-              writeContext(contextValues);
-              core.setOutput("pull-request-number", String(pullNumber));
-              core.setOutput("selected-linters-json", JSON.stringify([]));
-              core.setOutput("skip-reason", skipReason);
+              writeSkipContext({
+                commentEnabled: routedEventName === "pull_request" ? "true" : "false",
+                skipReason,
+              });
               return;
             }
 
-            const pull = (
-              await github.rest.pulls.get({
+            if (routedEventName === "pull_request") {
+              if (!Number.isInteger(pullNumber) || pullNumber < 1) {
+                throw new Error("pull request number is required");
+              }
+
+              const pull = (
+                await github.rest.pulls.get({
+                  owner,
+                  repo,
+                  pull_number: pullNumber,
+                })
+              ).data;
+
+              const files = await github.paginate(github.rest.pulls.listFiles, {
                 owner,
                 repo,
                 pull_number: pullNumber,
-              })
-            ).data;
-
-            const files = await github.paginate(github.rest.pulls.listFiles, {
-              owner,
-              repo,
-              pull_number: pullNumber,
-              per_page: 100,
-            });
-
-            const currentFiles = files
-              .filter((file) => file.status !== "removed")
-              .map((file) => file.filename);
-
-            const sourceOwner = pull.head.repo?.owner?.login ?? owner;
-            const sourceHeadRef = pull.head.ref ?? process.env.SOURCE_HEAD_REF ?? "";
-            const sourceRepo = pull.head.repo?.name ?? repo;
-            const sourceHeadSha = sourceHeadShaFromPayload || pull.head.sha;
-
-            if (!sourceHeadSha) {
-              throw new Error("pull request head SHA is required");
-            }
-
-            const selectedLinters = [];
-
-            for (const definition of definitions) {
-              if (
-                !definition ||
-                typeof definition !== "object" ||
-                typeof definition.name !== "string" ||
-                !Array.isArray(definition.patterns)
-              ) {
-                throw new Error("Each linter definition must include name and patterns");
-              }
-
-              const patterns = definition.patterns.map((pattern) => {
-                if (typeof pattern !== "string") {
-                  throw new Error("Linter patterns must be strings");
-                }
-
-                return new RegExp(pattern, "i");
+                per_page: 100,
               });
-              const selected = currentFiles.some((path) =>
-                patterns.some((pattern) => pattern.test(path)),
-              );
 
-              if (selected) {
-                selectedLinters.push(definition.name);
+              const currentFiles = files
+                .filter((file) => file.status !== "removed")
+                .map((file) => file.filename);
+
+              const sourceOwner = pull.head.repo?.owner?.login ?? owner;
+              const sourceHeadRef = pull.head.ref ?? sourceHeadRefFromPayload;
+              const sourceRepo = pull.head.repo?.name ?? repo;
+              const sourceHeadSha = sourceHeadShaFromPayload || pull.head.sha;
+
+              if (!sourceHeadSha) {
+                throw new Error("pull request head SHA is required");
               }
+
+              const selectedLinters = selectLinters(currentFiles);
+
+              writeContext({
+                changed_files: currentFiles,
+                comment_enabled: "true",
+                event_name: routedEventName,
+                pr_owner: owner,
+                pr_repo: repo,
+                processing_check_external_id: `linter-service:${pullNumber}:${sourceHeadSha}`,
+                processing_check_name: "linter-service",
+                selected_linters: selectedLinters,
+                skip_reason: "",
+                source_head_ref: sourceHeadRef,
+                source_head_sha: sourceHeadSha,
+                source_owner: sourceOwner,
+                source_repo: sourceRepo,
+              });
+              finalizeOutputs({
+                pullRequestNumber: String(pullNumber),
+                selectedLinters,
+                skipReason: "",
+              });
+              return;
             }
 
-            writeContext({
-              changed_files: currentFiles,
-              pr_owner: owner,
-              pr_repo: repo,
-              processing_check_external_id: `linter-service:${pullNumber}:${sourceHeadSha}`,
-              processing_check_name: "linter-service",
-              selected_linters: selectedLinters,
-              skip_reason: "",
-              source_head_ref: sourceHeadRef,
-              source_head_sha: sourceHeadSha,
-              source_owner: sourceOwner,
-              source_repo: sourceRepo,
-            });
-            core.setOutput("pull-request-number", String(pullNumber));
-            core.setOutput("selected-linters-json", JSON.stringify(selectedLinters));
-            core.setOutput("skip-reason", "");
+            if (routedEventName === "push") {
+              const sourceHeadRef = sourceHeadRefFromPayload || sourceDefaultBranch;
+              const sourceHeadSha = sourceHeadShaFromPayload;
+
+              if (!sourceHeadRef) {
+                throw new Error("push ref is required");
+              }
+
+              if (!sourceHeadSha) {
+                throw new Error("push head SHA is required");
+              }
+
+              if (sourceDefaultBranch && sourceHeadRef !== sourceDefaultBranch) {
+                writeSkipContext({
+                  commentEnabled: "false",
+                  pullRequestNumber: "",
+                  skipReason: `Skipping push event because ${sourceHeadRef} is not the default branch ${sourceDefaultBranch}.`,
+                  sourceHeadRef,
+                  sourceHeadSha,
+                });
+                return;
+              }
+
+              const currentFiles = childProcess
+                .execFileSync("git", ["ls-files"], {
+                  cwd: process.env.SOURCE_REPOSITORY_PATH,
+                  encoding: "utf8",
+                })
+                .split(/\r?\n/u)
+                .filter(Boolean);
+              const selectedLinters = selectLinters(currentFiles);
+
+              writeContext({
+                changed_files: currentFiles,
+                comment_enabled: "false",
+                event_name: routedEventName,
+                pr_owner: owner,
+                pr_repo: repo,
+                processing_check_external_id: `linter-service:push:${sourceHeadRef}:${sourceHeadSha}`,
+                processing_check_name: "linter-service",
+                selected_linters: selectedLinters,
+                skip_reason: "",
+                source_head_ref: sourceHeadRef,
+                source_head_sha: sourceHeadSha,
+                source_owner: owner,
+                source_repo: repo,
+              });
+              finalizeOutputs({
+                pullRequestNumber: "",
+                selectedLinters,
+                skipReason: "",
+              });
+              return;
+            }
+
+            throw new Error(`Unsupported routed event: ${routedEventName}`);
       - name: Report routing status
         env:
+          ROUTED_EVENT_NAME: ${{ env.ROUTED_EVENT_NAME }}
           SELECTED_LINTERS_JSON: ${{ steps.collect.outputs.selected-linters-json }}
         run: |
           echo "Routing targets resolved."
+          echo "Routed event: ${ROUTED_EVENT_NAME}"
           echo "Selected linters: ${SELECTED_LINTERS_JSON}"
       - name: Derive artifact passphrase
         env:
@@ -386,6 +503,7 @@ jobs:
           python3 "$LINTER_SERVICE_PATH/.github/scripts/context-artifact.py" \
             outputs \
             "$CONTEXT_PATH" \
+            comment_enabled=comment-enabled \
             processing_check_external_id=processing-check-external-id \
             processing_check_name=processing-check-name \
             source_head_sha=source-head-sha \
@@ -410,6 +528,7 @@ jobs:
           CHECK_RUN_OWNER: ${{ steps.decode_source_context.outputs.source-owner }}
           CHECK_RUN_REPO: ${{ steps.decode_source_context.outputs.source-repo }}
           CHECK_RUN_STATUS: in_progress
+          COMMENT_ENABLED: ${{ steps.decode_source_context.outputs.comment-enabled }}
           LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
           PROCESSING_CHECK_EXTERNAL_ID: ${{ steps.decode_source_context.outputs.processing-check-external-id }}
           PROCESSING_CHECK_NAME: ${{ steps.decode_source_context.outputs.processing-check-name }}
@@ -424,7 +543,9 @@ jobs:
             process.env.CHECK_RUN_OUTPUT_SUMMARY =
               selectedLinters.length === 0
                 ? "No linters were selected."
-                : `Running linters: ${selectedLinters.join(", ")}. Detailed results will be posted as a pull request comment.`;
+                : process.env.COMMENT_ENABLED === "true"
+                  ? `Running linters: ${selectedLinters.join(", ")}. Detailed results will be posted as a pull request comment.`
+                  : `Running linters: ${selectedLinters.join(", ")}. Detailed results will be published as checks and SARIF for this default-branch commit.`;
             const upsertCheckRun = require(
               `${process.env.LINTER_SERVICE_PATH}/.github/scripts/upsert-check-run.js`,
             );
@@ -526,6 +647,8 @@ jobs:
           python3 "$LINTER_SERVICE_PATH/.github/scripts/context-artifact.py" \
             outputs \
             "$CONTEXT_PATH" \
+            comment_enabled=comment-enabled \
+            event_name=event-name \
             pr_owner=pr-owner \
             pr_repo=pr-repo \
             processing_check_external_id=processing-check-external-id \
@@ -701,7 +824,7 @@ jobs:
               fh.write(f"overall_summary={overall_summary}\n")
           PY
       - name: Upsert combined PR comment
-        if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
+        if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' && steps.decode_repository_context.outputs.comment-enabled == 'true' }}
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           COMMENT_FILE: ${{ runner.temp }}/combined-linter-comment.md
@@ -726,7 +849,8 @@ jobs:
           LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
           SARIF_HEAD_SHA: ${{ steps.decode_repository_context.outputs.source-head-sha }}
           SARIF_OWNER: ${{ steps.decode_repository_context.outputs.pr-owner }}
-          SARIF_PR_NUMBER: ${{ needs.detect-targets.outputs.pull-request-number }}
+          SARIF_PR_NUMBER: ${{ steps.decode_repository_context.outputs.comment-enabled == 'true' && needs.detect-targets.outputs.pull-request-number || '' }}
+          SARIF_REF: ${{ steps.decode_repository_context.outputs.source-head-ref }}
           SARIF_REPO: ${{ steps.decode_repository_context.outputs.pr-repo }}
           SARIF_ROOT: ${{ runner.temp }}/linter-sarifs-decrypted
         with:
@@ -824,5 +948,5 @@ jobs:
           if [ -n "$SKIP_REASON" ]; then
             echo "$SKIP_REASON"
           else
-            echo "No configured linters matched the pull request changes."
+            echo "No configured linters matched the selected target files."
           fi

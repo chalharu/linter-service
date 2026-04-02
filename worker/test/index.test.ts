@@ -486,6 +486,126 @@ describe("github webhook proxy worker", () => {
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
+	it("dispatches default-branch push payloads with the dispatcher app", async () => {
+		const fetchMock = vi.mocked(fetch);
+
+		fetchMock
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify({ id: 456 }), {
+					headers: { "content-type": "application/json" },
+					status: 200,
+				}),
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({ token: "dispatcher-installation-token" }),
+					{
+						headers: { "content-type": "application/json" },
+						status: 201,
+					},
+				),
+			)
+			.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+		const request = createWebhookRequest(
+			"push",
+			{
+				after: "abc123",
+				before: "def456",
+				created: false,
+				deleted: false,
+				forced: false,
+				installation: { id: 987 },
+				ref: "refs/heads/main",
+				repository: {
+					default_branch: "main",
+					full_name: "acme/source-repo",
+					html_url: "https://github.com/acme/source-repo",
+					id: 10,
+					name: "source-repo",
+					owner: { id: 1, login: "acme", type: "Organization" },
+					private: false,
+				},
+				sender: { id: 2, login: "octocat", type: "User" },
+			},
+			baseEnv.GITHUB_CHECKER_WEBHOOK_SECRET,
+		);
+
+		const response = await worker.fetch(request, baseEnv);
+		const responseJson = await response.json<{
+			dispatched: boolean;
+			push: { default_branch: string; head_sha: string; ref: string };
+		}>();
+
+		expect(response.status).toBe(200);
+		expect(responseJson.dispatched).toBe(true);
+		expect(responseJson.push).toEqual({
+			default_branch: "main",
+			head_sha: "abc123",
+			ref: "refs/heads/main",
+		});
+		expect(fetchMock).toHaveBeenCalledTimes(3);
+
+		const dispatchBody = JSON.parse(
+			(fetchMock.mock.calls[2]?.[1] as RequestInit).body as string,
+		) as {
+			client_payload: {
+				event_name: string;
+				push: {
+					after: string;
+					ref: string;
+					ref_name: string;
+				};
+				repository: {
+					default_branch: string;
+				};
+			};
+			event_type: string;
+		};
+
+		expect(dispatchBody.event_type).toBe("github_app_webhook");
+		expect(dispatchBody.client_payload.event_name).toBe("push");
+		expect(dispatchBody.client_payload.push.after).toBe("abc123");
+		expect(dispatchBody.client_payload.push.ref).toBe("refs/heads/main");
+		expect(dispatchBody.client_payload.push.ref_name).toBe("main");
+		expect(dispatchBody.client_payload.repository.default_branch).toBe("main");
+	});
+
+	it("skips push events outside the default branch", async () => {
+		const fetchMock = vi.mocked(fetch);
+
+		const request = createWebhookRequest(
+			"push",
+			{
+				after: "abc123",
+				installation: { id: 987 },
+				ref: "refs/heads/feature/example",
+				repository: {
+					default_branch: "main",
+					full_name: "acme/source-repo",
+				},
+			},
+			baseEnv.GITHUB_CHECKER_WEBHOOK_SECRET,
+		);
+
+		const response = await worker.fetch(request, baseEnv);
+		const responseJson = await response.json<{
+			dispatched: boolean;
+			reason: string;
+			skipped: boolean;
+		}>();
+
+		expect(response.status).toBe(202);
+		expect(responseJson).toEqual({
+			dispatched: false,
+			ok: true,
+			reason:
+				"push event is not forwarded: ref refs/heads/feature/example is not the default branch",
+			skipped: true,
+		});
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
 	it("skips pull-request-associated check_run events to avoid duplicate lint runs", async () => {
 		const fetchMock = vi.mocked(fetch);
 
