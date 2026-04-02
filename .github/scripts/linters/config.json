@@ -55,6 +55,15 @@
       "details_fallback": "yamllint did not produce diagnostic output before the job failed."
     },
     {
+      "name": "yamlfmt",
+      "heading": "### yamlfmt",
+      "no_files": "No matching YAML files were selected for `yamlfmt`.",
+      "success": "✅ No issues were reported for the selected YAML target(s).",
+      "failure": "❌ Issues were reported for the selected YAML target(s).",
+      "infra_failure": "❌ The `yamlfmt` workflow failed before producing a detailed report. See the workflow logs.",
+      "details_fallback": "yamlfmt did not produce diagnostic output before the job failed."
+    },
+    {
       "name": "markdownlint-cli2",
       "heading": "### markdownlint-cli2",
       "no_files": "No matching Markdown files were selected for `markdownlint-cli2`.",
