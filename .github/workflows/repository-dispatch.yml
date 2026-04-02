@@ -32,6 +32,7 @@ jobs:
       PR_REPOSITORY_NAME: ${{ github.event_name == 'pull_request' && github.event.repository.name || github.event.client_payload.repository.name }}
       PR_REPOSITORY_OWNER: ${{ github.event_name == 'pull_request' && github.event.repository.owner.login || github.event.client_payload.repository.owner.login }}
       PULL_REQUEST_NUMBER: ${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.event.client_payload.pull_request.number }}
+      SOURCE_HEAD_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.event.client_payload.pull_request.head.ref }}
       SOURCE_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.event.client_payload.pull_request.head.sha }}
     steps:
       - name: Validate pull request metadata
@@ -194,6 +195,7 @@ jobs:
                 processing_check_name: "linter-service",
                 selected_linters: [],
                 skip_reason: skipReason,
+                source_head_ref: process.env.SOURCE_HEAD_REF || "",
                 source_head_sha: sourceHeadShaFromPayload,
                 source_owner: owner,
                 source_repo: repo,
@@ -218,6 +220,7 @@ jobs:
                 processing_check_name: "linter-service",
                 selected_linters: [],
                 skip_reason: skipReason,
+                source_head_ref: process.env.SOURCE_HEAD_REF || "",
                 source_head_sha: sourceHeadShaFromPayload,
                 source_owner: owner,
                 source_repo: repo,
@@ -250,6 +253,7 @@ jobs:
               .map((file) => file.filename);
 
             const sourceOwner = pull.head.repo?.owner?.login ?? owner;
+            const sourceHeadRef = pull.head.ref ?? process.env.SOURCE_HEAD_REF ?? "";
             const sourceRepo = pull.head.repo?.name ?? repo;
             const sourceHeadSha = sourceHeadShaFromPayload || pull.head.sha;
 
@@ -293,6 +297,7 @@ jobs:
               processing_check_name: "linter-service",
               selected_linters: selectedLinters,
               skip_reason: "",
+              source_head_ref: sourceHeadRef,
               source_head_sha: sourceHeadSha,
               source_owner: sourceOwner,
               source_repo: sourceRepo,
@@ -519,6 +524,15 @@ jobs:
           merge-multiple: true
           path: ${{ runner.temp }}/linter-summaries
 
+      - name: Download linter SARIF artifacts
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: linter-sarif-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/linter-sarifs
+
       - name: Mask repository metadata
         env:
           CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
@@ -546,6 +560,7 @@ jobs:
             pr_repo=pr-repo \
             processing_check_external_id=processing-check-external-id \
             processing_check_name=processing-check-name \
+            source_head_ref=source-head-ref \
             source_head_sha=source-head-sha \
             source_owner=source-owner \
             source_repo=source-repo
@@ -567,6 +582,7 @@ jobs:
           app-id: ${{ secrets.CHECKER_APP_ID }}
           owner: ${{ steps.decode_repository_context.outputs.source-owner }}
           permission-checks: write
+          permission-security-events: write
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ steps.decode_repository_context.outputs.source-repo }}
 
@@ -586,6 +602,33 @@ jobs:
 
           for encrypted_path in "${encrypted_files[@]}"; do
             decrypted_path="$RUNNER_TEMP/linter-summaries-decrypted/$(basename "${encrypted_path%.enc}")"
+            if ! bash "$LINTER_SERVICE_PATH/.github/scripts/secure-artifact.sh" \
+              decrypt \
+              "$encrypted_path" \
+              "$decrypted_path"; then
+              echo "::warning::Failed to decrypt $(basename "$encrypted_path")"
+              failures=1
+            fi
+          done
+
+          exit "$failures"
+
+      - name: Decrypt linter SARIF artifacts
+        id: decrypt_sarifs
+        if: ${{ always() }}
+        env:
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
+        run: |
+          shopt -s nullglob
+          failures=0
+          mkdir -p "$RUNNER_TEMP/linter-sarifs-decrypted"
+          encrypted_files=("$RUNNER_TEMP"/linter-sarifs/*.enc)
+          if [ "${#encrypted_files[@]}" -eq 0 ]; then
+            exit 0
+          fi
+
+          for encrypted_path in "${encrypted_files[@]}"; do
+            decrypted_path="$RUNNER_TEMP/linter-sarifs-decrypted/$(basename "${encrypted_path%.enc}")"
             if ! bash "$LINTER_SERVICE_PATH/.github/scripts/secure-artifact.sh" \
               decrypt \
               "$encrypted_path" \
@@ -701,22 +744,78 @@ jobs:
             );
             await upsertPullRequestComment({ github, env: process.env });
 
+      - name: Upload SARIF artifacts
+        id: upload_sarif
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
+          SARIF_HEAD_SHA: ${{ steps.decode_repository_context.outputs.source-head-sha }}
+          SARIF_OWNER: ${{ steps.decode_repository_context.outputs.source-owner }}
+          SARIF_REF: ${{ steps.decode_repository_context.outputs.source-head-ref }}
+          SARIF_REPO: ${{ steps.decode_repository_context.outputs.source-repo }}
+          SARIF_ROOT: ${{ runner.temp }}/linter-sarifs-decrypted
+        with:
+          github-token: ${{ steps.get_source_token.outputs.token }}
+          script: |
+            const uploadSarif = require(
+              `${process.env.LINTER_SERVICE_PATH}/.github/scripts/upload-sarif.js`,
+            );
+            await uploadSarif({ github, env: process.env });
+
+      - name: Prepare final processing summary
+        id: prepare_final_summary
+        if: ${{ always() }}
+        env:
+          OVERALL_CONCLUSION: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_conclusion || 'failure' }}
+          OVERALL_SUMMARY: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_summary || 'The linter-service workflow failed to generate a combined report.' }}
+          UPLOAD_SARIF_OUTCOME: ${{ steps.upload_sarif.outcome }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          overall_conclusion = os.environ["OVERALL_CONCLUSION"]
+          overall_summary = os.environ["OVERALL_SUMMARY"]
+          upload_sarif_outcome = os.environ.get("UPLOAD_SARIF_OUTCOME", "")
+
+          if upload_sarif_outcome == "failure":
+              conclusion = "failure"
+              summary = f"{overall_summary} SARIF upload failed; see the workflow logs."
+          else:
+              conclusion = overall_conclusion
+              summary = overall_summary
+
+          title = (
+              "linter-service completed"
+              if conclusion == "success"
+              else "linter-service found issues"
+          )
+
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          with output_path.open("a", encoding="utf-8") as fh:
+              fh.write(f"conclusion={conclusion}\n")
+              fh.write(f"summary={summary}\n")
+              fh.write(f"title={title}\n")
+          PY
+
       - name: Finalize processing check run
         if: ${{ always() }}
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
-          CHECK_RUN_CONCLUSION: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_conclusion || 'failure' }}
+          CHECK_RUN_CONCLUSION: ${{ steps.prepare_final_summary.outputs.conclusion || 'failure' }}
           CHECK_RUN_EXTERNAL_ID: ${{ steps.decode_repository_context.outputs.processing-check-external-id }}
           CHECK_RUN_HEAD_SHA: ${{ steps.decode_repository_context.outputs.source-head-sha }}
           CHECK_RUN_NAME: ${{ steps.decode_repository_context.outputs.processing-check-name }}
-          CHECK_RUN_OUTPUT_SUMMARY: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_summary || 'The linter-service workflow failed to generate a combined report.' }}
-          CHECK_RUN_OUTPUT_TITLE: ${{ (steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_conclusion || 'failure') == 'success' && format('{0} completed', steps.decode_repository_context.outputs.processing-check-name) || format('{0} found issues', steps.decode_repository_context.outputs.processing-check-name) }}
+          CHECK_RUN_OUTPUT_SUMMARY: ${{ steps.prepare_final_summary.outputs.summary || 'The linter-service workflow failed to generate a combined report.' }}
+          CHECK_RUN_OUTPUT_TITLE: ${{ steps.prepare_final_summary.outputs.title || 'linter-service found issues' }}
           CHECK_RUN_OWNER: ${{ steps.decode_repository_context.outputs.source-owner }}
           CHECK_RUN_REPO: ${{ steps.decode_repository_context.outputs.source-repo }}
           CHECK_RUN_STATUS: completed
           LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
-          OVERALL_CONCLUSION: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_conclusion || 'failure' }}
-          OVERALL_SUMMARY: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_summary || 'The linter-service workflow failed to generate a combined report.' }}
+          OVERALL_CONCLUSION: ${{ steps.prepare_final_summary.outputs.conclusion || 'failure' }}
+          OVERALL_SUMMARY: ${{ steps.prepare_final_summary.outputs.summary || 'The linter-service workflow failed to generate a combined report.' }}
           PROCESSING_CHECK_EXTERNAL_ID: ${{ steps.decode_repository_context.outputs.processing-check-external-id }}
           PROCESSING_CHECK_NAME: ${{ steps.decode_repository_context.outputs.processing-check-name }}
           SOURCE_HEAD_SHA: ${{ steps.decode_repository_context.outputs.source-head-sha }}
@@ -731,9 +830,9 @@ jobs:
             await upsertCheckRun({ github, env: process.env });
 
       - name: Fail workflow when lint reports issues
-        if: ${{ steps.prepare_report.outputs.overall_conclusion != 'success' }}
+        if: ${{ steps.prepare_final_summary.outputs.conclusion != 'success' }}
         run: |
-          echo "One or more linters reported issues." >&2
+          echo "${{ steps.prepare_final_summary.outputs.summary }}" >&2
           exit 1
 
   no-linters-needed:

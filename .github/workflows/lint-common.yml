@@ -182,6 +182,20 @@ jobs:
         run: |
           node "$LINTER_SERVICE_PATH/.github/scripts/render-linter-report.js"
 
+      - name: Prepare linter SARIF
+        id: prepare_sarif
+        if: ${{ always() }}
+        env:
+          INSTALL_TOOL_OUTCOME: ${{ steps.install_tool.outcome }}
+          LINTER_NAME: ${{ inputs.linter-name }}
+          OUTPUT_PATH: ${{ runner.temp }}/linter-sarif-${{ inputs.linter-name }}.sarif
+          RESULT_PATH: ${{ runner.temp }}/linter-result.json
+          RUN_LINTER_OUTCOME: ${{ steps.run_linter.outcome }}
+          SELECTED_FILES_PATH: ${{ runner.temp }}/selected-files.txt
+          SELECT_FILES_OUTCOME: ${{ steps.select_files.outcome }}
+        run: |
+          node "$LINTER_SERVICE_PATH/.github/scripts/render-linter-sarif.js"
+
       - name: Encrypt linter summary artifact
         id: encrypt_summary
         if: ${{ always() }}
@@ -200,5 +214,29 @@ jobs:
         with:
           name: linter-summary-${{ inputs.linter-name }}
           path: ${{ runner.temp }}/linter-summary-${{ inputs.linter-name }}.json.enc
+          if-no-files-found: warn
+          retention-days: 1
+
+      - name: Encrypt linter SARIF artifact
+        id: encrypt_sarif
+        if: ${{ always() }}
+        run: |
+          input_path="$RUNNER_TEMP/linter-sarif-$LINTER_NAME.sarif"
+          if [ ! -f "$input_path" ]; then
+            exit 0
+          fi
+          output_path="$RUNNER_TEMP/linter-sarif-$LINTER_NAME.sarif.enc"
+          bash "$LINTER_SERVICE_PATH/.github/scripts/secure-artifact.sh" \
+            encrypt \
+            "$input_path" \
+            "$output_path"
+          rm -f "$input_path"
+
+      - name: Upload linter SARIF artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linter-sarif-${{ inputs.linter-name }}
+          path: ${{ runner.temp }}/linter-sarif-${{ inputs.linter-name }}.sarif.enc
           if-no-files-found: warn
           retention-days: 1
