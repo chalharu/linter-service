@@ -12,8 +12,8 @@ const { runFromEnv } = require("./render-linter-sarif.js");
 const configPath = path.join(__dirname, "linters/config.json");
 const details = "Diff in src/lib.rs at line 1:";
 
-test("emits SARIF for cargo-fmt diagnostics", () => {
-	const context = makeTempRepo("render-linter-sarif-cargo-fmt-");
+test("emits SARIF for rustfmt diagnostics", () => {
+	const context = makeTempRepo("render-linter-sarif-rustfmt-");
 
 	writeFile(
 		path.join(context.repoDir, "Cargo.toml"),
@@ -36,8 +36,8 @@ test("emits SARIF for cargo-fmt diagnostics", () => {
 		const report = runFromEnv({
 			INSTALL_TOOL_OUTCOME: "success",
 			LINTER_CONFIG_PATH: configPath,
-			LINTER_NAME: "cargo-fmt",
-			OUTPUT_PATH: path.join(context.runnerTemp, "cargo-fmt.sarif"),
+			LINTER_NAME: "rustfmt",
+			OUTPUT_PATH: path.join(context.runnerTemp, "rustfmt.sarif"),
 			RESULT_PATH: path.join(context.runnerTemp, "linter-result.json"),
 			RUNNER_TEMP: context.runnerTemp,
 			RUN_LINTER_OUTCOME: "success",

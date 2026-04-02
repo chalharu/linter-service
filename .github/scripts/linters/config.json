@@ -109,13 +109,13 @@
       }
     },
     {
-      "name": "cargo-fmt",
-      "heading": "### cargo-fmt",
-      "no_files": "No matching Rust files were selected for `cargo-fmt`.",
+      "name": "rustfmt",
+      "heading": "### rustfmt",
+      "no_files": "No matching Rust files were selected for `rustfmt`.",
       "success": "✅ No issues were reported for the selected Rust file target(s).",
       "failure": "❌ Issues were reported for the selected Rust file target(s).",
-      "infra_failure": "❌ The `cargo-fmt` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "cargo-fmt did not produce diagnostic output before the job failed.",
+      "infra_failure": "❌ The `rustfmt` workflow failed before producing a detailed report. See the workflow logs.",
+      "details_fallback": "rustfmt did not produce diagnostic output before the job failed.",
       "sarif": {
         "enabled": true
       }

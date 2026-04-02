@@ -6,7 +6,7 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../linter-library.sh
 source "$script_dir/../linter-library.sh"
 
-cargo_fmt_prepare_env() {
+rustfmt_prepare_env() {
   : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
 
   export CARGO_HOME="${CARGO_HOME:-$RUNNER_TEMP/cargo}"
@@ -14,7 +14,7 @@ cargo_fmt_prepare_env() {
   export PATH="$CARGO_HOME/bin:$PATH"
 }
 
-cargo_fmt_persist_env() {
+rustfmt_persist_env() {
   if [ -n "${GITHUB_ENV:-}" ]; then
     printf 'CARGO_HOME=%s\n' "$CARGO_HOME" >> "$GITHUB_ENV"
     printf 'RUSTUP_HOME=%s\n' "$RUSTUP_HOME" >> "$GITHUB_ENV"
@@ -34,7 +34,7 @@ EOF
     ;;
   install)
     : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
-    cargo_fmt_prepare_env
+    rustfmt_prepare_env
 
     if command -v rustfmt >/dev/null 2>&1 && rustfmt --version >/dev/null 2>&1; then
       exit 0
@@ -58,15 +58,15 @@ EOF
       --no-modify-path \
       >/dev/null
 
-    cargo_fmt_persist_env
+    rustfmt_persist_env
     linter_lib::add_path "$CARGO_HOME/bin"
     ;;
   run)
     : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
-    cargo_fmt_prepare_env
+    rustfmt_prepare_env
     output_file="$RUNNER_TEMP/linter-output.txt"
 
-    run_cargo_fmt() {
+    run_rustfmt() {
       local failure=0
       local current_file
       local -a unique_files=()
@@ -92,7 +92,7 @@ EOF
       return "$failure"
     }
 
-    linter_lib::run_and_emit_json "$output_file" run_cargo_fmt "$@"
+    linter_lib::run_and_emit_json "$output_file" run_rustfmt "$@"
     ;;
   *)
     echo "usage: $0 {patterns|install|run}" >&2

@@ -56,8 +56,8 @@ test("lists checked file paths in a successful non-cargo linter report", () => {
 	}
 });
 
-test("treats cargo-fmt as selected Rust files instead of Cargo projects", () => {
-	const context = makeTempRepo("render-linter-report-cargo-fmt-files-");
+test("treats rustfmt as selected Rust files instead of Cargo projects", () => {
+	const context = makeTempRepo("render-linter-report-rustfmt-files-");
 
 	populateCargoRepo(context.repoDir);
 
@@ -76,7 +76,7 @@ test("treats cargo-fmt as selected Rust files instead of Cargo projects", () => 
 		const report = runFromEnv(
 			createReportEnv(context, {
 				EXIT_CODE: "0",
-				LINTER_NAME: "cargo-fmt",
+				LINTER_NAME: "rustfmt",
 			}),
 		);
 

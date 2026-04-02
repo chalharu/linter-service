@@ -11,7 +11,7 @@ const {
 
 const { execFileSync } = require("node:child_process");
 
-const scriptPath = path.join(__dirname, "cargo-fmt.sh");
+const scriptPath = path.join(__dirname, "rustfmt.sh");
 
 function createRustfmtStub(binDir) {
 	writeExecutable(
@@ -46,7 +46,7 @@ done
 	);
 }
 
-function runCargoFmt(context, args, extraEnv = {}) {
+function runRustfmtLinter(context, args, extraEnv = {}) {
 	return JSON.parse(
 		execFileSync("bash", [scriptPath, "run", ...args], {
 			cwd: context.repoDir,
@@ -61,8 +61,8 @@ function runCargoFmt(context, args, extraEnv = {}) {
 	);
 }
 
-test("cargo-fmt.sh runs rustfmt directly for selected Rust files", () => {
-	const context = makeTempRepo("cargo-fmt-direct-files-");
+test("rustfmt.sh runs rustfmt directly for selected Rust files", () => {
+	const context = makeTempRepo("rustfmt-direct-files-");
 	const rustfmtArgsLog = path.join(context.tempDir, "rustfmt-args.log");
 
 	createRustfmtStub(context.binDir);
@@ -74,7 +74,7 @@ test("cargo-fmt.sh runs rustfmt directly for selected Rust files", () => {
 	);
 
 	try {
-		const result = runCargoFmt(
+		const result = runRustfmtLinter(
 			context,
 			["src/lib.rs", "src/main.rs", "crates/member/src/lib.rs"],
 			{
@@ -99,15 +99,15 @@ test("cargo-fmt.sh runs rustfmt directly for selected Rust files", () => {
 	}
 });
 
-test("cargo-fmt.sh formats standalone Rust files without Cargo.toml discovery", () => {
-	const context = makeTempRepo("cargo-fmt-standalone-file-");
+test("rustfmt.sh formats standalone Rust files without Cargo.toml discovery", () => {
+	const context = makeTempRepo("rustfmt-standalone-file-");
 	const rustfmtArgsLog = path.join(context.tempDir, "rustfmt-args.log");
 
 	createRustfmtStub(context.binDir);
 	writeFile(path.join(context.repoDir, "standalone.rs"), "fn main() {}\n");
 
 	try {
-		const result = runCargoFmt(context, ["standalone.rs"], {
+		const result = runRustfmtLinter(context, ["standalone.rs"], {
 			RUSTFMT_ARGS_LOG: rustfmtArgsLog,
 		});
 
@@ -123,8 +123,8 @@ test("cargo-fmt.sh formats standalone Rust files without Cargo.toml discovery", 
 	}
 });
 
-test("cargo-fmt.sh handles absolute Rust file paths directly", () => {
-	const context = makeTempRepo("cargo-fmt-absolute-file-");
+test("rustfmt.sh handles absolute Rust file paths directly", () => {
+	const context = makeTempRepo("rustfmt-absolute-file-");
 	const rustfmtArgsLog = path.join(context.tempDir, "rustfmt-args.log");
 	const standalonePath = path.join(context.tempDir, "standalone.rs");
 
@@ -132,7 +132,7 @@ test("cargo-fmt.sh handles absolute Rust file paths directly", () => {
 	writeFile(standalonePath, "fn main() {}\n");
 
 	try {
-		const result = runCargoFmt(context, [standalonePath], {
+		const result = runRustfmtLinter(context, [standalonePath], {
 			RUSTFMT_ARGS_LOG: rustfmtArgsLog,
 		});
 
@@ -151,8 +151,8 @@ test("cargo-fmt.sh handles absolute Rust file paths directly", () => {
 	}
 });
 
-test("cargo-fmt.sh continues checking later Rust files after one failure", () => {
-	const context = makeTempRepo("cargo-fmt-continue-files-");
+test("rustfmt.sh continues checking later Rust files after one failure", () => {
+	const context = makeTempRepo("rustfmt-continue-files-");
 	const rustfmtArgsLog = path.join(context.tempDir, "rustfmt-args.log");
 
 	createRustfmtStub(context.binDir);
@@ -163,7 +163,7 @@ test("cargo-fmt.sh continues checking later Rust files after one failure", () =>
 	);
 
 	try {
-		const result = runCargoFmt(
+		const result = runRustfmtLinter(
 			context,
 			["src/lib.rs", "crates/member/src/lib.rs"],
 			{
@@ -187,8 +187,8 @@ test("cargo-fmt.sh continues checking later Rust files after one failure", () =>
 	}
 });
 
-test("cargo-fmt.sh skips duplicate Rust file paths", () => {
-	const context = makeTempRepo("cargo-fmt-deduplicate-files-");
+test("rustfmt.sh skips duplicate Rust file paths", () => {
+	const context = makeTempRepo("rustfmt-deduplicate-files-");
 	const rustfmtArgsLog = path.join(context.tempDir, "rustfmt-args.log");
 
 	createRustfmtStub(context.binDir);
@@ -199,7 +199,7 @@ test("cargo-fmt.sh skips duplicate Rust file paths", () => {
 	);
 
 	try {
-		const result = runCargoFmt(
+		const result = runRustfmtLinter(
 			context,
 			["src/lib.rs", "src/lib.rs", "crates/member/src/lib.rs"],
 			{
