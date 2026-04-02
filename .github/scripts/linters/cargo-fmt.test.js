@@ -68,11 +68,16 @@ NODE
   exit 0
 fi
 manifest=""
+all_flag=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --manifest-path)
       manifest="$2"
       shift 2
+      ;;
+    --all)
+      all_flag=1
+      shift
       ;;
     *)
       shift
@@ -80,6 +85,13 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 printf '%s\\n' "$manifest" >> "$CARGO_MANIFEST_LOG"
+if [ -f "$manifest" ] && grep -Eq '^\\[workspace\\]' "$manifest" && ! grep -Eq '^\\[package\\]' "$manifest"; then
+  if [ "$all_flag" -ne 1 ]; then
+    printf 'Failed to find targets\\n' >&2
+    printf 'This utility formats all bin and lib files of the current crate using rustfmt.\\n' >&2
+    exit 1
+  fi
+fi
 printf 'checked %s\\n' "$manifest"
 if [ -n "\${FAIL_MANIFEST:-}" ] && [ "$manifest" = "$FAIL_MANIFEST" ]; then
   printf 'unformatted %s\\n' "$manifest" >&2
@@ -202,6 +214,66 @@ edition = "2021"
 			/cargo fmt --check --manifest-path Cargo\.toml/,
 		);
 		assert.doesNotMatch(result.details, /crates\/member\/Cargo\.toml/);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("cargo-fmt.sh uses --all for virtual workspace roots", () => {
+	const context = makeTempRepo("cargo-fmt-virtual-workspace-");
+	const cargoManifestLog = path.join(context.tempDir, "cargo-manifests.log");
+
+	createCargoStub(context.binDir);
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		`[workspace]
+members = ["crates/member"]
+resolver = "2"
+`,
+	);
+	writeFile(
+		path.join(context.repoDir, "crates/member/Cargo.toml"),
+		`[package]
+name = "member"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+	writeFile(
+		path.join(context.repoDir, "crates/member/src/lib.rs"),
+		"pub fn member_lib() {}\n",
+	);
+
+	try {
+		const output = execFileSync(
+			"bash",
+			[scriptPath, "run", "crates/member/src/lib.rs"],
+			{
+				cwd: context.repoDir,
+				encoding: "utf8",
+				env: {
+					...process.env,
+					CARGO_MANIFEST_LOG: cargoManifestLog,
+					PATH: `${context.binDir}:${process.env.PATH}`,
+					RUNNER_TEMP: context.runnerTemp,
+				},
+			},
+		);
+		const result = JSON.parse(output);
+
+		assert.equal(result.exit_code, 0);
+		assert.deepEqual(
+			fs.readFileSync(cargoManifestLog, "utf8").trim().split("\n"),
+			["Cargo.toml"],
+		);
+		assert.match(
+			result.details,
+			/cargo fmt --check --all --manifest-path Cargo\.toml/,
+		);
+		assert.doesNotMatch(
+			result.details,
+			/Failed to find targets|This utility formats all bin and lib files/,
+		);
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}
