@@ -52,6 +52,11 @@ test("emits SARIF for shellcheck diagnostics", () => {
 				.startLine,
 			3,
 		);
+		assert.match(
+			report.sarif.runs[0].results[0].message.text,
+			/Double quote to prevent globbing and word splitting/,
+		);
+		assert.equal(report.sarif.runs[0].results[0].ruleId, "SC2086");
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}

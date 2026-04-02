@@ -396,13 +396,18 @@ function parseShellcheckStyleDiagnostics({
 		const blockLines = lines
 			.slice(index + 1, index + 6)
 			.map((line) => line.trim());
+		const diagnosticLine = blockLines.find((line) =>
+			RULE_ID_PATTERN.test(line),
+		);
 		const message =
+			diagnosticLine?.replace(/^[\^~-]+\s*/u, "").trim() ||
 			blockLines.find(
 				(line) =>
 					line.length > 0 &&
 					!/^[\^~-]+$/u.test(line) &&
-					!/^For more information:/u.test(line),
-			) || summarizeDetails(details, linterName);
+					!line.startsWith("For more information:"),
+			) ||
+			summarizeDetails(details, linterName);
 		const ruleId =
 			extractRuleId(blockLines.join(" "), linterName) ||
 			`${linterName}/diagnostic`;
@@ -598,7 +603,7 @@ function summarizeDetails(details, linterName) {
 			line.startsWith("-->") ||
 			line.startsWith("|") ||
 			/^[\^~-]+$/u.test(line) ||
-			/^For more information:/u.test(line)
+			line.startsWith("For more information:")
 		) {
 			continue;
 		}
