@@ -93,7 +93,26 @@ if [ "\${1-}" = "-version" ]; then
   echo "yamlfmt version 0.0.0"
   exit 0
 fi
-printf '%s\\n' "$*" >> "$YAMLFMT_ARGS_LOG"
+lint_mode=0
+if [ "\${1-}" = "-lint" ]; then
+  lint_mode=1
+fi
+if [ "$lint_mode" -eq 1 ]; then
+  printf '%s\\n' "$*" >> "$YAMLFMT_ARGS_LOG"
+fi
+if [ "$lint_mode" -eq 0 ]; then
+  for arg in "$@"; do
+    if [ -f "$arg" ]; then
+      node - "$arg" <<'NODE'
+const fs = require("node:fs");
+const filePath = process.argv[2];
+const content = fs.readFileSync(filePath, "utf8");
+fs.writeFileSync(filePath, content.replace(/:  /g, ": "), "utf8");
+NODE
+    fi
+  done
+  exit 0
+fi
 printf 'linted %s\\n' "$*"
 for arg in "$@"; do
   if [ -n "\${FAIL_TARGET:-}" ] && [ "$arg" = "$FAIL_TARGET" ]; then
@@ -247,7 +266,20 @@ test("yamlfmt.sh reports yamlfmt failures for selected files", () => {
 		"formatter:\n  type: basic\n",
 	);
 	writeFile(path.join(context.repoDir, "valid.yaml"), "foo: bar\n");
-	writeFile(path.join(context.repoDir, "needs-format.yml"), "bar: baz\n");
+	writeFile(
+		path.join(context.repoDir, "needs-format.yml"),
+		[
+			"service:",
+			"  name: demo",
+			"  metadata:",
+			"    owner: platform",
+			"    labels:",
+			"      env: dev",
+			"      team:  core",
+			"  enabled: true",
+			"",
+		].join("\n"),
+	);
 
 	try {
 		const output = execFileSync(
@@ -268,6 +300,10 @@ test("yamlfmt.sh reports yamlfmt failures for selected files", () => {
 		assert.equal(
 			fs.readFileSync(argsLog, "utf8").trim(),
 			"-lint -conf .yamlfmt.yml valid.yaml needs-format.yml",
+		);
+		assert.match(
+			result.details,
+			/needs-format\.yml:7: yamlfmt would reformat this file/,
 		);
 		assert.match(result.details, /issue in needs-format\.yml/);
 	} finally {
