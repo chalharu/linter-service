@@ -210,7 +210,9 @@ EOF
     : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
     cargo_deny_prepare_env
     output_file="$RUNNER_TEMP/linter-output.txt"
+    result_json_file="$RUNNER_TEMP/cargo-deny-result.json"
     manifest_list_file="$RUNNER_TEMP/cargo-deny-manifests.txt"
+    run_entries_dir="$RUNNER_TEMP/cargo-deny-runs"
     manifests=()
     relevant_dirs=()
     unsupported_config=""
@@ -246,41 +248,70 @@ EOF
 
     run_cargo_deny() {
       local failure=0
-      local current_manifest config_path
+      local current_manifest config_path command_line run_dir run_exit
+      local run_index=0
 
       cd "$source_root"
       export HOME="$CARGO_HOME"
+      rm -rf "$run_entries_dir"
+      mkdir -p "$run_entries_dir"
 
       for current_manifest in "${manifests[@]}"; do
+        run_index=$((run_index + 1))
+        run_dir=$(printf '%s/%04d' "$run_entries_dir" "$run_index")
+        mkdir -p "$run_dir"
+        config_path=""
+
         if config_path=$(cargo_deny_find_config "$current_manifest"); then
-          printf '==> cargo-deny --color never --log-level warn --all-features --manifest-path %s check --config %s\n' "$current_manifest" "$config_path"
-          if ! cargo-deny \
+          command_line="cargo-deny --format json --color never --log-level warn --all-features --manifest-path $current_manifest check --audit-compatible-output --config $config_path"
+          set +e
+          cargo-deny \
+            --format json \
             --color never \
             --log-level warn \
             --all-features \
             --manifest-path "$current_manifest" \
             check \
-            --config "$config_path"; then
-            failure=1
-          fi
+            --audit-compatible-output \
+            --config "$config_path" >"$run_dir/stdout.txt" 2>"$run_dir/stderr.txt"
+          run_exit=$?
+          set -e
         else
-          printf '==> cargo-deny --color never --log-level warn --all-features --manifest-path %s check\n' "$current_manifest"
-          if ! cargo-deny \
+          command_line="cargo-deny --format json --color never --log-level warn --all-features --manifest-path $current_manifest check --audit-compatible-output"
+          set +e
+          cargo-deny \
+            --format json \
             --color never \
             --log-level warn \
             --all-features \
             --manifest-path "$current_manifest" \
-            check; then
-            failure=1
-          fi
+            check \
+            --audit-compatible-output >"$run_dir/stdout.txt" 2>"$run_dir/stderr.txt"
+          run_exit=$?
+          set -e
         fi
-        echo
+
+        printf '%s\n' "$command_line" > "$run_dir/command.txt"
+        printf '%s\n' "$current_manifest" > "$run_dir/manifest_path.txt"
+        printf '%s\n' "$config_path" > "$run_dir/config_path.txt"
+        printf '%s\n' "$run_exit" > "$run_dir/exit_code.txt"
+
+        if [ "$run_exit" -ne 0 ]; then
+          failure=1
+        fi
       done
 
       return "$failure"
     }
 
-    linter_lib::run_and_emit_json "$output_file" run_cargo_deny
+    if run_cargo_deny; then
+      exit_code=0
+    else
+      exit_code=1
+    fi
+
+    node "$script_dir/../cargo-deny-result.js" "$run_entries_dir" "$exit_code" > "$result_json_file"
+    cat "$result_json_file"
     ;;
   *)
     echo "usage: $0 {patterns|install|run}" >&2

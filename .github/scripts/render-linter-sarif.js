@@ -2,6 +2,10 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
+const {
+	isCargoDenyAdvisoryLikeDiagnostic,
+	isCargoDenyConfigLikeDiagnostic,
+} = require("./cargo-deny-result.js");
 const { collectProjectTargets } = require("./render-linter-report.js");
 
 const DETAILS_LIMIT = 8000;
@@ -76,6 +80,10 @@ function renderSarif({
 		result,
 		linterConfig.details_fallback,
 	);
+	const cargoDenyRuns =
+		linterName === "cargo-deny" && Array.isArray(result?.cargo_deny_runs)
+			? result.cargo_deny_runs
+			: [];
 	const reportedPathRoots = buildReportedPathRoots({
 		linterName,
 		runnerTemp,
@@ -86,6 +94,7 @@ function renderSarif({
 			? []
 			: buildSarifResults({
 					defaultLevel: sarifConfig.default_level || "warning",
+					cargoDenyRuns,
 					details,
 					linterName,
 					reportedPathRoots,
@@ -227,6 +236,7 @@ function buildReportedPathRoots({
 }
 
 function buildSarifResults({
+	cargoDenyRuns,
 	defaultLevel,
 	details,
 	linterName,
@@ -234,6 +244,19 @@ function buildSarifResults({
 	sourceRepositoryPath,
 	targetPaths,
 }) {
+	const structuredCargoDenyResults = parseCargoDenyStructuredResults({
+		cargoDenyRuns,
+		defaultLevel,
+		linterName,
+		reportedPathRoots,
+		sourceRepositoryPath,
+		targetPaths,
+	});
+
+	if (structuredCargoDenyResults.length > 0) {
+		return structuredCargoDenyResults;
+	}
+
 	const preciseResults = dedupeResults([
 		...parsePathDiagnostics({
 			defaultLevel,
@@ -281,6 +304,254 @@ function buildSarifResults({
 		sourceRepositoryPath,
 		targetPaths,
 	});
+}
+
+function parseCargoDenyStructuredResults({
+	cargoDenyRuns,
+	defaultLevel,
+	linterName,
+	reportedPathRoots,
+	sourceRepositoryPath,
+	targetPaths,
+}) {
+	if (linterName !== "cargo-deny" || cargoDenyRuns.length === 0) {
+		return [];
+	}
+
+	const results = [];
+
+	for (const run of cargoDenyRuns) {
+		const advisoryResults = parseCargoDenyAuditReportResults({
+			defaultLevel,
+			linterName,
+			reportedPathRoots,
+			run,
+			sourceRepositoryPath,
+			targetPaths,
+		});
+		const diagnosticResults = parseCargoDenyJsonDiagnostics({
+			defaultLevel,
+			linterName,
+			reportedPathRoots,
+			run,
+			skipAdvisories: advisoryResults.length > 0,
+			sourceRepositoryPath,
+			targetPaths,
+		});
+
+		results.push(...advisoryResults, ...diagnosticResults);
+	}
+
+	return dedupeResults(results);
+}
+
+function parseCargoDenyAuditReportResults({
+	defaultLevel,
+	linterName,
+	reportedPathRoots,
+	run,
+	sourceRepositoryPath,
+	targetPaths,
+}) {
+	const results = [];
+	const auditReports = Array.isArray(run?.audit_reports)
+		? run.audit_reports
+		: [];
+	const manifestPath = normalizeCargoDenyStructuredPath(
+		sourceRepositoryPath,
+		run?.manifest_path,
+		targetPaths,
+		reportedPathRoots,
+	);
+	const defaultFilePath =
+		manifestPath ||
+		normalizeCargoDenyStructuredPath(
+			sourceRepositoryPath,
+			run?.config_path,
+			targetPaths,
+			reportedPathRoots,
+		);
+
+	for (const report of auditReports) {
+		for (const vulnerability of Array.isArray(report?.vulnerabilities)
+			? report.vulnerabilities
+			: []) {
+			const advisory = vulnerability?.advisory || {};
+			const packageInfo = vulnerability?.package || {};
+			const packageLabel = [packageInfo.name, packageInfo.version]
+				.filter(Boolean)
+				.join(" ");
+			const title = advisory.title || advisory.id || "cargo-deny advisory";
+
+			results.push(
+				createResult({
+					column: defaultFilePath ? 1 : null,
+					defaultLevel,
+					filePath: defaultFilePath,
+					line: defaultFilePath ? 1 : null,
+					linterName,
+					message: packageLabel ? `${packageLabel}: ${title}` : title,
+					ruleId: advisory.id || "cargo-deny/advisory",
+				}),
+			);
+		}
+
+		for (const [kind, entries] of Object.entries(
+			report && typeof report.warnings === "object" && report.warnings
+				? report.warnings
+				: {},
+		)) {
+			for (const warning of Array.isArray(entries) ? entries : []) {
+				const advisory = warning?.advisory || {};
+				const packageInfo = warning?.package || {};
+				const packageLabel = [packageInfo.name, packageInfo.version]
+					.filter(Boolean)
+					.join(" ");
+				const title = advisory.title || advisory.id || kind;
+
+				results.push(
+					createResult({
+						column: defaultFilePath ? 1 : null,
+						defaultLevel,
+						filePath: defaultFilePath,
+						line: defaultFilePath ? 1 : null,
+						linterName,
+						message: packageLabel ? `${packageLabel}: ${title}` : title,
+						ruleId: advisory.id || `cargo-deny/${kind}`,
+					}),
+				);
+			}
+		}
+	}
+
+	return results;
+}
+
+function parseCargoDenyJsonDiagnostics({
+	defaultLevel,
+	linterName,
+	reportedPathRoots,
+	run,
+	skipAdvisories,
+	sourceRepositoryPath,
+	targetPaths,
+}) {
+	const results = [];
+	const diagnostics = Array.isArray(run?.diagnostics) ? run.diagnostics : [];
+	const manifestPath = normalizeCargoDenyStructuredPath(
+		sourceRepositoryPath,
+		run?.manifest_path,
+		targetPaths,
+		reportedPathRoots,
+	);
+	const configPath = normalizeCargoDenyStructuredPath(
+		sourceRepositoryPath,
+		run?.config_path,
+		targetPaths,
+		reportedPathRoots,
+	);
+
+	for (const diagnostic of diagnostics) {
+		if (skipAdvisories && isCargoDenyAdvisoryLikeDiagnostic(diagnostic)) {
+			continue;
+		}
+
+		const fields = diagnostic?.fields || {};
+		const label = Array.isArray(fields.labels) ? fields.labels[0] : null;
+		const filePath =
+			configPath && isCargoDenyConfigLikeDiagnostic(diagnostic)
+				? configPath
+				: manifestPath || configPath;
+		const useLabelRegion = filePath === configPath && label;
+		const line = filePath
+			? useLabelRegion
+				? parseInteger(label?.line)
+				: 1
+			: null;
+		const column = filePath
+			? useLabelRegion
+				? parseInteger(label?.column)
+				: 1
+			: null;
+
+		results.push(
+			createResult({
+				column,
+				defaultLevel:
+					typeof fields.severity === "string"
+						? toSarifLevel(fields.severity, defaultLevel)
+						: defaultLevel,
+				filePath,
+				line,
+				linterName,
+				message:
+					typeof fields.message === "string" && fields.message.length > 0
+						? fields.message
+						: summarizeCargoDenyDiagnostic(diagnostic),
+				ruleId: resolveCargoDenyRuleId(fields, linterName),
+			}),
+		);
+	}
+
+	return results;
+}
+
+function normalizeCargoDenyStructuredPath(
+	sourceRepositoryPath,
+	reportedPath,
+	targetPaths,
+	reportedPathRoots,
+) {
+	if (typeof reportedPath !== "string" || reportedPath.trim().length === 0) {
+		return null;
+	}
+
+	return normalizeReportedPath(
+		sourceRepositoryPath,
+		reportedPath,
+		targetPaths,
+		reportedPathRoots,
+	);
+}
+
+function resolveCargoDenyRuleId(fields, linterName) {
+	if (
+		typeof fields?.advisory?.id === "string" &&
+		fields.advisory.id.length > 0
+	) {
+		return fields.advisory.id;
+	}
+
+	if (typeof fields?.code === "string" && fields.code.length > 0) {
+		return `cargo-deny/${fields.code}`;
+	}
+
+	if (Array.isArray(fields?.notes)) {
+		for (const note of fields.notes) {
+			const match = /^ID:\s*(.+)$/u.exec(String(note || "").trim());
+
+			if (match?.[1]) {
+				return match[1];
+			}
+		}
+	}
+
+	return `${linterName}/diagnostic`;
+}
+
+function summarizeCargoDenyDiagnostic(diagnostic) {
+	const fields = diagnostic?.fields || {};
+	const label = Array.isArray(fields.labels) ? fields.labels[0] : null;
+
+	if (typeof label?.message === "string" && label.message.length > 0) {
+		return label.message;
+	}
+
+	if (typeof label?.span === "string" && label.span.length > 0) {
+		return label.span;
+	}
+
+	return "cargo-deny reported an issue";
 }
 
 function parsePathDiagnostics({
@@ -353,16 +624,23 @@ function parseRustStyleDiagnostics({
 	targetPaths,
 }) {
 	let currentMessage = "";
+	let currentRuleId = null;
+	let emittedForCurrentDiagnostic = false;
 	const results = [];
 
 	for (const rawLine of details.split(/\r?\n/u)) {
 		const line = rawLine.trim();
 
-		if (/^(error|warning|note)(\[[^\]]+\])?:/iu.test(line)) {
-			currentMessage = line.replace(
-				/^(error|warning|note)(\[[^\]]+\])?:\s*/iu,
-				"",
-			);
+		const header = parseDiagnosticHeader(line);
+
+		if (header) {
+			if (header.kind === "note") {
+				continue;
+			}
+
+			currentMessage = header.message;
+			currentRuleId = header.ruleId;
+			emittedForCurrentDiagnostic = false;
 			continue;
 		}
 
@@ -370,7 +648,7 @@ function parseRustStyleDiagnostics({
 			rawLine,
 		);
 
-		if (!match?.groups) {
+		if (!match?.groups || emittedForCurrentDiagnostic) {
 			continue;
 		}
 
@@ -385,6 +663,7 @@ function parseRustStyleDiagnostics({
 			continue;
 		}
 
+		emittedForCurrentDiagnostic = true;
 		results.push(
 			createResult({
 				column: parseInteger(match.groups.column),
@@ -393,9 +672,11 @@ function parseRustStyleDiagnostics({
 				line: parseInteger(match.groups.line),
 				linterName,
 				message: currentMessage || summarizeDetails(details, linterName),
-				ruleId:
-					extractRuleId(currentMessage, linterName) ||
-					`${linterName}/diagnostic`,
+				ruleId: resolveDiagnosticRuleId(
+					currentRuleId,
+					currentMessage,
+					linterName,
+				),
 			}),
 		);
 	}
@@ -412,16 +693,23 @@ function parseSnippetStyleDiagnostics({
 	targetPaths,
 }) {
 	let currentMessage = "";
+	let currentRuleId = null;
+	let emittedForCurrentDiagnostic = false;
 	const results = [];
 
 	for (const rawLine of details.split(/\r?\n/u)) {
 		const line = rawLine.trim();
 
-		if (/^(error|warning|note)(\[[^\]]+\])?:/iu.test(line)) {
-			currentMessage = line.replace(
-				/^(error|warning|note)(\[[^\]]+\])?:\s*/iu,
-				"",
-			);
+		const header = parseDiagnosticHeader(line);
+
+		if (header) {
+			if (header.kind === "note") {
+				continue;
+			}
+
+			currentMessage = header.message;
+			currentRuleId = header.ruleId;
+			emittedForCurrentDiagnostic = false;
 			continue;
 		}
 
@@ -430,7 +718,7 @@ function parseSnippetStyleDiagnostics({
 				rawLine,
 			);
 
-		if (!match?.groups) {
+		if (!match?.groups || emittedForCurrentDiagnostic) {
 			continue;
 		}
 
@@ -445,6 +733,7 @@ function parseSnippetStyleDiagnostics({
 			continue;
 		}
 
+		emittedForCurrentDiagnostic = true;
 		results.push(
 			createResult({
 				column: parseInteger(match.groups.column),
@@ -453,9 +742,11 @@ function parseSnippetStyleDiagnostics({
 				line: parseInteger(match.groups.line),
 				linterName,
 				message: currentMessage || summarizeDetails(details, linterName),
-				ruleId:
-					extractRuleId(currentMessage, linterName) ||
-					`${linterName}/diagnostic`,
+				ruleId: resolveDiagnosticRuleId(
+					currentRuleId,
+					currentMessage,
+					linterName,
+				),
 			}),
 		);
 	}
@@ -682,7 +973,28 @@ function buildRuleDescriptors(results) {
 	}));
 }
 
+function parseDiagnosticHeader(rawLine) {
+	const match =
+		/^(?<kind>error|warning|note)(?:\[(?<ruleId>[^\]]+)\])?:\s*(?<message>.*)$/iu.exec(
+			String(rawLine || "").trim(),
+		);
+
+	if (!match?.groups) {
+		return null;
+	}
+
+	return {
+		kind: match.groups.kind.toLowerCase(),
+		message: match.groups.message.trim(),
+		ruleId: match.groups.ruleId ? match.groups.ruleId.trim() : null,
+	};
+}
+
 function parseInteger(value) {
+	if (typeof value === "number") {
+		return Number.isInteger(value) && value > 0 ? value : null;
+	}
+
 	if (typeof value !== "string" || value.length === 0) {
 		return null;
 	}
@@ -691,9 +1003,24 @@ function parseInteger(value) {
 	return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+function resolveDiagnosticRuleId(headerRuleId, text, linterName) {
+	if (typeof headerRuleId === "string" && headerRuleId.trim().length > 0) {
+		return headerRuleId.trim();
+	}
+
+	return extractRuleId(text, linterName) || `${linterName}/diagnostic`;
+}
+
 function extractRuleId(text, linterName) {
 	if (typeof text !== "string") {
 		return null;
+	}
+
+	const headerMatch =
+		/(?:^|\b)(?:error|warning|note)\[(?<ruleId>[^\]]+)\]:/iu.exec(text);
+
+	if (headerMatch?.groups?.ruleId) {
+		return headerMatch.groups.ruleId.trim();
 	}
 
 	const match = text.match(RULE_ID_PATTERN);

@@ -134,15 +134,25 @@ if [ "\${1-}" = "--version" ]; then
   exit 0
 fi
 manifest=""
+config=""
+audit_mode=0
 args=()
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --manifest-path|--config)
+    --manifest-path|--config|--format)
       if [ "$1" = "--manifest-path" ]; then
         manifest="$2"
       fi
+      if [ "$1" = "--config" ]; then
+        config="$2"
+      fi
       args+=("$1" "$2")
       shift 2
+      ;;
+    --audit-compatible-output)
+      audit_mode=1
+      args+=("$1")
+      shift
       ;;
     *)
       args+=("$1")
@@ -151,11 +161,69 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 printf '%s\\n' "\${args[*]}" >> "$CARGO_DENY_ARGS_LOG"
-printf 'checked %s\\n' "$manifest"
+if [ "$audit_mode" -eq 1 ] && {
+  [ -n "\${AUDIT_REPORT_MANIFEST:-}" ] && [ "$manifest" = "$AUDIT_REPORT_MANIFEST" ] || \
+  [ -n "\${FAIL_MANIFEST:-}" ] && [ "$manifest" = "$FAIL_MANIFEST" ];
+}; then
+  node - "$manifest" <<'NODE'
+const manifest = process.argv[2];
+const packageName =
+  manifest === "Cargo.toml"
+    ? "root"
+    : manifest.slice(0, -"/Cargo.toml".length);
+process.stdout.write(
+  JSON.stringify({
+    settings: {},
+    lockfile: { "dependency-count": 1 },
+    vulnerabilities: [
+      {
+        advisory: {
+          id: "RUSTSEC-2024-0001",
+          title: "issue in " + manifest,
+        },
+        package: {
+          name: packageName,
+          version: "0.1.0",
+        },
+      },
+    ],
+    warnings: {},
+  }),
+);
+process.stdout.write("\\n");
+NODE
+fi
 if [ -n "\${FAIL_MANIFEST:-}" ] && [ "$manifest" = "$FAIL_MANIFEST" ]; then
-  printf 'issue in %s\\n' "$manifest" >&2
+  if [ "$audit_mode" -eq 1 ]; then
+    node - "$manifest" "$config" <<'NODE'
+const [manifest, config] = process.argv.slice(2);
+process.stderr.write(
+  JSON.stringify({
+    type: "diagnostic",
+    fields: {
+      code: "rejected",
+      labels: [
+        {
+          column: 1,
+          line: 1,
+          message: "simulated cargo-deny issue",
+          span: config || manifest,
+        },
+      ],
+      message: "issue in " + manifest,
+      notes: [],
+      severity: "error",
+    },
+  }),
+);
+process.stderr.write("\\n");
+NODE
+  else
+    printf 'issue in %s\\n' "$manifest" >&2
+  fi
   exit 1
 fi
+printf 'checked %s\\n' "$manifest" >&2
 `,
 	);
 }
@@ -276,17 +344,21 @@ edition = "2021"
 		const result = JSON.parse(output);
 
 		assert.equal(result.exit_code, 0);
+		assert.deepEqual(
+			result.cargo_deny_runs.map((run) => run.manifest_path),
+			["Cargo.toml", "crates/member/Cargo.toml"],
+		);
 		assert.deepEqual(fs.readFileSync(argsLog, "utf8").trim().split("\n"), [
-			"--color never --log-level warn --all-features --manifest-path Cargo.toml check --config deny.toml",
-			"--color never --log-level warn --all-features --manifest-path crates/member/Cargo.toml check --config crates/member/deny.toml",
+			"--format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output --config deny.toml",
+			"--format json --color never --log-level warn --all-features --manifest-path crates/member/Cargo.toml check --audit-compatible-output --config crates/member/deny.toml",
 		]);
 		assert.match(
 			result.details,
-			/cargo-deny --color never --log-level warn --all-features --manifest-path Cargo\.toml check --config deny\.toml/,
+			/cargo-deny --format json --color never --log-level warn --all-features --manifest-path Cargo\.toml check --audit-compatible-output --config deny\.toml/,
 		);
 		assert.match(
 			result.details,
-			/cargo-deny --color never --log-level warn --all-features --manifest-path crates\/member\/Cargo\.toml check --config crates\/member\/deny\.toml/,
+			/cargo-deny --format json --color never --log-level warn --all-features --manifest-path crates\/member\/Cargo\.toml check --audit-compatible-output --config crates\/member\/deny\.toml/,
 		);
 	} finally {
 		cleanupTempRepo(context.tempDir);
@@ -322,12 +394,13 @@ edition = "2021"
 		const result = JSON.parse(output);
 
 		assert.equal(result.exit_code, 0);
+		assert.equal(result.cargo_deny_runs.length, 1);
 		assert.deepEqual(fs.readFileSync(argsLog, "utf8").trim().split("\n"), [
-			"--color never --log-level warn --all-features --manifest-path crates/member/Cargo.toml check --config deny.toml",
+			"--format json --color never --log-level warn --all-features --manifest-path crates/member/Cargo.toml check --audit-compatible-output --config deny.toml",
 		]);
 		assert.match(
 			result.details,
-			/cargo-deny --color never --log-level warn --all-features --manifest-path crates\/member\/Cargo\.toml check --config deny\.toml/,
+			/cargo-deny --format json --color never --log-level warn --all-features --manifest-path crates\/member\/Cargo\.toml check --audit-compatible-output --config deny\.toml/,
 		);
 	} finally {
 		cleanupTempRepo(context.tempDir);
@@ -365,6 +438,7 @@ edition = "2021"
 				cwd: context.repoDir,
 				encoding: "utf8",
 				env: createEnv(context, {
+					AUDIT_REPORT_MANIFEST: "Cargo.toml",
 					CARGO_DENY_ARGS_LOG: argsLog,
 					FAIL_MANIFEST: "Cargo.toml",
 				}),
@@ -373,14 +447,27 @@ edition = "2021"
 		const result = JSON.parse(output);
 
 		assert.equal(result.exit_code, 1);
+		assert.equal(result.cargo_deny_runs.length, 2);
+		assert.equal(
+			result.cargo_deny_runs[0].audit_reports[0].vulnerabilities[0].advisory.id,
+			"RUSTSEC-2024-0001",
+		);
+		assert.equal(
+			result.cargo_deny_runs[0].diagnostics[0].fields.code,
+			"rejected",
+		);
 		assert.deepEqual(fs.readFileSync(argsLog, "utf8").trim().split("\n"), [
-			"--color never --log-level warn --all-features --manifest-path Cargo.toml check",
-			"--color never --log-level warn --all-features --manifest-path crates/member/Cargo.toml check",
+			"--format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output",
+			"--format json --color never --log-level warn --all-features --manifest-path crates/member/Cargo.toml check --audit-compatible-output",
 		]);
-		assert.match(result.details, /issue in Cargo\.toml/);
 		assert.match(
 			result.details,
-			/cargo-deny --color never --log-level warn --all-features --manifest-path crates\/member\/Cargo\.toml check/,
+			/error\[RUSTSEC-2024-0001\]: root 0\.1\.0 - issue in Cargo\.toml/,
+		);
+		assert.match(result.details, /error\[rejected\]: issue in Cargo\.toml/);
+		assert.match(
+			result.details,
+			/cargo-deny --format json --color never --log-level warn --all-features --manifest-path crates\/member\/Cargo\.toml check --audit-compatible-output/,
 		);
 	} finally {
 		cleanupTempRepo(context.tempDir);
