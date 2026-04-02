@@ -91,7 +91,7 @@ jobs:
       - name: Build linter definitions
         id: build_linter_definitions
         env:
-          LINTER_CONFIG_PATH: ${{ github.workspace }}/linter-service/.github/scripts/linters/config.json
+          LINTER_CONFIG_PATH: ${{ github.workspace }}/linter-service/linters.json
           LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
         run: |
           python3 - <<'PY'
@@ -103,7 +103,7 @@ jobs:
           config_path = Path(os.environ["LINTER_CONFIG_PATH"])
           config_data = json.loads(config_path.read_text(encoding="utf-8"))
           linters = config_data.get("linters", [])
-          script_root = Path(os.environ["LINTER_SERVICE_PATH"]) / ".github" / "scripts" / "linters"
+          script_root = Path(os.environ["LINTER_SERVICE_PATH"])
           definitions = []
 
           if not isinstance(linters, list):
@@ -114,9 +114,9 @@ jobs:
                   raise SystemExit("each linter config entry must include a name")
 
               linter_name = item["name"]
-              script_path = script_root / f"{linter_name}.sh"
+              script_path = script_root / linter_name / "patterns.sh"
               result = subprocess.run(
-                  ["bash", str(script_path), "patterns"],
+                  ["bash", str(script_path)],
                   capture_output=True,
                   check=True,
                   text=True,
@@ -732,7 +732,7 @@ jobs:
       - name: Prepare deselected SARIF placeholders
         if: ${{ always() }}
         env:
-          LINTER_CONFIG_PATH: ${{ github.workspace }}/linter-service/.github/scripts/linters/config.json
+          LINTER_CONFIG_PATH: ${{ github.workspace }}/linter-service/linters.json
           LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
           OUTPUT_ROOT: ${{ runner.temp }}/linter-sarifs-decrypted
           SELECTED_LINTERS_JSON: ${{ needs.detect-targets.outputs.selected-linters-json }}

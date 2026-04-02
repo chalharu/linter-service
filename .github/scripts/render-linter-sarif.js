@@ -5,7 +5,7 @@ const path = require("node:path");
 const {
 	isCargoDenyAdvisoryLikeDiagnostic,
 	isCargoDenyConfigLikeDiagnostic,
-} = require("./cargo-deny-result.js");
+} = require("../../cargo-deny/cargo-deny-result.js");
 const { collectProjectTargets } = require("./render-linter-report.js");
 
 const DETAILS_LIMIT = 8000;

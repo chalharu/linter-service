@@ -7,10 +7,10 @@ const {
 	cleanupTempRepo,
 	makeTempRepo,
 	writeFile,
-} = require("./linters/cargo-linter-test-lib.js");
+} = require("./cargo-linter-test-lib.js");
 const { runFromEnv } = require("./render-linter-report.js");
 
-const configPath = path.join(__dirname, "linters/config.json");
+const configPath = path.join(__dirname, "..", "..", "linters.json");
 
 test("lists checked file paths in a successful non-cargo linter report", () => {
 	const context = makeTempRepo("render-linter-report-non-cargo-");
