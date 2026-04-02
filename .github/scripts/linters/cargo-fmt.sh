@@ -21,6 +21,34 @@ cargo_fmt_persist_env() {
   fi
 }
 
+cargo_fmt_resolve_workspace_manifest() {
+  local source_root=$1
+  local manifest_path=$2
+
+  (
+    cd "$source_root" &&
+      linter_lib::resolve_cargo_workspace_manifest "$source_root" "$manifest_path" cargo
+  )
+}
+
+cargo_fmt_normalize_manifests() {
+  local source_root=$1
+  shift
+
+  local -A seen_manifests=()
+  local manifest_path normalized_manifest
+
+  for manifest_path in "$@"; do
+    normalized_manifest=$(cargo_fmt_resolve_workspace_manifest "$source_root" "$manifest_path")
+    if [ -n "${seen_manifests[$normalized_manifest]+x}" ]; then
+      continue
+    fi
+
+    seen_manifests["$normalized_manifest"]=1
+    printf '%s\n' "$normalized_manifest"
+  done
+}
+
 mode=${1-}
 if [ "$#" -gt 0 ]; then
   shift
@@ -65,11 +93,13 @@ EOF
     : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
     cargo_fmt_prepare_env
     output_file="$RUNNER_TEMP/linter-output.txt"
+    repo_root=$(pwd -P)
     manifests=()
     if ! linter_lib::collect_cargo_manifests "$output_file" "Cargo fmt" manifests "$@"; then
       linter_lib::emit_json_result 1 "$output_file"
       exit 0
     fi
+    mapfile -t manifests < <(cargo_fmt_normalize_manifests "$repo_root" "${manifests[@]}")
 
     run_cargo_fmt() {
       local failure=0

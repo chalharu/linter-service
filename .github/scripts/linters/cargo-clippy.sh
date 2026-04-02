@@ -65,6 +65,7 @@ EOF
     cargo_clippy_require_docker
     output_file="$RUNNER_TEMP/linter-output.txt"
     manifests=()
+    normalized_manifests=()
     relevant_dirs=()
     unsupported_config=""
     if ! linter_lib::collect_cargo_manifests "$output_file" "Cargo clippy" manifests "$@"; then
@@ -137,6 +138,41 @@ EOF
       --env HOME=/cargo-home
     )
 
+    metadata_docker_run_common=(
+      --rm
+      --cap-drop ALL
+      --security-opt no-new-privileges
+      --read-only
+      --tmpfs /tmp
+      --user "$user_id:$group_id"
+      --workdir /work
+      --mount "type=bind,src=$source_root,dst=/work"
+    )
+
+    cargo_clippy_resolve_workspace_manifest() {
+      local manifest_path=$1
+
+      linter_lib::resolve_cargo_workspace_manifest /work "$manifest_path" \
+        docker run "${metadata_docker_run_common[@]}" --network=none "$image_ref" cargo
+    }
+
+    cargo_clippy_normalize_manifests() {
+      local -A seen_manifests=()
+      local manifest_path normalized_manifest
+
+      for manifest_path in "${manifests[@]}"; do
+        normalized_manifest=$(cargo_clippy_resolve_workspace_manifest "$manifest_path")
+        if [ -n "${seen_manifests[$normalized_manifest]+x}" ]; then
+          continue
+        fi
+
+        seen_manifests["$normalized_manifest"]=1
+        printf '%s\n' "$normalized_manifest"
+      done
+    }
+
+    mapfile -t normalized_manifests < <(cargo_clippy_normalize_manifests)
+
     run_cargo_clippy() {
       local failure=0
       local current_manifest
@@ -164,7 +200,7 @@ EOF
             fi
             echo
           done
-        ' sh "${manifests[@]}"; then
+        ' sh "${normalized_manifests[@]}"; then
         return 1
       fi
 
@@ -177,7 +213,7 @@ EOF
         done < "$fetch_failures_path"
       fi
 
-      for current_manifest in "${manifests[@]}"; do
+      for current_manifest in "${normalized_manifests[@]}"; do
         if [ -n "${failed_fetches[$current_manifest]+x}" ]; then
           printf '==> skip cargo clippy --manifest-path %s because cargo fetch failed\n\n' "$current_manifest"
           continue

@@ -86,6 +86,58 @@ linter_lib::find_cargo_manifest() {
   return 1
 }
 
+linter_lib::workspace_manifest_from_metadata() {
+  local source_root=$1
+
+  node -e '
+const fs = require("node:fs");
+const path = require("node:path");
+
+const sourceRoot = process.argv[1];
+const data = JSON.parse(fs.readFileSync(0, "utf8"));
+
+if (typeof data.workspace_root !== "string" || data.workspace_root.length === 0) {
+  process.exit(1);
+}
+
+const manifestPath = path.join(data.workspace_root, "Cargo.toml");
+const relativePath = path.relative(sourceRoot, manifestPath);
+
+if (relativePath.length === 0) {
+  process.stdout.write("Cargo.toml");
+  process.exit(0);
+}
+
+if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+  process.exit(1);
+}
+
+process.stdout.write(relativePath.split(path.sep).join("/"));
+  ' "$source_root"
+}
+
+linter_lib::resolve_cargo_workspace_manifest() {
+  local source_root=$1
+  local manifest_path=$2
+  shift 2
+
+  local metadata_json relative_manifest
+
+  if ! metadata_json="$("$@" metadata --format-version 1 --no-deps --manifest-path "$manifest_path" 2>/dev/null)"; then
+    printf '%s\n' "$manifest_path"
+    return 0
+  fi
+
+  if ! relative_manifest="$(
+    printf '%s' "$metadata_json" | linter_lib::workspace_manifest_from_metadata "$source_root"
+  )"; then
+    printf '%s\n' "$manifest_path"
+    return 0
+  fi
+
+  printf '%s\n' "$relative_manifest"
+}
+
 linter_lib::collect_cargo_manifests() {
   local output_file=$1
   local tool_name=$2
