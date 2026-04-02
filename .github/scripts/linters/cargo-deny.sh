@@ -70,31 +70,16 @@ cargo_deny_manifest_in_config_scope() {
   esac
 }
 
-cargo_deny_append_manifest() {
-  local manifest_path=$1
-  local seen_var=$2
-  local manifests_var=$3
-  local -n seen_ref="$seen_var"
-  local -n manifests_ref="$manifests_var"
-
-  if [ -z "${seen_ref[$manifest_path]+x}" ]; then
-    seen_ref["$manifest_path"]=1
-    manifests_ref+=("$manifest_path")
-  fi
-}
-
 cargo_deny_collect_manifests() {
   local output_file=$1
-  local manifests_var=$2
-  shift 2
+  shift
 
-  local -n collected_manifests_ref="$manifests_var"
   local -A seen_manifests=()
   local -a all_manifests=()
+  local manifests=()
   local missing_files=()
   local selected_path manifest_path config_path matched
 
-  collected_manifests_ref=()
   mapfile -t all_manifests < <(cargo_deny_list_manifests)
 
   for selected_path in "$@"; do
@@ -104,14 +89,20 @@ cargo_deny_collect_manifests() {
     case "$selected_path" in
       Cargo.toml | */Cargo.toml | Cargo.lock | */Cargo.lock)
         if manifest_path=$(linter_lib::find_cargo_manifest "$selected_path"); then
-          cargo_deny_append_manifest "$manifest_path" seen_manifests collected_manifests_ref
+          if [ -z "${seen_manifests[$manifest_path]+x}" ]; then
+            seen_manifests["$manifest_path"]=1
+            manifests+=("$manifest_path")
+          fi
           matched=1
         fi
         ;;
       deny.toml | */deny.toml)
         for manifest_path in "${all_manifests[@]}"; do
           if config_path=$(cargo_deny_find_config "$manifest_path") && [ "$config_path" = "$selected_path" ]; then
-            cargo_deny_append_manifest "$manifest_path" seen_manifests collected_manifests_ref
+            if [ -z "${seen_manifests[$manifest_path]+x}" ]; then
+              seen_manifests["$manifest_path"]=1
+              manifests+=("$manifest_path")
+            fi
             matched=1
           fi
         done
@@ -119,14 +110,20 @@ cargo_deny_collect_manifests() {
       .cargo/config | */.cargo/config | .cargo/config.toml | */.cargo/config.toml)
         for manifest_path in "${all_manifests[@]}"; do
           if cargo_deny_manifest_in_config_scope "$manifest_path" "$selected_path"; then
-            cargo_deny_append_manifest "$manifest_path" seen_manifests collected_manifests_ref
+            if [ -z "${seen_manifests[$manifest_path]+x}" ]; then
+              seen_manifests["$manifest_path"]=1
+              manifests+=("$manifest_path")
+            fi
             matched=1
           fi
         done
         ;;
       *)
         if manifest_path=$(linter_lib::find_cargo_manifest "$selected_path"); then
-          cargo_deny_append_manifest "$manifest_path" seen_manifests collected_manifests_ref
+          if [ -z "${seen_manifests[$manifest_path]+x}" ]; then
+            seen_manifests["$manifest_path"]=1
+            manifests+=("$manifest_path")
+          fi
           matched=1
         fi
         ;;
@@ -148,6 +145,7 @@ cargo_deny_collect_manifests() {
     return 1
   fi
 
+  printf '%s\n' "${manifests[@]}"
   return 0
 }
 
@@ -212,13 +210,16 @@ EOF
     : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
     cargo_deny_prepare_env
     output_file="$RUNNER_TEMP/linter-output.txt"
+    manifest_list_file="$RUNNER_TEMP/cargo-deny-manifests.txt"
     manifests=()
     relevant_dirs=()
     unsupported_config=""
-    if ! cargo_deny_collect_manifests "$output_file" manifests "$@"; then
+    if ! cargo_deny_collect_manifests "$output_file" "$@" > "$manifest_list_file"; then
       linter_lib::emit_json_result 1 "$output_file"
       exit 0
     fi
+    mapfile -t manifests < "$manifest_list_file"
+    rm -f "$manifest_list_file"
 
     mapfile -t relevant_dirs < <(linter_lib::collect_cargo_relevant_dirs "${manifests[@]}")
     if unsupported_config="$(linter_lib::find_unsupported_cargo_config "${relevant_dirs[@]}")"; then
