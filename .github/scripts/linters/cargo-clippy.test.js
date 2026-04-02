@@ -47,6 +47,7 @@ case "$command" in
     manifest=""
     prev=""
     is_clippy=0
+    is_metadata=0
     is_rustup_seed=0
     has_rustup_runtime_mount=0
     option_with_value=""
@@ -102,6 +103,9 @@ case "$command" in
       if [ "$prev" = "--manifest-path" ]; then
         manifest="$arg"
       fi
+      if [ "$prev" = "cargo" ] && [ "$arg" = "metadata" ]; then
+        is_metadata=1
+      fi
       if [ "$prev" = "cargo" ] && [ "$arg" = "clippy" ]; then
         is_clippy=1
       fi
@@ -117,17 +121,48 @@ case "$command" in
       : > "$RUSTUP_STATE_FILE"
       exit 0
     fi
-    if [ -n "$work_mount_src" ]; then
+    if [ "$is_metadata" -ne 1 ] && [ -n "$work_mount_src" ]; then
       if [ -e "$work_mount_src/.git" ]; then
         printf 'present\\n' >> "$WORKTREE_GIT_LOG"
       else
         printf 'absent\\n' >> "$WORKTREE_GIT_LOG"
       fi
     fi
-    if [ -n "\${REQUIRE_WRITABLE_RUSTUP_HOME:-}" ] && { [ "$has_rustup_runtime_mount" -ne 1 ] || [ ! -f "$RUSTUP_STATE_FILE" ]; }; then
+    if [ "$is_metadata" -ne 1 ] && [ -n "\${REQUIRE_WRITABLE_RUSTUP_HOME:-}" ] && { [ "$has_rustup_runtime_mount" -ne 1 ] || [ ! -f "$RUSTUP_STATE_FILE" ]; }; then
       printf 'info: syncing channel updates for 1.94-x86_64-unknown-linux-gnu\\n' >&2
       printf 'error: could not create temp file /usr/local/rustup/tmp/test_file: Read-only file system (os error 30)\\n' >&2
       exit 1
+    fi
+    if [ "$is_metadata" -eq 1 ]; then
+      if [ -z "$manifest" ]; then
+        echo "missing --manifest-path" >&2
+        exit 1
+      fi
+      current_dir="$work_mount_src/$(dirname "$manifest")"
+      workspace_dir="$current_dir"
+      search_dir="$current_dir"
+      while :; do
+        candidate="$search_dir/Cargo.toml"
+        if [ -f "$candidate" ] && grep -Eq '^\\[workspace\\]' "$candidate"; then
+          workspace_dir="$search_dir"
+          break
+        fi
+        if [ "$search_dir" = "$work_mount_src" ] || [ "$search_dir" = "/" ]; then
+          break
+        fi
+        search_dir=$(dirname "$search_dir")
+      done
+      node - "$work_mount_src" "$workspace_dir" <<'NODE'
+const path = require("node:path");
+const [sourceRoot, workspaceDir] = process.argv.slice(2);
+const relativeDir = path.relative(sourceRoot, workspaceDir);
+const workspaceRoot =
+  relativeDir.length === 0
+    ? "/work"
+    : path.posix.join("/work", ...relativeDir.split(path.sep));
+process.stdout.write(JSON.stringify({ workspace_root: workspaceRoot }));
+NODE
+      exit 0
     fi
     if [ -n "$batch_mode" ]; then
       batch_manifests=()
@@ -507,6 +542,82 @@ edition = "2021"
 		assert.deepEqual(
 			fs.readFileSync(tooling.dockerManifestLog, "utf8").trim().split("\n"),
 			["crates/member/Cargo.toml"],
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("cargo-clippy.sh collapses workspace members to a single workspace-root run", () => {
+	const context = makeTempRepo("cargo-clippy-workspace-root-");
+	const tooling = setupDockerTooling(context);
+
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		`[package]
+name = "root"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+members = ["crates/member"]
+resolver = "2"
+`,
+	);
+	writeFile(path.join(context.repoDir, "src/lib.rs"), "pub fn root_lib() {}\n");
+	writeFile(
+		path.join(context.repoDir, "crates/member/Cargo.toml"),
+		`[package]
+name = "member"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+	writeFile(
+		path.join(context.repoDir, "crates/member/src/lib.rs"),
+		"pub fn member_lib() {}\n",
+	);
+
+	try {
+		const output = execFileSync(
+			"bash",
+			[scriptPath, "run", "src/lib.rs", "crates/member/src/lib.rs"],
+			{
+				cwd: context.repoDir,
+				encoding: "utf8",
+				env: {
+					...process.env,
+					...tooling.env,
+					PATH: `${context.binDir}:${process.env.PATH}`,
+					RUNNER_TEMP: context.runnerTemp,
+				},
+			},
+		);
+		const result = JSON.parse(output);
+
+		assert.equal(result.exit_code, 0);
+		assert.deepEqual(
+			fs
+				.readFileSync(tooling.dockerFetchManifestLog, "utf8")
+				.trim()
+				.split("\n"),
+			["Cargo.toml"],
+		);
+		assert.deepEqual(
+			fs.readFileSync(tooling.dockerManifestLog, "utf8").trim().split("\n"),
+			["Cargo.toml"],
+		);
+		assert.match(
+			result.details,
+			/docker run cargo fetch --manifest-path Cargo\.toml/,
+		);
+		assert.match(
+			result.details,
+			/docker run cargo clippy --manifest-path Cargo\.toml --all-targets -- -D warnings/,
+		);
+		assert.doesNotMatch(
+			result.details,
+			/crates\/member\/Cargo\.toml --all-targets -- -D warnings/,
 		);
 	} finally {
 		cleanupTempRepo(context.tempDir);
