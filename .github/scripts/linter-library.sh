@@ -126,7 +126,7 @@ if (!pkg || typeof pkg.edition !== "string" || pkg.edition.length === 0) {
   process.exit(1);
 }
 
-process.stdout.write(`edition\t${pkg.edition}\n`);
+process.stdout.write("edition\t" + pkg.edition + "\n");
 
 const seenTargets = new Set();
 for (const target of Array.isArray(pkg.targets) ? pkg.targets : []) {
@@ -136,7 +136,7 @@ for (const target of Array.isArray(pkg.targets) ? pkg.targets : []) {
   }
 
   seenTargets.add(targetPath);
-  process.stdout.write(`${targetPath}\n`);
+  process.stdout.write(targetPath + "\n");
 }
   ' "$source_root" "$manifest_path"
 }
