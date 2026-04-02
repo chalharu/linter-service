@@ -67,7 +67,10 @@
       "success": "✅ No issues were reported for the selected YAML target(s).",
       "failure": "❌ Issues were reported for the selected YAML target(s).",
       "infra_failure": "❌ The `yamllint` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "yamllint did not produce diagnostic output before the job failed."
+      "details_fallback": "yamllint did not produce diagnostic output before the job failed.",
+      "sarif": {
+        "enabled": true
+      }
     },
     {
       "name": "yamlfmt",
