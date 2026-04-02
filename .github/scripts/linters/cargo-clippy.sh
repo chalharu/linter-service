@@ -21,49 +21,6 @@ cargo_clippy_require_docker() {
   fi
 }
 
-cargo_clippy_collect_relevant_dirs() {
-  local -A seen=()
-  local manifest_path current_dir
-
-  seen["."]=1
-  printf '%s\n' "."
-
-  for manifest_path in "$@"; do
-    current_dir=$(dirname "$manifest_path")
-
-    while :; do
-      if [ -z "${seen[$current_dir]+x}" ]; then
-        seen["$current_dir"]=1
-        printf '%s\n' "$current_dir"
-      fi
-
-      if [ "$current_dir" = "." ] || [ "$current_dir" = "/" ]; then
-        break
-      fi
-
-      current_dir=$(dirname "$current_dir")
-    done
-  done
-}
-
-cargo_clippy_find_unsupported_config() {
-  local dir candidate
-
-  for dir in "$@"; do
-    for candidate in \
-      "$dir/.cargo/config.toml" \
-      "$dir/.cargo/config"
-    do
-      if [ -f "$candidate" ]; then
-        printf '%s\n' "${candidate#./}"
-        return 0
-      fi
-    done
-  done
-
-  return 1
-}
-
 mode=${1-}
 if [ "$#" -gt 0 ]; then
   shift
@@ -114,8 +71,8 @@ EOF
       linter_lib::emit_json_result 1 "$output_file"
       exit 0
     fi
-    mapfile -t relevant_dirs < <(cargo_clippy_collect_relevant_dirs "${manifests[@]}")
-    if unsupported_config="$(cargo_clippy_find_unsupported_config "${relevant_dirs[@]}")"; then
+    mapfile -t relevant_dirs < <(linter_lib::collect_cargo_relevant_dirs "${manifests[@]}")
+    if unsupported_config="$(linter_lib::find_unsupported_cargo_config "${relevant_dirs[@]}")"; then
       cat > "$output_file" <<EOF
 Repository-supplied \`$unsupported_config\` is not supported in this shared linter service because \`cargo fetch\` for untrusted pull requests cannot safely honor repository-controlled Cargo configuration.
 Use the default Cargo registry configuration for the shared \`cargo-clippy\` path.

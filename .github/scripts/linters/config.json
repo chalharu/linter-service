@@ -100,6 +100,15 @@
       "details_fallback": "cargo-clippy did not produce diagnostic output before the job failed."
     },
     {
+      "name": "cargo-deny",
+      "heading": "### cargo-deny",
+      "no_files": "No matching Cargo dependency or policy files were selected for `cargo-deny`.",
+      "success": "✅ No issues were reported for the selected Cargo project target(s).",
+      "failure": "❌ Issues were reported for the selected Cargo project target(s).",
+      "infra_failure": "❌ The `cargo-deny` workflow failed before producing a detailed report. See the workflow logs.",
+      "details_fallback": "cargo-deny did not produce diagnostic output before the job failed."
+    },
+    {
       "name": "taplo",
       "heading": "### taplo",
       "no_files": "No matching TOML files were selected for `taplo`.",

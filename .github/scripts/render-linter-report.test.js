@@ -100,6 +100,101 @@ test("lists checked Cargo projects alongside changed file paths", () => {
 	}
 });
 
+test("lists checked Cargo projects for cargo-deny dependency target files", () => {
+	const context = makeTempRepo("render-linter-report-cargo-deny-");
+
+	populateCargoRepo(context.repoDir);
+	writeFile(path.join(context.repoDir, "Cargo.lock"), "version = 3\n");
+	writeFile(
+		path.join(context.repoDir, "crates/member/deny.toml"),
+		"[graph]\nall-features = true\n",
+	);
+
+	try {
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "selected-files.txt"),
+			["Cargo.lock", "crates/member/deny.toml"].join("\n") + "\n",
+			"utf8",
+		);
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "linter-result.json"),
+			JSON.stringify({ details: "", exit_code: 0 }),
+			"utf8",
+		);
+
+		const report = runFromEnv(
+			createReportEnv(context, {
+				EXIT_CODE: "0",
+				LINTER_NAME: "cargo-deny",
+			}),
+		);
+
+		assert.equal(report.conclusion, "success");
+		assert.deepEqual(report.checkedProjects, [
+			"Cargo.toml",
+			"crates/member/Cargo.toml",
+		]);
+		assert.match(
+			report.body,
+			/✅ No issues were reported for the selected Cargo project target\(s\)\./,
+		);
+		assert.match(report.body, /Target file paths:/);
+		assert.match(report.body, /Cargo project targets:/);
+		assert.match(report.body, /- <code>Cargo\.lock<\/code>/);
+		assert.match(report.body, /- <code>crates\/member\/deny\.toml<\/code>/);
+		assert.match(report.body, /- <code>Cargo\.toml<\/code>/);
+		assert.match(report.body, /- <code>crates\/member\/Cargo\.toml<\/code>/);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("lists checked Cargo projects for repo-root cargo-deny policy files in nested-only repos", () => {
+	const context = makeTempRepo("render-linter-report-cargo-deny-root-policy-");
+
+	writeFile(
+		path.join(context.repoDir, "deny.toml"),
+		"[graph]\nall-features = true\n",
+	);
+	writeFile(
+		path.join(context.repoDir, "crates/member/Cargo.toml"),
+		`[package]
+name = "member"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+
+	try {
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "selected-files.txt"),
+			["deny.toml"].join("\n") + "\n",
+			"utf8",
+		);
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "linter-result.json"),
+			JSON.stringify({ details: "", exit_code: 0 }),
+			"utf8",
+		);
+
+		const report = runFromEnv(
+			createReportEnv(context, {
+				EXIT_CODE: "0",
+				LINTER_NAME: "cargo-deny",
+			}),
+		);
+
+		assert.equal(report.conclusion, "success");
+		assert.deepEqual(report.checkedProjects, ["crates/member/Cargo.toml"]);
+		assert.match(report.body, /Target file paths:/);
+		assert.match(report.body, /Cargo project targets:/);
+		assert.match(report.body, /- <code>deny\.toml<\/code>/);
+		assert.match(report.body, /- <code>crates\/member\/Cargo\.toml<\/code>/);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
 test("includes checked targets before diagnostic details on failure", () => {
 	const context = makeTempRepo("render-linter-report-failure-");
 
