@@ -1,5 +1,4 @@
 name: Lint Common
-
 on:
   workflow_call:
     inputs:
@@ -11,9 +10,7 @@ on:
         required: true
       CHECKER_PRIVATE_KEY:
         required: true
-
 permissions: {}
-
 jobs:
   run-linter:
     permissions:
@@ -31,14 +28,12 @@ jobs:
         with:
           name: detect-targets-context
           path: ${{ runner.temp }}/detect-targets-context
-
       - name: Check out linter-service repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           path: linter-service
           persist-credentials: false
           ref: ${{ github.sha }}
-
       - name: Derive artifact passphrase
         env:
           CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
@@ -46,7 +41,6 @@ jobs:
           passphrase="$(bash "$LINTER_SERVICE_PATH/.github/scripts/artifact-passphrase.sh")"
           echo "::add-mask::$passphrase"
           echo "ARTIFACT_PASSPHRASE=$passphrase" >> "$GITHUB_ENV"
-
       - name: Decrypt dispatch context artifact
         run: |
           encrypted_path="$RUNNER_TEMP/detect-targets-context/detect-targets-context.json.enc"
@@ -56,7 +50,6 @@ jobs:
             "$encrypted_path" \
             "$decrypted_path"
           rm -f "$encrypted_path"
-
       - name: Mask repository metadata
         env:
           CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
@@ -67,7 +60,6 @@ jobs:
             source_owner \
             source_repo \
             source_head_sha
-
       - name: Decode repository metadata
         id: decode_context
         env:
@@ -79,7 +71,6 @@ jobs:
             source_head_sha=source-head-sha \
             source_owner=source-owner \
             source_repo=source-repo
-
       - name: Get source repository checker token
         id: get_source_token
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
@@ -89,7 +80,6 @@ jobs:
           permission-contents: read
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ steps.decode_context.outputs.source-repo }}
-
       - name: Check out source repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
@@ -98,7 +88,6 @@ jobs:
           ref: ${{ steps.decode_context.outputs.source-head-sha }}
           repository: ${{ steps.decode_context.outputs.source-owner }}/${{ steps.decode_context.outputs.source-repo }}
           token: ${{ steps.get_source_token.outputs.token }}
-
       - name: Select lint target files
         id: select_files
         env:
@@ -128,7 +117,6 @@ jobs:
 
           count=$(wc -l < "$RUNNER_TEMP/selected-files.txt" | tr -d ' ')
           echo "count=$count" >> "$GITHUB_OUTPUT"
-
       - name: Install linter tool
         id: install_tool
         if: ${{ steps.select_files.outputs.count != '0' }}
@@ -138,7 +126,6 @@ jobs:
             cd "$LINTER_SERVICE_PATH" || exit 1
             bash "$script_path" install
           )
-
       - name: Run linter
         id: run_linter
         if: ${{ steps.select_files.outputs.count != '0' }}
@@ -167,7 +154,6 @@ jobs:
           with output_path.open("a", encoding="utf-8") as fh:
               fh.write(f"exit_code={exit_code}\n")
           PY
-
       - name: Prepare linter report
         id: prepare_report
         if: ${{ always() }}
@@ -181,7 +167,19 @@ jobs:
           SELECT_FILES_OUTCOME: ${{ steps.select_files.outcome }}
         run: |
           node "$LINTER_SERVICE_PATH/.github/scripts/render-linter-report.js"
-
+      - name: Prepare linter SARIF
+        id: prepare_sarif
+        if: ${{ always() }}
+        env:
+          INSTALL_TOOL_OUTCOME: ${{ steps.install_tool.outcome }}
+          LINTER_NAME: ${{ inputs.linter-name }}
+          OUTPUT_PATH: ${{ runner.temp }}/linter-sarif-${{ inputs.linter-name }}.sarif
+          RESULT_PATH: ${{ runner.temp }}/linter-result.json
+          RUN_LINTER_OUTCOME: ${{ steps.run_linter.outcome }}
+          SELECTED_FILES_PATH: ${{ runner.temp }}/selected-files.txt
+          SELECT_FILES_OUTCOME: ${{ steps.select_files.outcome }}
+        run: |
+          node "$LINTER_SERVICE_PATH/.github/scripts/render-linter-sarif.js"
       - name: Encrypt linter summary artifact
         id: encrypt_summary
         if: ${{ always() }}
@@ -193,12 +191,33 @@ jobs:
             "$input_path" \
             "$output_path"
           rm -f "$input_path"
-
       - name: Upload linter summary artifact
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: linter-summary-${{ inputs.linter-name }}
           path: ${{ runner.temp }}/linter-summary-${{ inputs.linter-name }}.json.enc
+          if-no-files-found: warn
+          retention-days: 1
+      - name: Encrypt linter SARIF artifact
+        id: encrypt_sarif
+        if: ${{ always() }}
+        run: |
+          input_path="$RUNNER_TEMP/linter-sarif-$LINTER_NAME.sarif"
+          if [ ! -f "$input_path" ]; then
+            exit 0
+          fi
+          output_path="$RUNNER_TEMP/linter-sarif-$LINTER_NAME.sarif.enc"
+          bash "$LINTER_SERVICE_PATH/.github/scripts/secure-artifact.sh" \
+            encrypt \
+            "$input_path" \
+            "$output_path"
+          rm -f "$input_path"
+      - name: Upload linter SARIF artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linter-sarif-${{ inputs.linter-name }}
+          path: ${{ runner.temp }}/linter-sarif-${{ inputs.linter-name }}.sarif.enc
           if-no-files-found: warn
           retention-days: 1
