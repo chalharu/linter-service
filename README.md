@@ -50,6 +50,7 @@ GitHub Actions が共通ルールで lint します。
 | `dotenv-linter` | `.env`, `.env.*` | なし | shared workflow は upstream default checks を changed `.env` file に直接適用します。`--schema` や ignore-checks の注入は現状未対応です。 |
 | `spectral` | `*.json`, `*.yaml`, `*.yml` | `.spectral.yml` / `.spectral.yaml` / `.spectral.json` | 未配置時は `spectral:oas` を使い、unknown format は無視します。`.spectral.js` は任意コード実行を避けるため対象外です。 |
 | `yamllint` | `*.yaml`, `*.yml` | `.yamllint` → `.yamllint.yaml` → `.yamllint.yml` | - |
+| `yamlfmt` | `*.yaml`, `*.yml` | `.yamlfmt` → `yamlfmt.yml` → `yamlfmt.yaml` → `.yamlfmt.yaml` → `.yamlfmt.yml` | shared workflow は repo root の静的 config を `-conf` で明示し、未配置時は temp default config で `-lint` を実行します。global config は使いません。 |
 | `markdownlint-cli2` | `*.md`, `*.markdown` | `.markdownlint-cli2.jsonc` / `.markdownlint-cli2.yaml` / `.markdownlint.jsonc` / `.markdownlint.json` / `.markdownlint.yaml` / `.markdownlint.yml` | 静的 config のみを扱います。`.cjs` / `.mjs` は任意コード実行を避けるため対象外です。共有 workflow は `globs` を使わず、変更対象だけを検査します。 |
 | `ruff` | `*.py`, `*.pyi` | 対象ファイルごとに近い `pyproject.toml` の `[tool.ruff]` / `ruff.toml` / `.ruff.toml` を使い、同一 directory では `.ruff.toml` → `ruff.toml` → `pyproject.toml` の順です。 | 共有 workflow は `--force-exclude` を付け、設定上の除外も尊重します。 |
 | `cargo-fmt` | `*.rs` | `rustfmt.toml` / `.rustfmt.toml` と `rust-toolchain.toml` / `rust-toolchain` は Cargo / rustup の既定探索を使います。 | 変更された Rust ファイルごとに最も近い `Cargo.toml` を基準に、重複を除いた package 単位で `cargo fmt --check --manifest-path ...` を実行します。 |
