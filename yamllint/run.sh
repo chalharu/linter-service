@@ -26,7 +26,7 @@ rules:
   document-start: disable
   line-length: disable
   truthy:
-check-keys: false
+    check-keys: false
 EOF
 fi
 
