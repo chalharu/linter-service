@@ -11,8 +11,6 @@ const {
 
 const { execFileSync } = require("node:child_process");
 
-const patternsPath = path.join(__dirname, "patterns.sh");
-const installPath = path.join(__dirname, "install.sh");
 const runPath = path.join(__dirname, "run.sh");
 
 function createRustfmtStub(binDir) {

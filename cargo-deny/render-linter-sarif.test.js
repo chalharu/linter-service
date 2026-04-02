@@ -282,13 +282,11 @@ test("keeps only the primary cargo-deny snippet location and preserves advisory 
 	);
 	writeFile(
 		path.join(context.repoDir, "Cargo.lock"),
-		Array.from({ length: 60 }, (_, index) => `line ${index + 1}`).join("\n") +
-			"\n",
+		`${Array.from({ length: 60 }, (_, index) => `line ${index + 1}`).join("\n")}\n`,
 	);
 	writeFile(
 		path.join(context.repoDir, "deny.toml"),
-		Array.from({ length: 12 }, (_, index) => `line ${index + 1}`).join("\n") +
-			"\n",
+		`${Array.from({ length: 12 }, (_, index) => `line ${index + 1}`).join("\n")}\n`,
 	);
 	writeFile(
 		path.join(context.runnerTemp, "selected-files.txt"),

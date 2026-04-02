@@ -213,7 +213,7 @@ test("editorconfig-checker.sh merges repo config, copies relevant .editorconfig 
 	);
 	writeFile(
 		path.join(context.repoDir, ".editorconfig-checker.json"),
-		JSON.stringify(
+		`${JSON.stringify(
 			{
 				Exclude: ["vendor"],
 				IgnoreDefaults: true,
@@ -223,7 +223,7 @@ test("editorconfig-checker.sh merges repo config, copies relevant .editorconfig 
 			},
 			null,
 			2,
-		) + "\n",
+		)}\n`,
 	);
 	writeFile(
 		path.join(context.repoDir, "services/api/app.js"),
@@ -278,13 +278,13 @@ test("editorconfig-checker.sh falls back to .ecrc when the modern config file is
 
 	writeFile(
 		path.join(context.repoDir, ".ecrc"),
-		JSON.stringify(
+		`${JSON.stringify(
 			{
 				Debug: true,
 			},
 			null,
 			2,
-		) + "\n",
+		)}\n`,
 	);
 	writeFile(path.join(context.repoDir, "docs/guide.md"), "# Guide\n");
 

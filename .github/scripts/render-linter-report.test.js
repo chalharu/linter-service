@@ -18,8 +18,7 @@ test("lists checked file paths in a successful non-cargo linter report", () => {
 	try {
 		fs.writeFileSync(
 			path.join(context.runnerTemp, "selected-files.txt"),
-			[".github/workflows/ci.yml", ".github/workflows/release.yml"].join("\n") +
-				"\n",
+			`${[".github/workflows/ci.yml", ".github/workflows/release.yml"].join("\n")}\n`,
 			"utf8",
 		);
 		fs.writeFileSync(
@@ -64,7 +63,7 @@ test("treats rustfmt as selected Rust files instead of Cargo projects", () => {
 	try {
 		fs.writeFileSync(
 			path.join(context.runnerTemp, "selected-files.txt"),
-			["src/lib.rs", "crates/member/src/lib.rs"].join("\n") + "\n",
+			`${["src/lib.rs", "crates/member/src/lib.rs"].join("\n")}\n`,
 			"utf8",
 		);
 		fs.writeFileSync(
@@ -104,8 +103,7 @@ test("lists checked Cargo projects alongside changed file paths", () => {
 	try {
 		fs.writeFileSync(
 			path.join(context.runnerTemp, "selected-files.txt"),
-			["src/lib.rs", "src/main.rs", "crates/member/src/lib.rs"].join("\n") +
-				"\n",
+			`${["src/lib.rs", "src/main.rs", "crates/member/src/lib.rs"].join("\n")}\n`,
 			"utf8",
 		);
 		fs.writeFileSync(
@@ -153,7 +151,7 @@ test("lists checked Cargo projects for cargo-deny dependency target files", () =
 	try {
 		fs.writeFileSync(
 			path.join(context.runnerTemp, "selected-files.txt"),
-			["Cargo.lock", "crates/member/deny.toml"].join("\n") + "\n",
+			`${["Cargo.lock", "crates/member/deny.toml"].join("\n")}\n`,
 			"utf8",
 		);
 		fs.writeFileSync(
@@ -208,7 +206,7 @@ edition = "2021"
 	try {
 		fs.writeFileSync(
 			path.join(context.runnerTemp, "selected-files.txt"),
-			["deny.toml"].join("\n") + "\n",
+			`${["deny.toml"].join("\n")}\n`,
 			"utf8",
 		);
 		fs.writeFileSync(
@@ -241,7 +239,7 @@ test("includes checked targets before diagnostic details on failure", () => {
 	try {
 		fs.writeFileSync(
 			path.join(context.runnerTemp, "selected-files.txt"),
-			["openapi/spec.yaml"].join("\n") + "\n",
+			`${["openapi/spec.yaml"].join("\n")}\n`,
 			"utf8",
 		);
 		fs.writeFileSync(
@@ -278,7 +276,7 @@ test("renders target paths safely when they contain Markdown-breaking backticks"
 	try {
 		fs.writeFileSync(
 			path.join(context.runnerTemp, "selected-files.txt"),
-			["docs/with`tick`.md"].join("\n") + "\n",
+			`${["docs/with`tick`.md"].join("\n")}\n`,
 			"utf8",
 		);
 		fs.writeFileSync(
