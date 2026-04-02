@@ -11,15 +11,14 @@ rules:
       - lint-common.yml:39
       - lint-common.yml:78
       - lint-common.yml:81
-      - repository-dispatch.yml:115
-      - repository-dispatch.yml:118
-      - repository-dispatch.yml:307
-      - repository-dispatch.yml:352
-      - repository-dispatch.yml:398
-      - repository-dispatch.yml:401
-      - repository-dispatch.yml:449
-      - repository-dispatch.yml:474
-      - repository-dispatch.yml:541
-      - repository-dispatch.yml:545
-      - repository-dispatch.yml:552
-      - repository-dispatch.yml:555
+      - repository-dispatch.yml:138
+      - repository-dispatch.yml:142
+      - repository-dispatch.yml:424
+      - repository-dispatch.yml:469
+      - repository-dispatch.yml:516
+      - repository-dispatch.yml:519
+      - repository-dispatch.yml:595
+      - repository-dispatch.yml:664
+      - repository-dispatch.yml:668
+      - repository-dispatch.yml:675
+      - repository-dispatch.yml:678
