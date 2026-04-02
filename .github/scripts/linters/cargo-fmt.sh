@@ -104,10 +104,20 @@ EOF
     run_cargo_fmt() {
       local failure=0
       local current_manifest
+      local display_command
+      local -a cargo_fmt_args
 
       for current_manifest in "${manifests[@]}"; do
-        printf '==> cargo fmt --check --manifest-path %s\n' "$current_manifest"
-        if ! cargo fmt --check --manifest-path "$current_manifest"; then
+        cargo_fmt_args=(fmt --check --manifest-path "$current_manifest")
+        display_command="cargo fmt --check --manifest-path $current_manifest"
+
+        if linter_lib::cargo_manifest_is_virtual_workspace "$current_manifest"; then
+          cargo_fmt_args=(fmt --check --all --manifest-path "$current_manifest")
+          display_command="cargo fmt --check --all --manifest-path $current_manifest"
+        fi
+
+        printf '==> %s\n' "$display_command"
+        if ! cargo "${cargo_fmt_args[@]}"; then
           failure=1
         fi
         echo
