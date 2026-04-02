@@ -54,7 +54,7 @@ default branch push では repository 全体の tracked file path から対象 l
 | `yamlfmt` | `*.yaml`, `*.yml` | `.yamlfmt` → `yamlfmt.yml` → `yamlfmt.yaml` → `.yamlfmt.yaml` → `.yamlfmt.yml` | shared workflow は repo root の静的 config を `-conf` で明示し、未配置時は temp default config で `-lint` を実行します。global config は使いません。 |
 | `markdownlint-cli2` | `*.md`, `*.markdown` | `.markdownlint-cli2.jsonc` / `.markdownlint-cli2.yaml` / `.markdownlint.jsonc` / `.markdownlint.json` / `.markdownlint.yaml` / `.markdownlint.yml` | 静的 config のみを扱います。`.cjs` / `.mjs` は任意コード実行を避けるため対象外です。共有 workflow は `globs` を使わず、変更対象だけを検査します。 |
 | `ruff` | `*.py`, `*.pyi` | 対象ファイルごとに近い `pyproject.toml` の `[tool.ruff]` / `ruff.toml` / `.ruff.toml` を使い、同一 directory では `.ruff.toml` → `ruff.toml` → `pyproject.toml` の順です。 | 共有 workflow は `--force-exclude` を付け、設定上の除外も尊重します。 |
-| `cargo-fmt` | `*.rs` | `rustfmt.toml` / `.rustfmt.toml` と `rust-toolchain.toml` / `rust-toolchain` は Cargo / rustup の既定探索を使います。 | 変更された Rust ファイルごとに最も近い `Cargo.toml` を基準に、重複を除いた package 単位で `cargo fmt --check --manifest-path ...` を実行します。 |
+| `cargo-fmt` | `*.rs` | `rustfmt.toml` / `.rustfmt.toml` と `rust-toolchain.toml` / `rust-toolchain` は rustfmt / rustup の既定探索を使います。 | 変更された Rust ファイルごとに最も近い `Cargo.toml` を基準に、重複を除いた package 単位で `cargo metadata --no-deps` から edition と target root file を解決し、`rustfmt --check` を実行します。 |
 | `cargo-clippy` | `*.rs` | `clippy.toml` / `.clippy.toml` と `rust-toolchain.toml` / `rust-toolchain` は tool の既定探索を使います。 | 変更された Rust ファイルごとに最も近い `Cargo.toml` を基準に、重複を除いた package 単位で `cargo fetch` の後に `cargo clippy --manifest-path ... --all-targets -- -D warnings` を実行します。Clippy 実行本体は `--network none` 付き Docker container へ隔離し、rustup state は writable mount へ seed してから使います。repository-supplied `.cargo/config` / `.cargo/config.toml` は共有 path では未対応です。private git dependency や認証が必要な registry は現状サポートしません。 |
 | `cargo-deny` | `Cargo.toml`, `Cargo.lock`, `deny.toml`, `.cargo/config`, `.cargo/config.toml` | 対象 `Cargo.toml` の directory から親へ向けて `deny.toml` を探し、見つかれば `--config` で明示します。未配置時は cargo-deny の既定値を使います。 | 変更された dependency / policy file ごとに最も近い `Cargo.toml` を基準に、重複を除いた package 単位で `cargo-deny check` を実行します。shared workflow は `--all-features` と `--color never` を付けます。repository-supplied `.cargo/config` / `.cargo/config.toml` は共有 path では未対応です。private registry や認証が必要な git dependency は現状サポートしません。 |
 | `taplo` | `*.toml` | `.taplo.toml` を優先し、なければ repo root の `taplo.toml` を使います。 | 未配置時は既定値で `fmt --check` を行います。 |
@@ -117,7 +117,7 @@ default branch push では repository 全体の tracked file path から対象 l
 
 3. `run` は changed file path をそのまま tool に渡せるかを先に確認します。
    そのまま扱えない場合は wrapper 側で package / workspace / temp repo に
-   変換します。`cargo-fmt.sh` は Cargo package 単位へまとめ、
+   変換します。`cargo-fmt.sh` は Cargo package ごとの target root file へ解決し、
    `markdownlint-cli2.sh` は temp repo を組み立てて changed file だけを検査します。
 
 4. 利用 repository 側の config を読む linter や、

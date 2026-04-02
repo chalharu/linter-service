@@ -19,9 +19,13 @@ function createCargoStub(binDir) {
 		path.join(binDir, "cargo"),
 		`#!/usr/bin/env bash
 set -euo pipefail
-if [ "\${1-}" = "fmt" ] && [ "\${2-}" = "--version" ]; then
-  echo "cargo-fmt 0.0.0"
+if [ "\${1-}" = "--version" ]; then
+  echo "cargo 0.0.0"
   exit 0
+fi
+if [ "\${1-}" != "metadata" ]; then
+  echo "unexpected cargo command: $*" >&2
+  exit 1
 fi
 if [ "\${1-}" = "metadata" ]; then
   shift
@@ -46,57 +50,82 @@ if [ "\${1-}" = "metadata" ]; then
     echo "missing --manifest-path" >&2
     exit 1
   fi
-  current_dir=$(dirname "$manifest")
-  workspace_dir="$current_dir"
-  search_dir="$current_dir"
-  while :; do
-    candidate="$search_dir/Cargo.toml"
-    if [ -f "$candidate" ] && grep -Eq '^\\[workspace\\]' "$candidate"; then
-      workspace_dir="$search_dir"
-      break
-    fi
-    if [ "$search_dir" = "." ] || [ "$search_dir" = "/" ]; then
-      break
-    fi
-    search_dir=$(dirname "$search_dir")
-  done
-  workspace_root=$(cd "$workspace_dir" && pwd)
-  node - "$workspace_root" <<'NODE'
-const [workspaceRoot] = process.argv.slice(2);
-process.stdout.write(JSON.stringify({ workspace_root: workspaceRoot }));
+  printf '%s\\n' "$manifest" >> "$CARGO_METADATA_LOG"
+  node - "$manifest" <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+
+const manifest = process.argv[2];
+const manifestDir = path.dirname(manifest);
+const manifestText = fs.readFileSync(manifest, "utf8");
+const editionMatch = manifestText.match(/^\\s*edition\\s*=\\s*"([^"]+)"/mu);
+const edition = editionMatch ? editionMatch[1] : "2015";
+const targetCandidates = ["src/lib.rs", "src/main.rs", "build.rs"];
+const targets = [];
+
+for (const candidate of targetCandidates) {
+  const relativePath =
+    manifestDir === "." ? candidate : path.posix.join(manifestDir, candidate);
+  if (fs.existsSync(relativePath)) {
+    targets.push({
+      src_path: path.resolve(relativePath),
+    });
+  }
+}
+
+process.stdout.write(
+  JSON.stringify({
+    packages: [
+      {
+        edition,
+        manifest_path: path.resolve(manifest),
+        targets,
+      },
+    ],
+  }),
+);
 NODE
   exit 0
 fi
-manifest=""
-all_flag=0
+`,
+	);
+}
+
+function createRustfmtStub(binDir) {
+	writeExecutable(
+		path.join(binDir, "rustfmt"),
+		`#!/usr/bin/env bash
+set -euo pipefail
+if [ "\${1-}" = "--version" ]; then
+  echo "rustfmt 0.0.0"
+  exit 0
+fi
+edition=""
+files=()
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --manifest-path)
-      manifest="$2"
+    --edition)
+      edition="$2"
       shift 2
       ;;
-    --all)
-      all_flag=1
+    --check)
       shift
       ;;
     *)
+      files+=("$1")
       shift
       ;;
   esac
 done
-printf '%s\\n' "$manifest" >> "$CARGO_MANIFEST_LOG"
-if [ -f "$manifest" ] && grep -Eq '^\\[workspace\\]' "$manifest" && ! grep -Eq '^\\[package\\]' "$manifest"; then
-  if [ "$all_flag" -ne 1 ]; then
-    printf 'Failed to find targets\\n' >&2
-    printf 'This utility formats all bin and lib files of the current crate using rustfmt.\\n' >&2
+printf '%s\\t%s\\n' "$edition" "\${files[*]}" >> "$RUSTFMT_ARGS_LOG"
+for file in "\${files[@]}"; do
+  if [ -n "\${FAIL_FILE:-}" ] && [ "$file" = "$FAIL_FILE" ]; then
+    printf 'Diff in %s at line 1:\\n' "$file"
+    printf '--- original\\n'
+    printf '+++ formatted\\n'
     exit 1
   fi
-fi
-printf 'checked %s\\n' "$manifest"
-if [ -n "\${FAIL_MANIFEST:-}" ] && [ "$manifest" = "$FAIL_MANIFEST" ]; then
-  printf 'unformatted %s\\n' "$manifest" >&2
-  exit 1
-fi
+done
 `,
 	);
 }
@@ -106,28 +135,36 @@ defineCommonCargoManifestTests({
 	tempPrefix: "cargo-fmt-",
 	toolName: "cargo-fmt.sh",
 	setupTooling(context) {
-		const cargoManifestLog = path.join(context.tempDir, "cargo-manifests.log");
+		const cargoMetadataLog = path.join(context.tempDir, "cargo-metadata.log");
+		const rustfmtArgsLog = path.join(context.tempDir, "rustfmt-args.log");
 		createCargoStub(context.binDir);
+		createRustfmtStub(context.binDir);
 		return {
-			cargoManifestLog,
+			cargoMetadataLog,
+			rustfmtArgsLog,
 			env: {
-				CARGO_MANIFEST_LOG: cargoManifestLog,
+				CARGO_METADATA_LOG: cargoMetadataLog,
+				RUSTFMT_ARGS_LOG: rustfmtArgsLog,
 			},
 		};
 	},
 	assertGroupedResult({ result, tooling }) {
 		assert.equal(result.exit_code, 0);
 		assert.deepEqual(
-			fs.readFileSync(tooling.cargoManifestLog, "utf8").trim().split("\n"),
+			fs.readFileSync(tooling.cargoMetadataLog, "utf8").trim().split("\n"),
 			["Cargo.toml", "crates/member/Cargo.toml"],
 		);
 		assert.match(
 			result.details,
-			/cargo fmt --check --manifest-path Cargo\.toml/,
+			/rustfmt --check --edition 2021 src\/lib\.rs src\/main\.rs/,
 		);
 		assert.match(
 			result.details,
-			/cargo fmt --check --manifest-path crates\/member\/Cargo\.toml/,
+			/rustfmt --check --edition 2021 crates\/member\/src\/lib\.rs/,
+		);
+		assert.deepEqual(
+			fs.readFileSync(tooling.rustfmtArgsLog, "utf8").trim().split("\n"),
+			["2021\tsrc/lib.rs src/main.rs", "2021\tcrates/member/src/lib.rs"],
 		);
 	},
 	assertMissingManifestResult({ pathValue, result, tooling }) {
@@ -137,30 +174,33 @@ defineCommonCargoManifestTests({
 			result.details,
 			new RegExp(pathValue.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
 		);
-		assert.equal(fs.existsSync(tooling.cargoManifestLog), false);
+		assert.equal(fs.existsSync(tooling.cargoMetadataLog), false);
+		assert.equal(fs.existsSync(tooling.rustfmtArgsLog), false);
 	},
 	continueFailureEnv: {
-		FAIL_MANIFEST: "Cargo.toml",
+		FAIL_FILE: "src/lib.rs",
 	},
 	assertContinueAfterFailureResult({ result, tooling }) {
 		assert.equal(result.exit_code, 1);
 		assert.deepEqual(
-			fs.readFileSync(tooling.cargoManifestLog, "utf8").trim().split("\n"),
+			fs.readFileSync(tooling.cargoMetadataLog, "utf8").trim().split("\n"),
 			["Cargo.toml", "crates/member/Cargo.toml"],
 		);
-		assert.match(result.details, /unformatted Cargo\.toml/);
+		assert.match(result.details, /Diff in src\/lib\.rs at line 1:/);
 		assert.match(
 			result.details,
-			/cargo fmt --check --manifest-path crates\/member\/Cargo\.toml/,
+			/rustfmt --check --edition 2021 crates\/member\/src\/lib\.rs/,
 		);
 	},
 });
 
-test("cargo-fmt.sh collapses workspace members to a single workspace-root check", () => {
-	const context = makeTempRepo("cargo-fmt-workspace-root-");
-	const cargoManifestLog = path.join(context.tempDir, "cargo-manifests.log");
+test("cargo-fmt.sh keeps package manifests separate inside package workspaces", () => {
+	const context = makeTempRepo("cargo-fmt-package-workspace-");
+	const cargoMetadataLog = path.join(context.tempDir, "cargo-metadata.log");
+	const rustfmtArgsLog = path.join(context.tempDir, "rustfmt-args.log");
 
 	createCargoStub(context.binDir);
+	createRustfmtStub(context.binDir);
 	writeFile(
 		path.join(context.repoDir, "Cargo.toml"),
 		`[package]
@@ -196,8 +236,9 @@ edition = "2021"
 				encoding: "utf8",
 				env: {
 					...process.env,
-					CARGO_MANIFEST_LOG: cargoManifestLog,
+					CARGO_METADATA_LOG: cargoMetadataLog,
 					PATH: `${context.binDir}:${process.env.PATH}`,
+					RUSTFMT_ARGS_LOG: rustfmtArgsLog,
 					RUNNER_TEMP: context.runnerTemp,
 				},
 			},
@@ -206,24 +247,30 @@ edition = "2021"
 
 		assert.equal(result.exit_code, 0);
 		assert.deepEqual(
-			fs.readFileSync(cargoManifestLog, "utf8").trim().split("\n"),
-			["Cargo.toml"],
+			fs.readFileSync(cargoMetadataLog, "utf8").trim().split("\n"),
+			["Cargo.toml", "crates/member/Cargo.toml"],
 		);
+		assert.deepEqual(
+			fs.readFileSync(rustfmtArgsLog, "utf8").trim().split("\n"),
+			["2021\tsrc/lib.rs", "2021\tcrates/member/src/lib.rs"],
+		);
+		assert.match(result.details, /rustfmt --check --edition 2021 src\/lib\.rs/);
 		assert.match(
 			result.details,
-			/cargo fmt --check --manifest-path Cargo\.toml/,
+			/rustfmt --check --edition 2021 crates\/member\/src\/lib\.rs/,
 		);
-		assert.doesNotMatch(result.details, /crates\/member\/Cargo\.toml/);
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}
 });
 
-test("cargo-fmt.sh uses --all for virtual workspace roots", () => {
+test("cargo-fmt.sh formats virtual workspace members via rustfmt target roots", () => {
 	const context = makeTempRepo("cargo-fmt-virtual-workspace-");
-	const cargoManifestLog = path.join(context.tempDir, "cargo-manifests.log");
+	const cargoMetadataLog = path.join(context.tempDir, "cargo-metadata.log");
+	const rustfmtArgsLog = path.join(context.tempDir, "rustfmt-args.log");
 
 	createCargoStub(context.binDir);
+	createRustfmtStub(context.binDir);
 	writeFile(
 		path.join(context.repoDir, "Cargo.toml"),
 		`[workspace]
@@ -253,8 +300,9 @@ edition = "2021"
 				encoding: "utf8",
 				env: {
 					...process.env,
-					CARGO_MANIFEST_LOG: cargoManifestLog,
+					CARGO_METADATA_LOG: cargoMetadataLog,
 					PATH: `${context.binDir}:${process.env.PATH}`,
+					RUSTFMT_ARGS_LOG: rustfmtArgsLog,
 					RUNNER_TEMP: context.runnerTemp,
 				},
 			},
@@ -263,16 +311,20 @@ edition = "2021"
 
 		assert.equal(result.exit_code, 0);
 		assert.deepEqual(
-			fs.readFileSync(cargoManifestLog, "utf8").trim().split("\n"),
-			["Cargo.toml"],
+			fs.readFileSync(cargoMetadataLog, "utf8").trim().split("\n"),
+			["crates/member/Cargo.toml"],
+		);
+		assert.deepEqual(
+			fs.readFileSync(rustfmtArgsLog, "utf8").trim().split("\n"),
+			["2021\tcrates/member/src/lib.rs"],
 		);
 		assert.match(
 			result.details,
-			/cargo fmt --check --all --manifest-path Cargo\.toml/,
+			/rustfmt --check --edition 2021 crates\/member\/src\/lib\.rs/,
 		);
 		assert.doesNotMatch(
 			result.details,
-			/Failed to find targets|This utility formats all bin and lib files/,
+			/Failed to find targets|cargo fmt --check --all --manifest-path/,
 		);
 	} finally {
 		cleanupTempRepo(context.tempDir);

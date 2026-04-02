@@ -21,34 +21,6 @@ cargo_fmt_persist_env() {
   fi
 }
 
-cargo_fmt_resolve_workspace_manifest() {
-  local source_root=$1
-  local manifest_path=$2
-
-  (
-    cd "$source_root" &&
-      linter_lib::resolve_cargo_workspace_manifest "$source_root" "$manifest_path" cargo
-  )
-}
-
-cargo_fmt_normalize_manifests() {
-  local source_root=$1
-  shift
-
-  local -A seen_manifests=()
-  local manifest_path normalized_manifest
-
-  for manifest_path in "$@"; do
-    normalized_manifest=$(cargo_fmt_resolve_workspace_manifest "$source_root" "$manifest_path")
-    if [ -n "${seen_manifests[$normalized_manifest]+x}" ]; then
-      continue
-    fi
-
-    seen_manifests["$normalized_manifest"]=1
-    printf '%s\n' "$normalized_manifest"
-  done
-}
-
 mode=${1-}
 if [ "$#" -gt 0 ]; then
   shift
@@ -64,7 +36,8 @@ EOF
     : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
     cargo_fmt_prepare_env
 
-    if command -v cargo >/dev/null 2>&1 && cargo fmt --version >/dev/null 2>&1; then
+    if command -v cargo >/dev/null 2>&1 && cargo --version >/dev/null 2>&1 && \
+       command -v rustfmt >/dev/null 2>&1 && rustfmt --version >/dev/null 2>&1; then
       exit 0
     fi
 
@@ -99,25 +72,52 @@ EOF
       linter_lib::emit_json_result 1 "$output_file"
       exit 0
     fi
-    mapfile -t manifests < <(cargo_fmt_normalize_manifests "$repo_root" "${manifests[@]}")
 
     run_cargo_fmt() {
       local failure=0
       local current_manifest
+      local metadata_output
+      local metadata_line
+      local edition
       local display_command
-      local -a cargo_fmt_args
+      local -a metadata_lines=()
+      local -a rustfmt_args=()
+      local -a rustfmt_targets=()
 
       for current_manifest in "${manifests[@]}"; do
-        cargo_fmt_args=(fmt --check --manifest-path "$current_manifest")
-        display_command="cargo fmt --check --manifest-path $current_manifest"
-
-        if linter_lib::cargo_manifest_is_virtual_workspace "$current_manifest"; then
-          cargo_fmt_args=(fmt --check --all --manifest-path "$current_manifest")
-          display_command="cargo fmt --check --all --manifest-path $current_manifest"
+        if ! metadata_output="$(linter_lib::collect_cargo_rustfmt_targets "$repo_root" "$current_manifest")"; then
+          printf 'Failed to resolve rustfmt targets for %s\n\n' "$current_manifest"
+          failure=1
+          continue
         fi
 
+        mapfile -t metadata_lines <<< "$metadata_output"
+        edition=""
+        rustfmt_targets=()
+        for metadata_line in "${metadata_lines[@]}"; do
+          case "$metadata_line" in
+            edition$'\t'*)
+              edition=${metadata_line#edition$'\t'}
+              ;;
+            "")
+              ;;
+            *)
+              rustfmt_targets+=("$metadata_line")
+              ;;
+          esac
+        done
+
+        if [ -z "$edition" ] || [ "${#rustfmt_targets[@]}" -eq 0 ]; then
+          printf 'Failed to resolve rustfmt targets for %s\n\n' "$current_manifest"
+          failure=1
+          continue
+        fi
+
+        rustfmt_args=(--check --edition "$edition" "${rustfmt_targets[@]}")
+        display_command="rustfmt --check --edition $edition ${rustfmt_targets[*]}"
+
         printf '==> %s\n' "$display_command"
-        if ! cargo "${cargo_fmt_args[@]}"; then
+        if ! rustfmt "${rustfmt_args[@]}"; then
           failure=1
         fi
         echo

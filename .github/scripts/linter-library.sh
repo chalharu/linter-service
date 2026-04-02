@@ -86,22 +86,74 @@ linter_lib::find_cargo_manifest() {
   return 1
 }
 
-linter_lib::cargo_manifest_is_virtual_workspace() {
-  local manifest_path=$1
+linter_lib::cargo_rustfmt_targets_from_metadata() {
+  local source_root=$1
+  local manifest_path=$2
 
-  if [ ! -f "$manifest_path" ]; then
+  node -e '
+const fs = require("node:fs");
+const path = require("node:path");
+
+const sourceRoot = process.argv[1];
+const requestedManifest = process.argv[2];
+const data = JSON.parse(fs.readFileSync(0, "utf8"));
+const packages = Array.isArray(data.packages) ? data.packages : [];
+
+function normalizePath(absolutePath) {
+  if (typeof absolutePath !== "string" || absolutePath.length === 0) {
+    return null;
+  }
+
+  const relativePath = path.relative(sourceRoot, absolutePath);
+
+  if (relativePath.length === 0) {
+    return ".";
+  }
+
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    return null;
+  }
+
+  return relativePath.split(path.sep).join("/");
+}
+
+const pkg = packages.find(
+  (currentPackage) =>
+    normalizePath(currentPackage?.manifest_path) === requestedManifest,
+);
+
+if (!pkg || typeof pkg.edition !== "string" || pkg.edition.length === 0) {
+  process.exit(1);
+}
+
+process.stdout.write(`edition\t${pkg.edition}\n`);
+
+const seenTargets = new Set();
+for (const target of Array.isArray(pkg.targets) ? pkg.targets : []) {
+  const targetPath = normalizePath(target?.src_path);
+  if (!targetPath || seenTargets.has(targetPath)) {
+    continue;
+  }
+
+  seenTargets.add(targetPath);
+  process.stdout.write(`${targetPath}\n`);
+}
+  ' "$source_root" "$manifest_path"
+}
+
+linter_lib::collect_cargo_rustfmt_targets() {
+  local source_root=$1
+  local manifest_path=$2
+  local metadata_json
+
+  if ! metadata_json="$(
+    cd "$source_root" &&
+      cargo metadata --format-version 1 --no-deps --manifest-path "$manifest_path" 2>/dev/null
+  )"; then
     return 1
   fi
 
-  if ! grep -Eq '^[[:space:]]*\[workspace\][[:space:]]*$' "$manifest_path"; then
-    return 1
-  fi
-
-  if grep -Eq '^[[:space:]]*\[package\][[:space:]]*$' "$manifest_path"; then
-    return 1
-  fi
-
-  return 0
+  printf '%s' "$metadata_json" | linter_lib::cargo_rustfmt_targets_from_metadata "$source_root" "$manifest_path"
 }
 
 linter_lib::workspace_manifest_from_metadata() {
