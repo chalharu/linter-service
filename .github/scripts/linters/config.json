@@ -112,8 +112,8 @@
       "name": "cargo-fmt",
       "heading": "### cargo-fmt",
       "no_files": "No matching Rust files were selected for `cargo-fmt`.",
-      "success": "✅ No issues were reported for the selected Cargo project target(s).",
-      "failure": "❌ Issues were reported for the selected Cargo project target(s).",
+      "success": "✅ No issues were reported for the selected Rust file target(s).",
+      "failure": "❌ Issues were reported for the selected Rust file target(s).",
       "infra_failure": "❌ The `cargo-fmt` workflow failed before producing a detailed report. See the workflow logs.",
       "details_fallback": "cargo-fmt did not produce diagnostic output before the job failed.",
       "sarif": {

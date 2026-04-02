@@ -36,8 +36,7 @@ EOF
     : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
     cargo_fmt_prepare_env
 
-    if command -v cargo >/dev/null 2>&1 && cargo --version >/dev/null 2>&1 && \
-       command -v rustfmt >/dev/null 2>&1 && rustfmt --version >/dev/null 2>&1; then
+    if command -v rustfmt >/dev/null 2>&1 && rustfmt --version >/dev/null 2>&1; then
       exit 0
     fi
 
@@ -66,58 +65,25 @@ EOF
     : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
     cargo_fmt_prepare_env
     output_file="$RUNNER_TEMP/linter-output.txt"
-    repo_root=$(pwd -P)
-    manifests=()
-    if ! linter_lib::collect_cargo_manifests "$output_file" "Cargo fmt" manifests "$@"; then
-      linter_lib::emit_json_result 1 "$output_file"
-      exit 0
-    fi
 
     run_cargo_fmt() {
       local failure=0
-      local current_manifest
-      local metadata_output
-      local metadata_line
-      local edition
-      local display_command
-      local -a metadata_lines=()
-      local -a rustfmt_args=()
-      local -a rustfmt_targets=()
+      local current_file
+      local -a unique_files=()
+      local -A seen_files=()
 
-      for current_manifest in "${manifests[@]}"; do
-        if ! metadata_output="$(linter_lib::collect_cargo_rustfmt_targets "$repo_root" "$current_manifest")"; then
-          printf 'Failed to resolve rustfmt targets for %s\n\n' "$current_manifest"
-          failure=1
+      for current_file in "$@"; do
+        if [ -n "${seen_files[$current_file]+x}" ]; then
           continue
         fi
 
-        mapfile -t metadata_lines <<< "$metadata_output"
-        edition=""
-        rustfmt_targets=()
-        for metadata_line in "${metadata_lines[@]}"; do
-          case "$metadata_line" in
-            edition$'\t'*)
-              edition=${metadata_line#edition$'\t'}
-              ;;
-            "")
-              ;;
-            *)
-              rustfmt_targets+=("$metadata_line")
-              ;;
-          esac
-        done
+        seen_files["$current_file"]=1
+        unique_files+=("$current_file")
+      done
 
-        if [ -z "$edition" ] || [ "${#rustfmt_targets[@]}" -eq 0 ]; then
-          printf 'Failed to resolve rustfmt targets for %s\n\n' "$current_manifest"
-          failure=1
-          continue
-        fi
-
-        rustfmt_args=(--check --edition "$edition" "${rustfmt_targets[@]}")
-        display_command="rustfmt --check --edition $edition ${rustfmt_targets[*]}"
-
-        printf '==> %s\n' "$display_command"
-        if ! rustfmt "${rustfmt_args[@]}"; then
+      for current_file in "${unique_files[@]}"; do
+        printf '==> rustfmt --check %s\n' "$current_file"
+        if ! rustfmt --check "$current_file"; then
           failure=1
         fi
         echo
@@ -126,7 +92,7 @@ EOF
       return "$failure"
     }
 
-    linter_lib::run_and_emit_json "$output_file" run_cargo_fmt
+    linter_lib::run_and_emit_json "$output_file" run_cargo_fmt "$@"
     ;;
   *)
     echo "usage: $0 {patterns|install|run}" >&2
