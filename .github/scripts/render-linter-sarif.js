@@ -272,7 +272,7 @@ function parsePathDiagnostics({
 		for (const pattern of patterns) {
 			const match = pattern.exec(line);
 
-			if (!match || !match.groups) {
+			if (!match?.groups) {
 				continue;
 			}
 
@@ -332,7 +332,7 @@ function parseRustStyleDiagnostics({
 			rawLine,
 		);
 
-		if (!match || !match.groups) {
+		if (!match?.groups) {
 			continue;
 		}
 
@@ -379,7 +379,7 @@ function parseShellcheckStyleDiagnostics({
 			lines[index].trim(),
 		);
 
-		if (!match || !match.groups) {
+		if (!match?.groups) {
 			continue;
 		}
 
