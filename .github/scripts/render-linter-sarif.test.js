@@ -233,3 +233,61 @@ test("parses file line and column diagnostics into SARIF results", () => {
 		cleanupTempRepo(context.tempDir);
 	}
 });
+
+test("keeps substring matches from changing the default SARIF severity", () => {
+	const context = makeTempRepo("render-linter-sarif-severity-");
+	const configPath = path.join(context.tempDir, "config.json");
+
+	writeFile(path.join(context.repoDir, "src/app.py"), "print('bad')\n");
+	writeFile(
+		configPath,
+		JSON.stringify(
+			{
+				linters: [
+					{
+						name: "example",
+						details_fallback: "fallback",
+						sarif: {
+							enabled: true,
+						},
+					},
+				],
+			},
+			null,
+			2,
+		),
+	);
+	writeFile(
+		path.join(context.runnerTemp, "selected-files.txt"),
+		"src/app.py\n",
+	);
+	writeFile(
+		path.join(context.runnerTemp, "linter-result.json"),
+		JSON.stringify({
+			details:
+				"src/app.py:8:3: F841 Local variable 'error_count' is assigned to but never used\nsrc/app.py:9:3: APP_INFO is not in alphabetical order",
+			exit_code: 1,
+		}),
+	);
+
+	try {
+		const report = renderSarif({
+			configPath,
+			installOutcome: "success",
+			linterName: "example",
+			outputPath: path.join(context.runnerTemp, "example.sarif"),
+			resultPath: path.join(context.runnerTemp, "linter-result.json"),
+			runOutcome: "success",
+			selectedFilesPath: path.join(context.runnerTemp, "selected-files.txt"),
+			selectOutcome: "success",
+			sourceRepositoryPath: context.repoDir,
+		});
+
+		assert.deepEqual(
+			report.sarif.runs[0].results.map((result) => result.level),
+			["warning", "warning"],
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});

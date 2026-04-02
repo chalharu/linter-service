@@ -475,7 +475,7 @@ jobs:
       - detect-targets
       - notify-processing-started
       - run-linters
-    if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
+    if: ${{ always() && needs.detect-targets.outputs.skip-reason == '' }}
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -572,17 +572,18 @@ jobs:
           app-id: ${{ secrets.CHECKER_APP_ID }}
           owner: ${{ steps.decode_repository_context.outputs.pr-owner }}
           permission-pull-requests: write
+          permission-security-events: write
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ steps.decode_repository_context.outputs.pr-repo }}
 
       - name: Get source repository checker token
         id: get_source_token
+        if: ${{ needs.detect-targets.outputs.selected-linters-json != '[]' }}
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
           owner: ${{ steps.decode_repository_context.outputs.source-owner }}
           permission-checks: write
-          permission-security-events: write
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ steps.decode_repository_context.outputs.source-repo }}
 
@@ -640,9 +641,19 @@ jobs:
 
           exit "$failures"
 
+      - name: Prepare deselected SARIF placeholders
+        if: ${{ always() }}
+        env:
+          LINTER_CONFIG_PATH: ${{ github.workspace }}/linter-service/.github/scripts/linters/config.json
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
+          OUTPUT_ROOT: ${{ runner.temp }}/linter-sarifs-decrypted
+          SELECTED_LINTERS_JSON: ${{ needs.detect-targets.outputs.selected-linters-json }}
+        run: |
+          node "$LINTER_SERVICE_PATH/.github/scripts/prepare-deselected-sarif.js"
+
       - name: Prepare combined report
         id: prepare_report
-        if: ${{ always() }}
+        if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
         env:
           DECRYPT_SUMMARIES_OUTCOME: ${{ steps.decrypt_summaries.outcome }}
           LINTER_SUMMARY_PATH: ${{ runner.temp }}/linter-summaries-decrypted
@@ -727,7 +738,7 @@ jobs:
           PY
 
       - name: Upsert combined PR comment
-        if: ${{ always() }}
+        if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           COMMENT_FILE: ${{ runner.temp }}/combined-linter-comment.md
@@ -752,12 +763,12 @@ jobs:
         env:
           LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
           SARIF_HEAD_SHA: ${{ steps.decode_repository_context.outputs.source-head-sha }}
-          SARIF_OWNER: ${{ steps.decode_repository_context.outputs.source-owner }}
-          SARIF_REF: ${{ steps.decode_repository_context.outputs.source-head-ref }}
-          SARIF_REPO: ${{ steps.decode_repository_context.outputs.source-repo }}
+          SARIF_OWNER: ${{ steps.decode_repository_context.outputs.pr-owner }}
+          SARIF_PR_NUMBER: ${{ needs.detect-targets.outputs.pull-request-number }}
+          SARIF_REPO: ${{ steps.decode_repository_context.outputs.pr-repo }}
           SARIF_ROOT: ${{ runner.temp }}/linter-sarifs-decrypted
         with:
-          github-token: ${{ steps.get_source_token.outputs.token }}
+          github-token: ${{ steps.get_pr_token.outputs.token }}
           script: |
             const uploadSarif = require(
               `${process.env.LINTER_SERVICE_PATH}/.github/scripts/upload-sarif.js`,
@@ -766,7 +777,7 @@ jobs:
 
       - name: Prepare final processing summary
         id: prepare_final_summary
-        if: ${{ always() }}
+        if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
         env:
           OVERALL_CONCLUSION: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_conclusion || 'failure' }}
           OVERALL_SUMMARY: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_summary || 'The linter-service workflow failed to generate a combined report.' }}
@@ -780,18 +791,18 @@ jobs:
           overall_summary = os.environ["OVERALL_SUMMARY"]
           upload_sarif_outcome = os.environ.get("UPLOAD_SARIF_OUTCOME", "")
 
-          if upload_sarif_outcome == "failure":
-              conclusion = "failure"
-              summary = f"{overall_summary} SARIF upload failed; see the workflow logs."
-          else:
-              conclusion = overall_conclusion
-              summary = overall_summary
-
+          conclusion = overall_conclusion
+          summary = overall_summary
           title = (
               "linter-service completed"
               if conclusion == "success"
               else "linter-service found issues"
           )
+
+          if upload_sarif_outcome == "failure":
+              summary = f"{overall_summary} Warning: SARIF upload failed; see the workflow logs."
+              if conclusion == "success":
+                  title = "linter-service completed with warnings"
 
           output_path = Path(os.environ["GITHUB_OUTPUT"])
           with output_path.open("a", encoding="utf-8") as fh:
@@ -801,7 +812,7 @@ jobs:
           PY
 
       - name: Finalize processing check run
-        if: ${{ always() }}
+        if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           CHECK_RUN_CONCLUSION: ${{ steps.prepare_final_summary.outputs.conclusion || 'failure' }}
@@ -830,9 +841,17 @@ jobs:
             await upsertCheckRun({ github, env: process.env });
 
       - name: Fail workflow when lint reports issues
-        if: ${{ steps.prepare_final_summary.outputs.conclusion != 'success' }}
+        if: ${{ needs.detect-targets.outputs.selected-linters-json != '[]' && steps.prepare_report.outputs.overall_conclusion != 'success' }}
+        env:
+          SUMMARY: ${{ steps.prepare_final_summary.outputs.summary }}
         run: |
-          echo "${{ steps.prepare_final_summary.outputs.summary }}" >&2
+          echo "$SUMMARY" >&2
+          exit 1
+
+      - name: Fail workflow when deselected SARIF upload fails
+        if: ${{ needs.detect-targets.outputs.selected-linters-json == '[]' && steps.upload_sarif.outcome == 'failure' }}
+        run: |
+          echo "SARIF upload failed while clearing deselected linter results. See the workflow logs." >&2
           exit 1
 
   no-linters-needed:

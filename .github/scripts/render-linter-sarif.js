@@ -615,15 +615,15 @@ function summarizeDetails(details, linterName) {
 }
 
 function toSarifLevel(text, defaultLevel) {
-	if (/fatal|error|failed/iu.test(text)) {
+	if (/\b(?:fatal|error|failed)\b/iu.test(text)) {
 		return "error";
 	}
 
-	if (/warn|warning/iu.test(text)) {
+	if (/\b(?:warn|warning)\b/iu.test(text)) {
 		return "warning";
 	}
 
-	if (/note|info/iu.test(text)) {
+	if (/\b(?:note|info)\b/iu.test(text)) {
 		return "note";
 	}
 
