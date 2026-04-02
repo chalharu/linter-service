@@ -97,6 +97,18 @@ interface CheckRunEventPayload {
 	sender?: GitHubUser;
 }
 
+interface PushEventPayload {
+	after: string;
+	before?: string;
+	created?: boolean;
+	deleted?: boolean;
+	forced?: boolean;
+	installation?: GitHubInstallation;
+	ref: string;
+	repository: GitHubRepository;
+	sender?: GitHubUser;
+}
+
 const DEFAULT_API_BASE_URL = "https://api.github.com";
 const DISPATCH_EVENT_TYPE = "github_app_webhook";
 const FORWARDED_PULL_REQUEST_ACTIONS = new Set([
@@ -171,6 +183,9 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
 		case "pull_request":
 			assertPullRequestEventPayload(payload);
 			return handlePullRequestEvent(payload, deliveryId, env);
+		case "push":
+			assertPushEventPayload(payload);
+			return handlePushEvent(payload, deliveryId, env);
 		case "check_run":
 			assertCheckRunEventPayload(payload);
 			return handleCheckRunEvent(payload, deliveryId, env);
@@ -208,7 +223,7 @@ async function handlePullRequestEvent(
 	await sendRepositoryDispatch(
 		env,
 		dispatchToken,
-		buildClientPayload({
+		buildPullRequestClientPayload({
 			action: payload.action,
 			deliveryId,
 			pullRequest: normalizePullRequest(payload.pull_request),
@@ -219,9 +234,49 @@ async function handlePullRequestEvent(
 	);
 
 	return dispatchedResponse({
-		head_ref: payload.pull_request.head.ref ?? null,
-		head_sha: payload.pull_request.head.sha ?? null,
-		number: payload.pull_request.number,
+		pull_request: {
+			head_ref: payload.pull_request.head.ref ?? null,
+			head_sha: payload.pull_request.head.sha ?? null,
+			number: payload.pull_request.number,
+		},
+	});
+}
+
+async function handlePushEvent(
+	payload: PushEventPayload,
+	deliveryId: string,
+	env: Env,
+): Promise<Response> {
+	if (isDispatchTargetRepository(payload.repository, env)) {
+		return skippedResponse(SELF_WEBHOOK_SKIP_REASON);
+	}
+
+	if (!isForwardedPushEvent(payload)) {
+		return skippedResponse(
+			`push event is not forwarded: ref ${payload.ref} is not the default branch`,
+		);
+	}
+
+	const sourceInstallationId = getSourceInstallationId(payload.installation);
+	const dispatchToken = await createDispatchInstallationToken(env);
+
+	await sendRepositoryDispatch(
+		env,
+		dispatchToken,
+		buildPushClientPayload({
+			deliveryId,
+			push: payload,
+			sender: payload.sender,
+			sourceInstallationId,
+		}),
+	);
+
+	return dispatchedResponse({
+		push: {
+			default_branch: payload.repository.default_branch ?? null,
+			head_sha: payload.after,
+			ref: payload.ref,
+		},
 	});
 }
 
@@ -241,7 +296,7 @@ async function handleCheckRunEvent(
 	return skippedResponse(CHECK_RUN_SKIP_REASON);
 }
 
-function buildClientPayload({
+function buildPullRequestClientPayload({
 	action,
 	deliveryId,
 	pullRequest,
@@ -263,6 +318,30 @@ function buildClientPayload({
 		pull_request: pullRequest,
 		received_at: new Date().toISOString(),
 		repository: normalizeRepository(repository),
+		sender: normalizeUser(sender),
+		source_installation_id: sourceInstallationId,
+	};
+
+	return payload;
+}
+
+function buildPushClientPayload({
+	deliveryId,
+	push,
+	sender,
+	sourceInstallationId,
+}: {
+	deliveryId: string;
+	push: PushEventPayload;
+	sender?: GitHubUser;
+	sourceInstallationId: number;
+}): JsonRecord {
+	const payload: JsonRecord = {
+		delivery_id: deliveryId,
+		event_name: "push",
+		push: normalizePushEvent(push),
+		received_at: new Date().toISOString(),
+		repository: normalizeRepository(push.repository),
 		sender: normalizeUser(sender),
 		source_installation_id: sourceInstallationId,
 	};
@@ -524,6 +603,18 @@ function normalizePullRequestBranch(
 	};
 }
 
+function normalizePushEvent(payload: PushEventPayload): JsonRecord {
+	return {
+		after: payload.after,
+		before: payload.before ?? null,
+		created: typeof payload.created === "boolean" ? payload.created : null,
+		deleted: typeof payload.deleted === "boolean" ? payload.deleted : null,
+		forced: typeof payload.forced === "boolean" ? payload.forced : null,
+		ref: payload.ref,
+		ref_name: normalizeRefName(payload.ref),
+	};
+}
+
 function normalizeRepository(
 	repository: GitHubRepository | undefined,
 ): JsonRecord | null {
@@ -601,13 +692,13 @@ function skippedResponse(reason: string): Response {
 	);
 }
 
-function dispatchedResponse(pullRequest: JsonRecord): Response {
+function dispatchedResponse(details: JsonRecord): Response {
 	return json(
 		{
 			ok: true,
 			dispatched: true,
 			skipped: false,
-			pull_request: pullRequest,
+			...details,
 		},
 		200,
 	);
@@ -764,6 +855,20 @@ function isForwardedPullRequestEvent(
 	);
 }
 
+function isForwardedPushEvent(payload: PushEventPayload): boolean {
+	if (payload.deleted) {
+		return false;
+	}
+
+	const defaultBranch = payload.repository.default_branch;
+
+	return (
+		typeof defaultBranch === "string" &&
+		defaultBranch.length > 0 &&
+		payload.ref === `refs/heads/${defaultBranch}`
+	);
+}
+
 function hasPullRequestBaseChange(payload: PullRequestEventPayload): boolean {
 	if (payload.action !== "edited") {
 		return false;
@@ -777,6 +882,10 @@ function hasPullRequestBaseChange(payload: PullRequestEventPayload): boolean {
 		isRecord(changes.base.ref) &&
 		typeof changes.base.ref.from === "string"
 	);
+}
+
+function normalizeRefName(ref: string): string {
+	return ref.startsWith("refs/heads/") ? ref.slice("refs/heads/".length) : ref;
 }
 
 function timingSafeEqual(left: string, right: string): boolean {
@@ -834,6 +943,21 @@ function assertCheckRunEventPayload(
 		!isCheckRun(payload.check_run)
 	) {
 		throw new HttpError(400, "invalid check_run payload");
+	}
+}
+
+function assertPushEventPayload(
+	payload: unknown,
+): asserts payload is PushEventPayload {
+	if (
+		!isRecord(payload) ||
+		typeof payload.after !== "string" ||
+		typeof payload.ref !== "string" ||
+		!isRepository(payload.repository) ||
+		typeof payload.repository.default_branch !== "string" ||
+		payload.repository.default_branch.length === 0
+	) {
+		throw new HttpError(400, "invalid push payload");
 	}
 }
 

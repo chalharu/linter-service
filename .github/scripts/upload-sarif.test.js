@@ -80,6 +80,57 @@ test("uploads each SARIF file, uses the PR ref, and waits for completion", async
 	}
 });
 
+test("uploads each SARIF file with an explicit branch ref", async () => {
+	const context = makeTempRepo("upload-sarif-branch-ref-");
+	const sarifRoot = path.join(context.tempDir, "sarif");
+	const calls = [];
+
+	fs.mkdirSync(sarifRoot, { recursive: true });
+	writeFile(
+		path.join(sarifRoot, "example.sarif"),
+		JSON.stringify({
+			version: "2.1.0",
+			runs: [
+				{
+					automationDetails: { id: "linter-service/example" },
+					results: [],
+					tool: { driver: { name: "linter-service/example" } },
+				},
+			],
+		}),
+	);
+
+	try {
+		const outcome = await uploadSarif({
+			env: {
+				SARIF_HEAD_SHA: "abc123",
+				SARIF_OWNER: "octo",
+				SARIF_POLL_ATTEMPTS: "2",
+				SARIF_POLL_INTERVAL_MS: "1",
+				SARIF_REF: "main",
+				SARIF_REPO: "demo",
+				SARIF_ROOT: sarifRoot,
+			},
+			github: {
+				request: async (route, params) => {
+					calls.push({ params, route });
+
+					if (route === "POST /repos/{owner}/{repo}/code-scanning/sarifs") {
+						return { data: { id: "1", processing_status: "pending" } };
+					}
+
+					return { data: { processing_status: "complete" } };
+				},
+			},
+		});
+
+		assert.deepEqual(outcome, { skipped: 0, uploaded: 1 });
+		assert.equal(calls[0].params.ref, "refs/heads/main");
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
 test("returns success when there are no SARIF files to upload", async () => {
 	const context = makeTempRepo("upload-sarif-empty-");
 	const sarifRoot = path.join(context.tempDir, "sarif");

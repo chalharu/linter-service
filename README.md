@@ -23,8 +23,8 @@ GitHub Actions が共通ルールで lint します。
  共通 lint workflow
 ```
 
-- 外部リポジトリの PR は Worker 経由で処理します。
-- このリポジトリ自身の PR は `pull_request` で処理します。
+- 外部リポジトリの PR と default branch push は Worker 経由で処理します。
+- このリポジトリ自身の PR は `pull_request`、default branch 更新は `push` で処理します。
 - Worker は dispatch 先 repo からの self-webhook を無視し、二重実行と再帰起動を防ぎます。
 
 ## 主な場所
@@ -39,8 +39,9 @@ GitHub Actions が共通ルールで lint します。
 
 ## 共有 linter 一覧
 
-`repository-dispatch.yml` は changed file path から対象 linter を選びます。
-一致した linter にだけ、対応する changed file を渡します。
+`repository-dispatch.yml` は PR では changed file path から、
+default branch push では repository 全体の tracked file path から対象 linter を選びます。
+一致した linter にだけ、対応する target file path を渡します。
 
 | linter | 対象ファイル | 設定ファイル | 制限事項 |
 |--------|--------------|--------------|----------|
@@ -71,7 +72,7 @@ GitHub Actions が共通ルールで lint します。
 1. `.github/scripts/linters/<name>.sh` を追加します。
    `patterns`, `install`, `run` の 3 mode を実装してください。
    `repository-dispatch.yml` は `patterns` の regex で対象 linter を選び、
-   `lint-common.yml` は一致した changed file path を `run` に渡します。
+   `lint-common.yml` は一致した target file path を `run` に渡します。
 
    ```bash
    #!/usr/bin/env bash
