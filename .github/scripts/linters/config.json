@@ -200,7 +200,10 @@
       "success": "✅ No issues were reported for the selected GitHub Actions workflow target(s).",
       "failure": "❌ Issues were reported for the selected GitHub Actions workflow target(s).",
       "infra_failure": "❌ The `zizmor` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "zizmor did not produce diagnostic output before the job failed."
+      "details_fallback": "zizmor did not produce diagnostic output before the job failed.",
+      "sarif": {
+        "enabled": true
+      }
     }
   ]
 }
