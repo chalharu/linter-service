@@ -1,4 +1,10 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
+
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-exec bash "$script_dir/main.sh" install "$@"
+# shellcheck source=./common.sh
+source "$script_dir/common.sh"
+
+: "${RUNNER_TEMP:?RUNNER_TEMP is required}"
+linter_lib::install_python_tools "$RUNNER_TEMP/ruff-venv" ruff
