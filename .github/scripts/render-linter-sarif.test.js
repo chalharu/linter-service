@@ -8,7 +8,11 @@ const {
 	makeTempRepo,
 	writeFile,
 } = require("./linters/cargo-linter-test-lib.js");
-const { renderSarif, runFromEnv } = require("./render-linter-sarif.js");
+const {
+	normalizeReportedPath,
+	renderSarif,
+	runFromEnv,
+} = require("./render-linter-sarif.js");
 
 test("does not emit SARIF when the linter has no SARIF config", () => {
 	const context = makeTempRepo("render-linter-sarif-disabled-");
@@ -229,6 +233,28 @@ test("parses file line and column diagnostics into SARIF results", () => {
 				.startColumn,
 			3,
 		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("does not remap temp-worktree absolute paths for generated files missing from the repository", () => {
+	const context = makeTempRepo("render-linter-sarif-temp-worktree-path-");
+
+	writeFile(path.join(context.repoDir, "src/lib.rs"), "pub fn demo() {}\n");
+
+	try {
+		const resolved = normalizeReportedPath(
+			context.repoDir,
+			path.join(
+				context.runnerTemp,
+				"cargo-clippy-workspace/source/target/debug/build/demo/out/generated.rs",
+			),
+			["src/lib.rs"],
+			[path.join(context.runnerTemp, "cargo-clippy-workspace/source")],
+		);
+
+		assert.equal(resolved, null);
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}
