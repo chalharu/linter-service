@@ -113,7 +113,7 @@ linter_lib::collect_cargo_manifests() {
 
   if [ "${#missing_files[@]}" -gt 0 ]; then
     {
-      printf '%s requires each selected Rust file to belong to a Cargo package.\n' "$tool_name"
+      printf '%s requires each selected file to belong to a Cargo package.\n' "$tool_name"
       echo "No Cargo.toml found for:"
       for path in "${missing_files[@]}"; do
         printf ' - %s\n' "$path"
@@ -123,6 +123,49 @@ linter_lib::collect_cargo_manifests() {
   fi
 
   return 0
+}
+
+linter_lib::collect_cargo_relevant_dirs() {
+  local -A seen=()
+  local manifest_path current_dir
+
+  seen["."]=1
+  printf '%s\n' "."
+
+  for manifest_path in "$@"; do
+    current_dir=$(dirname "$manifest_path")
+
+    while :; do
+      if [ -z "${seen[$current_dir]+x}" ]; then
+        seen["$current_dir"]=1
+        printf '%s\n' "$current_dir"
+      fi
+
+      if [ "$current_dir" = "." ] || [ "$current_dir" = "/" ]; then
+        break
+      fi
+
+      current_dir=$(dirname "$current_dir")
+    done
+  done
+}
+
+linter_lib::find_unsupported_cargo_config() {
+  local dir candidate
+
+  for dir in "$@"; do
+    for candidate in \
+      "$dir/.cargo/config.toml" \
+      "$dir/.cargo/config"
+    do
+      if [ -f "$candidate" ]; then
+        printf '%s\n' "${candidate#./}"
+        return 0
+      fi
+    done
+  done
+
+  return 1
 }
 
 linter_lib::emit_json_result() {
