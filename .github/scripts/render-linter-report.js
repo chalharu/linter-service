@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const CARGO_LINTERS = new Set(["cargo-clippy", "cargo-deny", "cargo-fmt"]);
+const CARGO_LINTERS = new Set(["cargo-clippy", "cargo-deny"]);
 const CARGO_DENY_CONFIG_FILE = /(?:^|\/)\.cargo\/config(?:\.toml)?$/u;
 const CARGO_DENY_POLICY_FILE = /(?:^|\/)deny\.toml$/u;
 const MAX_RENDERED_PATHS = 100;

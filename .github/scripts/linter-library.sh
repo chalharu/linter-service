@@ -86,24 +86,6 @@ linter_lib::find_cargo_manifest() {
   return 1
 }
 
-linter_lib::cargo_manifest_is_virtual_workspace() {
-  local manifest_path=$1
-
-  if [ ! -f "$manifest_path" ]; then
-    return 1
-  fi
-
-  if ! grep -Eq '^[[:space:]]*\[workspace\][[:space:]]*$' "$manifest_path"; then
-    return 1
-  fi
-
-  if grep -Eq '^[[:space:]]*\[package\][[:space:]]*$' "$manifest_path"; then
-    return 1
-  fi
-
-  return 0
-}
-
 linter_lib::workspace_manifest_from_metadata() {
   local source_root=$1
 

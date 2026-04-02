@@ -56,6 +56,46 @@ test("lists checked file paths in a successful non-cargo linter report", () => {
 	}
 });
 
+test("treats rustfmt as selected Rust files instead of Cargo projects", () => {
+	const context = makeTempRepo("render-linter-report-rustfmt-files-");
+
+	populateCargoRepo(context.repoDir);
+
+	try {
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "selected-files.txt"),
+			["src/lib.rs", "crates/member/src/lib.rs"].join("\n") + "\n",
+			"utf8",
+		);
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "linter-result.json"),
+			JSON.stringify({ details: "", exit_code: 0 }),
+			"utf8",
+		);
+
+		const report = runFromEnv(
+			createReportEnv(context, {
+				EXIT_CODE: "0",
+				LINTER_NAME: "rustfmt",
+			}),
+		);
+
+		assert.equal(report.conclusion, "success");
+		assert.deepEqual(report.checkedProjects, []);
+		assert.match(
+			report.body,
+			/✅ No issues were reported for the selected Rust file target\(s\)\./,
+		);
+		assert.match(report.body, /Target file paths:/);
+		assert.match(report.body, /- <code>src\/lib\.rs<\/code>/);
+		assert.match(report.body, /- <code>crates\/member\/src\/lib\.rs<\/code>/);
+		assert.doesNotMatch(report.body, /Cargo project targets:/);
+		assert.doesNotMatch(report.body, /Cargo\.toml/);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
 test("lists checked Cargo projects alongside changed file paths", () => {
 	const context = makeTempRepo("render-linter-report-cargo-");
 
