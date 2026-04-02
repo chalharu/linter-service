@@ -176,7 +176,10 @@
       "success": "✅ No issues were reported for the selected editorconfig-checker target(s).",
       "failure": "❌ Issues were reported for the selected editorconfig-checker target(s).",
       "infra_failure": "❌ The `editorconfig-checker` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "editorconfig-checker did not produce diagnostic output before the job failed."
+      "details_fallback": "editorconfig-checker did not produce diagnostic output before the job failed.",
+      "sarif": {
+        "enabled": true
+      }
     },
     {
       "name": "shellcheck",
