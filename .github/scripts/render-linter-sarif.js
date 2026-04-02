@@ -19,6 +19,7 @@ function runFromEnv(env = process.env) {
 			env.OUTPUT_PATH ||
 			path.join(runnerTemp, `linter-sarif-${linterName}.sarif`),
 		resultPath: requireEnv(env, "RESULT_PATH"),
+		runnerTemp,
 		runOutcome: env.RUN_LINTER_OUTCOME ?? "",
 		selectedFilesPath: requireEnv(env, "SELECTED_FILES_PATH"),
 		selectOutcome: env.SELECT_FILES_OUTCOME ?? "",
@@ -42,6 +43,7 @@ function renderSarif({
 	linterName,
 	outputPath,
 	resultPath,
+	runnerTemp,
 	runOutcome,
 	selectedFilesPath,
 	selectOutcome,
@@ -74,6 +76,11 @@ function renderSarif({
 		result,
 		linterConfig.details_fallback,
 	);
+	const reportedPathRoots = buildReportedPathRoots({
+		linterName,
+		runnerTemp,
+		sourceRepositoryPath,
+	});
 	const results =
 		result.exit_code === 0
 			? []
@@ -81,6 +88,7 @@ function renderSarif({
 					defaultLevel: sarifConfig.default_level || "warning",
 					details,
 					linterName,
+					reportedPathRoots,
 					sourceRepositoryPath,
 					targetPaths,
 				});
@@ -204,10 +212,25 @@ function collectSarifTargetPaths({
 	return selectedFiles;
 }
 
+function buildReportedPathRoots({
+	linterName,
+	runnerTemp,
+	sourceRepositoryPath,
+}) {
+	const roots = [path.resolve(sourceRepositoryPath)];
+
+	if (typeof runnerTemp === "string" && runnerTemp.length > 0) {
+		roots.push(path.resolve(runnerTemp, `${linterName}-workspace/source`));
+	}
+
+	return [...new Set(roots)];
+}
+
 function buildSarifResults({
 	defaultLevel,
 	details,
 	linterName,
+	reportedPathRoots,
 	sourceRepositoryPath,
 	targetPaths,
 }) {
@@ -216,6 +239,7 @@ function buildSarifResults({
 			defaultLevel,
 			details,
 			linterName,
+			reportedPathRoots,
 			sourceRepositoryPath,
 			targetPaths,
 		}),
@@ -223,6 +247,15 @@ function buildSarifResults({
 			defaultLevel,
 			details,
 			linterName,
+			reportedPathRoots,
+			sourceRepositoryPath,
+			targetPaths,
+		}),
+		...parseSnippetStyleDiagnostics({
+			defaultLevel,
+			details,
+			linterName,
+			reportedPathRoots,
 			sourceRepositoryPath,
 			targetPaths,
 		}),
@@ -230,6 +263,7 @@ function buildSarifResults({
 			defaultLevel,
 			details,
 			linterName,
+			reportedPathRoots,
 			sourceRepositoryPath,
 			targetPaths,
 		}),
@@ -243,6 +277,7 @@ function buildSarifResults({
 		defaultLevel,
 		details,
 		linterName,
+		reportedPathRoots,
 		sourceRepositoryPath,
 		targetPaths,
 	});
@@ -252,6 +287,7 @@ function parsePathDiagnostics({
 	defaultLevel,
 	details,
 	linterName,
+	reportedPathRoots,
 	sourceRepositoryPath,
 	targetPaths,
 }) {
@@ -280,6 +316,7 @@ function parsePathDiagnostics({
 				sourceRepositoryPath,
 				match.groups.path,
 				targetPaths,
+				reportedPathRoots,
 			);
 
 			if (!filePath) {
@@ -311,6 +348,7 @@ function parseRustStyleDiagnostics({
 	defaultLevel,
 	details,
 	linterName,
+	reportedPathRoots,
 	sourceRepositoryPath,
 	targetPaths,
 }) {
@@ -340,6 +378,67 @@ function parseRustStyleDiagnostics({
 			sourceRepositoryPath,
 			match.groups.path,
 			targetPaths,
+			reportedPathRoots,
+		);
+
+		if (!filePath) {
+			continue;
+		}
+
+		results.push(
+			createResult({
+				column: parseInteger(match.groups.column),
+				defaultLevel,
+				filePath,
+				line: parseInteger(match.groups.line),
+				linterName,
+				message: currentMessage || summarizeDetails(details, linterName),
+				ruleId:
+					extractRuleId(currentMessage, linterName) ||
+					`${linterName}/diagnostic`,
+			}),
+		);
+	}
+
+	return results;
+}
+
+function parseSnippetStyleDiagnostics({
+	defaultLevel,
+	details,
+	linterName,
+	reportedPathRoots,
+	sourceRepositoryPath,
+	targetPaths,
+}) {
+	let currentMessage = "";
+	const results = [];
+
+	for (const rawLine of details.split(/\r?\n/u)) {
+		const line = rawLine.trim();
+
+		if (/^(error|warning|note)(\[[^\]]+\])?:/iu.test(line)) {
+			currentMessage = line.replace(
+				/^(error|warning|note)(\[[^\]]+\])?:\s*/iu,
+				"",
+			);
+			continue;
+		}
+
+		const match =
+			/^\s*[│|]?\s*[┌╭]─\s+(?<path>.+?):(?<line>\d+):(?<column>\d+)/u.exec(
+				rawLine,
+			);
+
+		if (!match?.groups) {
+			continue;
+		}
+
+		const filePath = normalizeReportedPath(
+			sourceRepositoryPath,
+			match.groups.path,
+			targetPaths,
+			reportedPathRoots,
 		);
 
 		if (!filePath) {
@@ -368,6 +467,7 @@ function parseShellcheckStyleDiagnostics({
 	defaultLevel,
 	details,
 	linterName,
+	reportedPathRoots,
 	sourceRepositoryPath,
 	targetPaths,
 }) {
@@ -387,6 +487,7 @@ function parseShellcheckStyleDiagnostics({
 			sourceRepositoryPath,
 			match.groups.path,
 			targetPaths,
+			reportedPathRoots,
 		);
 
 		if (!filePath) {
@@ -431,6 +532,7 @@ function buildFallbackResults({
 	defaultLevel,
 	details,
 	linterName,
+	reportedPathRoots,
 	sourceRepositoryPath,
 	targetPaths,
 }) {
@@ -452,7 +554,12 @@ function buildFallbackResults({
 				defaultLevel,
 				filePath:
 					filePath &&
-					normalizeReportedPath(sourceRepositoryPath, filePath, targetPaths),
+					normalizeReportedPath(
+						sourceRepositoryPath,
+						filePath,
+						targetPaths,
+						reportedPathRoots,
+					),
 				linterName,
 				message: summaryMessage,
 				ruleId:
@@ -642,7 +749,12 @@ function normalizeReportedPath(
 	sourceRepositoryPath,
 	reportedPath,
 	targetPaths,
+	reportedPathRoots = [],
 ) {
+	const absolutePathRoots =
+		reportedPathRoots.length > 0
+			? reportedPathRoots
+			: [path.resolve(sourceRepositoryPath)];
 	const normalized = normalizePath(String(reportedPath || "").trim()).replace(
 		/^\.\//u,
 		"",
@@ -662,13 +774,17 @@ function normalizeReportedPath(
 	}
 
 	if (path.isAbsolute(reportedPath)) {
-		const relative = path.relative(
-			path.resolve(sourceRepositoryPath),
-			reportedPath,
-		);
+		for (const rootPath of absolutePathRoots) {
+			const relative = path.relative(rootPath, reportedPath);
+			const repoResolved = path.resolve(sourceRepositoryPath, relative);
 
-		if (!relative.startsWith("..") && !path.isAbsolute(relative)) {
-			return normalizePath(relative);
+			if (
+				!relative.startsWith("..") &&
+				!path.isAbsolute(relative) &&
+				fs.existsSync(repoResolved)
+			) {
+				return normalizePath(relative);
+			}
 		}
 	}
 
