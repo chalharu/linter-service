@@ -139,7 +139,11 @@
       "success": "✅ No issues were reported for the selected Cargo project target(s).",
       "failure": "❌ Issues were reported for the selected Cargo project target(s).",
       "infra_failure": "❌ The `cargo-deny` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "cargo-deny did not produce diagnostic output before the job failed."
+      "details_fallback": "cargo-deny did not produce diagnostic output before the job failed.",
+      "sarif": {
+        "enabled": true,
+        "target_kind": "cargo-projects"
+      }
     },
     {
       "name": "taplo",
