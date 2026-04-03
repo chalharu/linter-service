@@ -51,6 +51,7 @@ default branch push では repository 全体の tracked file path から対象 l
 | `actionlint` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | `.github/actionlint.yaml` / `.github/actionlint.yml` | - |
 | `ghalint` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | `.ghalint.yaml` → `.ghalint.yml` → `ghalint.yaml` → `ghalint.yml` → `.github/ghalint.yaml` → `.github/ghalint.yml` | - |
 | `hadolint` | `Dockerfile`, `Dockerfile.*`, `Containerfile`, `Containerfile.*`, `*.dockerfile`, `*.containerfile` | 対象ファイルの directory から親へ向けて `.hadolint.yaml` / `.hadolint.yml` を探し、見つかれば `--config` で明示します。 | 未配置時は既定値を使います。 |
+| `trivy` | `Dockerfile`, `Dockerfile.*`, `Containerfile`, `Containerfile.*`, `*.dockerfile`, `*.containerfile` | repo root の `trivy.yaml` / `trivy.yml` と `.trivyignore` | shared workflow は Dockerfile/Containerfile の misconfiguration scan だけを、SHA pin した official image 内で実行します。container は `--cap-drop ALL --security-opt no-new-privileges --read-only --tmpfs /tmp --network=none --user <uid>:<gid>` で動かし、`--skip-check-update` により実行時の rule update は行いません。 |
 | `dotenv-linter` | `.env`, `.env.*` | なし | shared workflow は upstream default checks を changed `.env` file に直接適用します。`--schema` や ignore-checks の注入は現状未対応です。 |
 | `spectral` | `*.json`, `*.yaml`, `*.yml` | `.spectral.yml` / `.spectral.yaml` / `.spectral.json` | 未配置時は `spectral:oas` を使い、unknown format は無視します。`.spectral.js` は任意コード実行を避けるため対象外です。 |
 | `yamllint` | `*.yaml`, `*.yml` | `.yamllint` → `.yamllint.yaml` → `.yamllint.yml` | - |

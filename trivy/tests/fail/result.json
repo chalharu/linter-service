@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "Dockerfile:1:1: warning DS-0001 (MEDIUM): Specify a tag in the 'FROM' statement for image 'ubuntu'\nDockerfile:1:1: warning DS-0026 (LOW): Add HEALTHCHECK instruction in your Dockerfile\nDockerfile:2:1: error DS-0002 (HIGH): Last USER command in Dockerfile should not be 'root'",
+    "exit_code": 1
+  },
+  "selected_files": [
+    "Dockerfile"
+  ]
+}
