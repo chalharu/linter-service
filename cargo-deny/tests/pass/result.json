@@ -1,0 +1,103 @@
+{
+  "checked_projects": [
+    "Cargo.toml"
+  ],
+  "result": {
+    "cargo_deny_runs": [
+      {
+        "audit_reports": [
+          {
+            "lockfile": {
+              "dependency-count": 1
+            },
+            "settings": {
+              "ignore": [],
+              "informational_warnings": [
+                "notice",
+                "unmaintained",
+                "unsound"
+              ],
+              "severity": null,
+              "target_arch": [],
+              "target_os": []
+            },
+            "vulnerabilities": {
+              "count": 0,
+              "found": false,
+              "list": []
+            },
+            "warnings": {}
+          }
+        ],
+        "command": "cargo-deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output",
+        "config_path": null,
+        "diagnostics": [
+          {
+            "fields": {
+              "code": "no-license-field",
+              "graphs": [
+                {
+                  "Krate": {
+                    "name": "fixture-pass",
+                    "version": "0.1.0"
+                  }
+                }
+              ],
+              "message": "license expression was not specified in manifest for crate 'fixture-pass = 0.1.0'",
+              "severity": "warning"
+            },
+            "type": "diagnostic"
+          },
+          {
+            "fields": {
+              "code": "unlicensed",
+              "graphs": [
+                {
+                  "Krate": {
+                    "name": "fixture-pass",
+                    "version": "0.1.0"
+                  }
+                }
+              ],
+              "labels": [
+                {
+                  "column": 9,
+                  "line": 2,
+                  "message": "",
+                  "span": "fixture-pass"
+                }
+              ],
+              "message": "a valid license expression could not be retrieved for the crate",
+              "severity": "warning"
+            },
+            "type": "diagnostic"
+          },
+          {
+            "fields": {
+              "code": "unlicensed",
+              "graphs": [
+                {
+                  "Krate": {
+                    "name": "fixture-pass",
+                    "version": "0.1.0"
+                  }
+                }
+              ],
+              "message": "fixture-pass = 0.1.0 is unlicensed",
+              "severity": "error"
+            },
+            "type": "diagnostic"
+          }
+        ],
+        "exit_code": 4,
+        "manifest_path": "Cargo.toml"
+      }
+    ],
+    "details": "==> cargo-deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output\nwarning[no-license-field]: license expression was not specified in manifest for crate 'fixture-pass = 0.1.0'\nwarning[unlicensed]: a valid license expression could not be retrieved for the crate\nCargo.toml:2:9: fixture-pass\nerror[unlicensed]: fixture-pass = 0.1.0 is unlicensed",
+    "exit_code": 1
+  },
+  "selected_files": [
+    "Cargo.lock",
+    "Cargo.toml"
+  ]
+}

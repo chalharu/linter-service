@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/yamllint"
+      },
+      "results": [
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "config.yaml"
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "::group::config.yaml"
+          },
+          "properties": {
+            "linter_name": "yamllint"
+          },
+          "ruleId": "yamllint/diagnostic"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/chalharu/linter-service",
+          "name": "linter-service/yamllint",
+          "rules": [
+            {
+              "id": "yamllint/diagnostic",
+              "name": "yamllint/diagnostic",
+              "shortDescription": {
+                "text": "yamllint/diagnostic"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

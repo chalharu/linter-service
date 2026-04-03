@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/cargo-deny"
+      },
+      "results": [
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "Cargo.toml"
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "cargo-deny reported issues."
+          },
+          "properties": {
+            "linter_name": "cargo-deny"
+          },
+          "ruleId": "cargo-deny/diagnostic"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/chalharu/linter-service",
+          "name": "linter-service/cargo-deny",
+          "rules": [
+            {
+              "id": "cargo-deny/diagnostic",
+              "name": "cargo-deny/diagnostic",
+              "shortDescription": {
+                "text": "cargo-deny/diagnostic"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

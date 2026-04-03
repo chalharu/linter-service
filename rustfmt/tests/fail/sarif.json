@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/rustfmt"
+      },
+      "results": [
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib.rs"
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Diff in src/lib.rs:1:"
+          },
+          "properties": {
+            "linter_name": "rustfmt"
+          },
+          "ruleId": "rustfmt/diagnostic"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/chalharu/linter-service",
+          "name": "linter-service/rustfmt",
+          "rules": [
+            {
+              "id": "rustfmt/diagnostic",
+              "name": "rustfmt/diagnostic",
+              "shortDescription": {
+                "text": "rustfmt/diagnostic"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

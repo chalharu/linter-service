@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/zizmor"
+      },
+      "results": [
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": ".github/workflows/workflow.yml"
+                },
+                "region": {
+                  "startColumn": 9,
+                  "startLine": 7
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "credential persistence through GitHub Actions artifacts"
+          },
+          "properties": {
+            "linter_name": "zizmor"
+          },
+          "ruleId": "artipacked"
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": ".github/workflows/workflow.yml"
+                },
+                "region": {
+                  "startColumn": 3,
+                  "startLine": 4
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "overly broad permissions"
+          },
+          "properties": {
+            "linter_name": "zizmor"
+          },
+          "ruleId": "excessive-permissions"
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": ".github/workflows/workflow.yml"
+                },
+                "region": {
+                  "startColumn": 15,
+                  "startLine": 7
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "unpinned action reference"
+          },
+          "properties": {
+            "linter_name": "zizmor"
+          },
+          "ruleId": "unpinned-uses"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/chalharu/linter-service",
+          "name": "linter-service/zizmor",
+          "rules": [
+            {
+              "id": "artipacked",
+              "name": "artipacked",
+              "shortDescription": {
+                "text": "artipacked"
+              }
+            },
+            {
+              "id": "excessive-permissions",
+              "name": "excessive-permissions",
+              "shortDescription": {
+                "text": "excessive-permissions"
+              }
+            },
+            {
+              "id": "unpinned-uses",
+              "name": "unpinned-uses",
+              "shortDescription": {
+                "text": "unpinned-uses"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

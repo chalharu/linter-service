@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "🌈 zizmor v1.23.1\n INFO audit: zizmor: 🌈 completed .github/workflows/workflow.yml\nwarning[artipacked]: credential persistence through GitHub Actions artifacts\n --> .github/workflows/workflow.yml:9:9\n  |\n9 |       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd\n  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ does not set persist-credentials: false\n  |\n  = note: audit confidence → Low\n  = note: this finding has an auto-fix\n  = help: audit documentation → https://docs.zizmor.sh/audits/#artipacked\n\n3 findings (2 suppressed, 1 fixable): 0 informational, 0 low, 1 medium, 0 high",
+    "exit_code": 13
+  },
+  "selected_files": [
+    ".github/workflows/workflow.yml"
+  ]
+}

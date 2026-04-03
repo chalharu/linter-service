@@ -1,0 +1,11 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "src/main.rs:\n\t2: Wrong indent style found (tabs instead of spaces)\n\n1 errors found",
+    "exit_code": 1
+  },
+  "selected_files": [
+    ".editorconfig",
+    "src/main.rs"
+  ]
+}
