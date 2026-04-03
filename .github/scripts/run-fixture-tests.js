@@ -349,6 +349,15 @@ function sanitizeFixtureString(value, repositoryPath) {
 
 	return normalized
 		.replace(
+			/(error: could not compile `([^`]+)` \((?:lib|lib test)\) due to 1 previous error)\n(warning: build failed, waiting for other jobs to finish\.\.\.)\n(error: could not compile `\2` \((?:lib|lib test)\) due to 1 previous error)/gu,
+			(_, firstError, crateName, warningLine, secondError) => {
+				const orderedErrors = [firstError, secondError].sort(
+					compareCargoClippyCompileErrors,
+				);
+				return `${orderedErrors[0]}\n${warningLine}\n${orderedErrors[1]}`;
+			},
+		)
+		.replace(
 			/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+\d\d:\d\d:\d\d(?:\.\d+)?\b/gu,
 			"<timestamp>",
 		)
@@ -357,6 +366,24 @@ function sanitizeFixtureString(value, repositoryPath) {
 			"<timestamp>",
 		)
 		.replace(/\b\d+(?:\.\d+)?(?:ns|us|µs|ms|s|min)\b/gu, "<duration>");
+}
+
+function compareCargoClippyCompileErrors(left, right) {
+	return buildCargoClippyCompileErrorKey(left).localeCompare(
+		buildCargoClippyCompileErrorKey(right),
+	);
+}
+
+function buildCargoClippyCompileErrorKey(line) {
+	if (line.includes("(lib)")) {
+		return `0\u0000${line}`;
+	}
+
+	if (line.includes("(lib test)")) {
+		return `1\u0000${line}`;
+	}
+
+	return `2\u0000${line}`;
 }
 
 function normalizeSarif(sarif, repositoryPath) {

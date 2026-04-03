@@ -204,6 +204,31 @@ test("normalizeFixtureResult removes temp paths and volatile durations", () => {
 	});
 });
 
+test("normalizeFixtureResult stabilizes cargo-clippy compile error ordering", () => {
+	const actual = normalizeFixtureResult({
+		report: {
+			checkedProjects: ["Cargo.toml"],
+			selectedFiles: ["src/lib.rs"],
+		},
+		repositoryPath: "/tmp/fixture-run/repo",
+		result: {
+			details:
+				"error: could not compile `fixture-fail` (lib test) due to 1 previous error\nwarning: build failed, waiting for other jobs to finish...\nerror: could not compile `fixture-fail` (lib) due to 1 previous error",
+			exit_code: 1,
+		},
+	});
+
+	assert.deepEqual(actual, {
+		checked_projects: ["Cargo.toml"],
+		result: {
+			details:
+				"error: could not compile `fixture-fail` (lib) due to 1 previous error\nwarning: build failed, waiting for other jobs to finish...\nerror: could not compile `fixture-fail` (lib test) due to 1 previous error",
+			exit_code: 1,
+		},
+		selected_files: ["src/lib.rs"],
+	});
+});
+
 test("normalizeSarif removes volatile timestamps and partial fingerprints", () => {
 	const actual = normalizeSarif(
 		{
