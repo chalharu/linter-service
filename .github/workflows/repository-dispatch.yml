@@ -130,6 +130,21 @@ jobs:
               execution_group = item.get("execution_group")
               if isinstance(execution_group, str) and execution_group:
                   definition["execution_group"] = execution_group
+              default_disabled = item.get("default_disabled")
+              if default_disabled is not None:
+                  if not isinstance(default_disabled, bool):
+                      raise SystemExit(f"{linter_name}.default_disabled must be a boolean")
+                  definition["default_disabled"] = default_disabled
+              required_root_files = item.get("required_root_files")
+              if required_root_files is not None:
+                  if not isinstance(required_root_files, list) or not all(
+                      isinstance(entry, str) and entry.strip()
+                      for entry in required_root_files
+                  ):
+                      raise SystemExit(
+                          f"{linter_name}.required_root_files must be an array of non-empty strings"
+                      )
+                  definition["required_root_files"] = required_root_files
               definitions.append(definition)
 
           output_path = Path(os.environ["RUNNER_TEMP"]) / "linter-definitions.json"
@@ -367,6 +382,7 @@ jobs:
               const selectedLinters = selectLinters({
                 candidatePaths: currentFiles,
                 definitions,
+                repositoryPath: sourceRepositoryPath,
                 serviceConfig,
               });
               const selectedLinterJobs = buildLinterJobAssignments({
@@ -431,6 +447,7 @@ jobs:
               const selectedLinters = selectLinters({
                 candidatePaths: currentFiles,
                 definitions,
+                repositoryPath: sourceRepositoryPath,
                 serviceConfig,
               });
               const selectedLinterJobs = buildLinterJobAssignments({

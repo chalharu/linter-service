@@ -1,6 +1,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
+const { parseExactPackageSpec } = require("./npm-package-spec.js");
+
 function runFromEnv(env = process.env) {
 	const repositoryPath = requireEnv(env, "SOURCE_REPOSITORY_PATH");
 	return loadLinterServiceConfig({ repositoryPath });
@@ -95,16 +97,45 @@ function normalizeLinterConfigs(value) {
 			);
 		}
 
-		entries[linterName] = {
+		const entry = {
 			disabled: currentConfig.disabled === true,
+			disabled_explicit:
+				currentConfig.disabled === true || currentConfig.disabled === false,
 			exclude_paths: normalizeGlobList(
 				currentConfig.exclude_paths,
 				`linters.${linterName}.exclude_paths`,
 			),
 		};
+
+		if (linterName === "textlint") {
+			entry.preset_package = normalizeOptionalPresetPackage(
+				currentConfig.preset_package,
+				`linters.${linterName}.preset_package`,
+			);
+
+			if (
+				currentConfig.disabled === false &&
+				typeof entry.preset_package !== "string"
+			) {
+				throw new Error(
+					`linters.${linterName}.preset_package is required when textlint is enabled`,
+				);
+			}
+		}
+
+		entries[linterName] = entry;
 	}
 
 	return entries;
+}
+
+function normalizeOptionalPresetPackage(value, label) {
+	if (value === undefined) {
+		return null;
+	}
+
+	const { spec } = parseExactPackageSpec(value, label);
+	return spec;
 }
 
 function normalizeGlobList(value, label) {
@@ -136,17 +167,46 @@ function normalizeRelativePath(value) {
 
 function getExcludedPatterns(config, linterName) {
 	const normalized = normalizeLoadedConfig(config);
-	const linterConfig = normalized.linters[linterName] || {
-		disabled: false,
-		exclude_paths: [],
-	};
+	const linterConfig = getLinterConfig(normalized, linterName);
 
 	return [...normalized.global.exclude_paths, ...linterConfig.exclude_paths];
 }
 
-function isLinterEnabled(config, linterName) {
+function getLinterConfig(config, linterName) {
 	const normalized = normalizeLoadedConfig(config);
-	return normalized.linters[linterName]?.disabled !== true;
+	const linterConfig = normalized.linters[linterName];
+
+	return (
+		linterConfig || {
+			disabled: false,
+			disabled_explicit: false,
+			exclude_paths: [],
+			preset_package: null,
+		}
+	);
+}
+
+function getTextlintPresetPackage(config) {
+	return getLinterConfig(config, "textlint").preset_package;
+}
+
+function isLinterEnabled(config, linterName, { defaultDisabled = false } = {}) {
+	const normalized = normalizeLoadedConfig(config);
+	const linterConfig = normalized.linters[linterName];
+
+	if (!linterConfig) {
+		return defaultDisabled !== true;
+	}
+
+	if (linterConfig.disabled === true) {
+		return false;
+	}
+
+	if (defaultDisabled) {
+		return linterConfig.disabled_explicit === true;
+	}
+
+	return true;
 }
 
 function isPathExcluded(config, linterName, candidatePath) {
@@ -232,7 +292,9 @@ if (require.main === module) {
 
 module.exports = {
 	filterExcludedPaths,
+	getLinterConfig,
 	getExcludedPatterns,
+	getTextlintPresetPackage,
 	isLinterEnabled,
 	isPathExcluded,
 	loadLinterServiceConfig,

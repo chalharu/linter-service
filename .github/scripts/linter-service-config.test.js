@@ -6,6 +6,7 @@ const test = require("node:test");
 
 const {
 	filterExcludedPaths,
+	getTextlintPresetPackage,
 	isLinterEnabled,
 	isPathExcluded,
 	loadLinterServiceConfig,
@@ -158,6 +159,98 @@ test("supports per-linter disable flags", () => {
 		assert.equal(isLinterEnabled(config, "actionlint"), false);
 		assert.equal(isLinterEnabled(config, "ghalint"), true);
 		assert.equal(isLinterEnabled(config, "yamllint"), true);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("requires explicit enablement and preset_package for default-disabled textlint", () => {
+	const context = makeTempRepo();
+
+	fs.writeFileSync(
+		path.join(context.repoDir, ".github", "linter-service.json"),
+		JSON.stringify(
+			{
+				linters: {
+					textlint: {
+						disabled: false,
+						preset_package: "textlint-rule-preset-ja-technical-writing@12.0.2",
+					},
+				},
+			},
+			null,
+			2,
+		),
+		"utf8",
+	);
+
+	try {
+		const config = loadLinterServiceConfig({
+			repositoryPath: context.repoDir,
+		});
+
+		assert.equal(
+			isLinterEnabled(config, "textlint", { defaultDisabled: true }),
+			true,
+		);
+		assert.equal(
+			getTextlintPresetPackage(config),
+			"textlint-rule-preset-ja-technical-writing@12.0.2",
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("default-disabled textlint stays disabled without explicit disabled false", () => {
+	const config = {
+		global: {
+			exclude_paths: [],
+		},
+		linters: {
+			textlint: {
+				disabled: false,
+				disabled_explicit: false,
+				exclude_paths: [],
+				preset_package: "textlint-rule-preset-ja-technical-writing@12.0.2",
+			},
+		},
+	};
+
+	assert.equal(
+		isLinterEnabled(config, "textlint", { defaultDisabled: true }),
+		false,
+	);
+});
+
+test("rejects invalid textlint preset package configuration", () => {
+	const context = makeTempRepo();
+
+	fs.writeFileSync(
+		path.join(context.repoDir, ".github", "linter-service.json"),
+		JSON.stringify(
+			{
+				linters: {
+					textlint: {
+						disabled: false,
+						preset_package: "textlint-rule-preset-ja-technical-writing",
+					},
+				},
+			},
+			null,
+			2,
+		),
+		"utf8",
+	);
+
+	try {
+		assert.throws(
+			() =>
+				loadLinterServiceConfig({
+					repositoryPath: context.repoDir,
+				}),
+			/exact version/u,
+		);
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}
