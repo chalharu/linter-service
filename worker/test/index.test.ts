@@ -9,6 +9,8 @@ const TEST_PRIVATE_KEY = privateKey
 	.toString();
 
 const baseEnv: Env = {
+	GITHUB_CHECKER_APP_ID: "987654",
+	GITHUB_CHECKER_APP_PRIVATE_KEY: TEST_PRIVATE_KEY,
 	GITHUB_CHECKER_WEBHOOK_SECRET: "super-secret",
 	GITHUB_DISPATCHER_APP_ID: "123456",
 	GITHUB_DISPATCHER_APP_PRIVATE_KEY: TEST_PRIVATE_KEY,
@@ -29,23 +31,7 @@ describe("github webhook proxy worker", () => {
 	it("dispatches normalized pull_request payloads with the dispatcher app", async () => {
 		const fetchMock = vi.mocked(fetch);
 
-		fetchMock
-			.mockResolvedValueOnce(
-				new Response(JSON.stringify({ id: 456 }), {
-					headers: { "content-type": "application/json" },
-					status: 200,
-				}),
-			)
-			.mockResolvedValueOnce(
-				new Response(
-					JSON.stringify({ token: "dispatcher-installation-token" }),
-					{
-						headers: { "content-type": "application/json" },
-						status: 201,
-					},
-				),
-			)
-			.mockResolvedValueOnce(new Response(null, { status: 204 }));
+		mockPullRequestDispatchAndQueuedCheck(fetchMock);
 
 		const request = createWebhookRequest(
 			"pull_request",
@@ -115,7 +101,7 @@ describe("github webhook proxy worker", () => {
 			head_sha: "abc123",
 			number: 42,
 		});
-		expect(fetchMock).toHaveBeenCalledTimes(3);
+		expect(fetchMock).toHaveBeenCalledTimes(7);
 		expect(fetchMock.mock.calls[0]?.[0]).toBe(
 			"https://api.github.com/repos/chalharu/linter-service/installation",
 		);
@@ -123,11 +109,23 @@ describe("github webhook proxy worker", () => {
 			"https://api.github.com/app/installations/456/access_tokens",
 		);
 		expect(fetchMock.mock.calls[2]?.[0]).toBe(
+			"https://api.github.com/repos/octocat/forked-repo/installation",
+		);
+		expect(fetchMock.mock.calls[3]?.[0]).toBe(
+			"https://api.github.com/app/installations/654/access_tokens",
+		);
+		expect(fetchMock.mock.calls[4]?.[0]).toBe(
+			"https://api.github.com/repos/octocat/forked-repo/commits/abc123/check-runs?check_name=linter-service&page=1&per_page=100",
+		);
+		expect(fetchMock.mock.calls[5]?.[0]).toBe(
+			"https://api.github.com/repos/octocat/forked-repo/check-runs",
+		);
+		expect(fetchMock.mock.calls[6]?.[0]).toBe(
 			"https://api.github.com/repos/chalharu/linter-service/dispatches",
 		);
 
 		const dispatchBody = JSON.parse(
-			(fetchMock.mock.calls[2]?.[1] as RequestInit).body as string,
+			(fetchMock.mock.calls[6]?.[1] as RequestInit).body as string,
 		) as {
 			client_payload: {
 				event_name: string;
@@ -153,28 +151,39 @@ describe("github webhook proxy worker", () => {
 			"feature/example",
 		);
 		expect(dispatchBody.client_payload.repository.owner.login).toBe("acme");
+
+		const queuedCheckBody = JSON.parse(
+			(fetchMock.mock.calls[5]?.[1] as RequestInit).body as string,
+		) as {
+			details_url: string;
+			external_id: string;
+			head_sha: string;
+			name: string;
+			output: {
+				summary: string;
+				title: string;
+			};
+			status: string;
+		};
+
+		expect(queuedCheckBody).toEqual({
+			details_url: "https://github.com/acme/source-repo/pull/42",
+			external_id: "linter-service:42:abc123",
+			head_sha: "abc123",
+			name: "linter-service",
+			output: {
+				summary:
+					"The linter-service workflow request is being queued and should start shortly.",
+				title: "linter-service is queued",
+			},
+			status: "queued",
+		});
 	});
 
 	it("normalizes custom GitHub API base URLs before calling upstream APIs", async () => {
 		const fetchMock = vi.mocked(fetch);
 
-		fetchMock
-			.mockResolvedValueOnce(
-				new Response(JSON.stringify({ id: 456 }), {
-					headers: { "content-type": "application/json" },
-					status: 200,
-				}),
-			)
-			.mockResolvedValueOnce(
-				new Response(
-					JSON.stringify({ token: "dispatcher-installation-token" }),
-					{
-						headers: { "content-type": "application/json" },
-						status: 201,
-					},
-				),
-			)
-			.mockResolvedValueOnce(new Response(null, { status: 204 }));
+		mockPullRequestDispatchAndQueuedCheck(fetchMock);
 
 		const request = createWebhookRequest(
 			"pull_request",
@@ -237,7 +246,7 @@ describe("github webhook proxy worker", () => {
 		});
 
 		expect(response.status).toBe(200);
-		expect(fetchMock).toHaveBeenCalledTimes(3);
+		expect(fetchMock).toHaveBeenCalledTimes(7);
 		expect(fetchMock.mock.calls[0]?.[0]).toBe(
 			"https://api.github.example.test/repos/chalharu/linter-service/installation",
 		);
@@ -245,6 +254,18 @@ describe("github webhook proxy worker", () => {
 			"https://api.github.example.test/app/installations/456/access_tokens",
 		);
 		expect(fetchMock.mock.calls[2]?.[0]).toBe(
+			"https://api.github.example.test/repos/octocat/forked-repo/installation",
+		);
+		expect(fetchMock.mock.calls[3]?.[0]).toBe(
+			"https://api.github.example.test/app/installations/654/access_tokens",
+		);
+		expect(fetchMock.mock.calls[4]?.[0]).toBe(
+			"https://api.github.example.test/repos/octocat/forked-repo/commits/abc123/check-runs?check_name=linter-service&page=1&per_page=100",
+		);
+		expect(fetchMock.mock.calls[5]?.[0]).toBe(
+			"https://api.github.example.test/repos/octocat/forked-repo/check-runs",
+		);
+		expect(fetchMock.mock.calls[6]?.[0]).toBe(
 			"https://api.github.example.test/repos/chalharu/linter-service/dispatches",
 		);
 	});
@@ -391,23 +412,7 @@ describe("github webhook proxy worker", () => {
 	it("dispatches pull_request edits when the base branch changes", async () => {
 		const fetchMock = vi.mocked(fetch);
 
-		fetchMock
-			.mockResolvedValueOnce(
-				new Response(JSON.stringify({ id: 456 }), {
-					headers: { "content-type": "application/json" },
-					status: 200,
-				}),
-			)
-			.mockResolvedValueOnce(
-				new Response(
-					JSON.stringify({ token: "dispatcher-installation-token" }),
-					{
-						headers: { "content-type": "application/json" },
-						status: 201,
-					},
-				),
-			)
-			.mockResolvedValueOnce(new Response(null, { status: 204 }));
+		mockPullRequestDispatchAndQueuedCheck(fetchMock);
 
 		const request = createWebhookRequest(
 			"pull_request",
@@ -423,11 +428,22 @@ describe("github webhook proxy worker", () => {
 				installation: { id: 987 },
 				pull_request: {
 					base: { ref: "release/1.x", sha: "def456" },
-					head: { ref: "feature/example", sha: "abc123" },
+					head: {
+						ref: "feature/example",
+						repo: {
+							full_name: "octocat/forked-repo",
+							name: "forked-repo",
+							owner: { login: "octocat", type: "User" },
+						},
+						sha: "abc123",
+					},
+					html_url: "https://github.com/acme/source-repo/pull/42",
 					number: 42,
 				},
 				repository: {
 					full_name: "acme/source-repo",
+					name: "source-repo",
+					owner: { login: "acme", type: "Organization" },
 				},
 			},
 			baseEnv.GITHUB_CHECKER_WEBHOOK_SECRET,
@@ -446,7 +462,192 @@ describe("github webhook proxy worker", () => {
 			head_sha: "abc123",
 			number: 42,
 		});
-		expect(fetchMock).toHaveBeenCalledTimes(3);
+		expect(fetchMock).toHaveBeenCalledTimes(7);
+	});
+
+	it("updates an existing queued processing check instead of creating a duplicate", async () => {
+		const fetchMock = vi.mocked(fetch);
+
+		mockPullRequestDispatchAndQueuedCheck(fetchMock, {
+			existingQueuedCheckRunId: 73,
+		});
+
+		const request = createWebhookRequest(
+			"pull_request",
+			{
+				action: "opened",
+				installation: { id: 987 },
+				pull_request: {
+					base: { ref: "main" },
+					head: {
+						ref: "feature/example",
+						repo: {
+							full_name: "acme/source-repo",
+							name: "source-repo",
+							owner: { login: "acme", type: "Organization" },
+						},
+						sha: "abc123",
+					},
+					html_url: "https://github.com/acme/source-repo/pull/42",
+					number: 42,
+				},
+				repository: {
+					full_name: "acme/source-repo",
+					name: "source-repo",
+					owner: { login: "acme", type: "Organization" },
+				},
+			},
+			baseEnv.GITHUB_CHECKER_WEBHOOK_SECRET,
+		);
+
+		const response = await worker.fetch(request, baseEnv);
+
+		expect(response.status).toBe(200);
+		expect(fetchMock).toHaveBeenCalledTimes(7);
+		expect(fetchMock.mock.calls[5]?.[0]).toBe(
+			"https://api.github.com/repos/acme/source-repo/check-runs/73",
+		);
+		expect((fetchMock.mock.calls[5]?.[1] as RequestInit).method).toBe("PATCH");
+	});
+
+	it("scans multiple check-run pages before deciding to create a queued check", async () => {
+		const fetchMock = vi.mocked(fetch);
+
+		fetchMock
+			.mockResolvedValueOnce(jsonResponse({ id: 456 }, 200))
+			.mockResolvedValueOnce(
+				jsonResponse({ token: "dispatcher-installation-token" }, 201),
+			)
+			.mockResolvedValueOnce(jsonResponse({ id: 654 }, 200))
+			.mockResolvedValueOnce(
+				jsonResponse({ token: "checker-installation-token" }, 201),
+			)
+			.mockResolvedValueOnce(
+				jsonResponse(
+					{
+						check_runs: Array.from({ length: 100 }, (_, index) => ({
+							external_id: `other-check:${index}`,
+							id: index + 1,
+						})),
+					},
+					200,
+				),
+			)
+			.mockResolvedValueOnce(
+				jsonResponse(
+					{
+						check_runs: [
+							{
+								external_id: "linter-service:42:abc123",
+								id: 173,
+							},
+						],
+					},
+					200,
+				),
+			)
+			.mockResolvedValueOnce(new Response(null, { status: 200 }))
+			.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+		const request = createWebhookRequest(
+			"pull_request",
+			{
+				action: "opened",
+				installation: { id: 987 },
+				pull_request: {
+					base: { ref: "main" },
+					head: {
+						ref: "feature/example",
+						repo: {
+							full_name: "acme/source-repo",
+							name: "source-repo",
+							owner: { login: "acme", type: "Organization" },
+						},
+						sha: "abc123",
+					},
+					html_url: "https://github.com/acme/source-repo/pull/42",
+					number: 42,
+				},
+				repository: {
+					full_name: "acme/source-repo",
+					name: "source-repo",
+					owner: { login: "acme", type: "Organization" },
+				},
+			},
+			baseEnv.GITHUB_CHECKER_WEBHOOK_SECRET,
+		);
+
+		const response = await worker.fetch(request, baseEnv);
+
+		expect(response.status).toBe(200);
+		expect(fetchMock).toHaveBeenCalledTimes(8);
+		expect(fetchMock.mock.calls[4]?.[0]).toBe(
+			"https://api.github.com/repos/acme/source-repo/commits/abc123/check-runs?check_name=linter-service&page=1&per_page=100",
+		);
+		expect(fetchMock.mock.calls[5]?.[0]).toBe(
+			"https://api.github.com/repos/acme/source-repo/commits/abc123/check-runs?check_name=linter-service&page=2&per_page=100",
+		);
+		expect(fetchMock.mock.calls[6]?.[0]).toBe(
+			"https://api.github.com/repos/acme/source-repo/check-runs/173",
+		);
+		expect(fetchMock.mock.calls[7]?.[0]).toBe(
+			"https://api.github.com/repos/chalharu/linter-service/dispatches",
+		);
+	});
+
+	it("keeps dispatching when queued processing notification fails", async () => {
+		const fetchMock = vi.mocked(fetch);
+		const consoleError = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+
+		fetchMock
+			.mockResolvedValueOnce(jsonResponse({ id: 456 }, 200))
+			.mockResolvedValueOnce(
+				jsonResponse({ token: "dispatcher-installation-token" }, 201),
+			)
+			.mockResolvedValueOnce(
+				new Response(JSON.stringify({ message: "missing installation" }), {
+					headers: { "content-type": "application/json" },
+					status: 404,
+				}),
+			)
+			.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+		const request = createWebhookRequest(
+			"pull_request",
+			{
+				action: "opened",
+				installation: { id: 987 },
+				pull_request: {
+					base: { ref: "main" },
+					head: {
+						ref: "feature/example",
+						repo: {
+							full_name: "acme/source-repo",
+							name: "source-repo",
+							owner: { login: "acme", type: "Organization" },
+						},
+						sha: "abc123",
+					},
+					number: 42,
+				},
+				repository: {
+					full_name: "acme/source-repo",
+					name: "source-repo",
+					owner: { login: "acme", type: "Organization" },
+				},
+			},
+			baseEnv.GITHUB_CHECKER_WEBHOOK_SECRET,
+		);
+
+		const response = await worker.fetch(request, baseEnv);
+		const responseJson = await response.json<{ dispatched: boolean }>();
+
+		expect(response.status).toBe(200);
+		expect(responseJson.dispatched).toBe(true);
+		expect(fetchMock).toHaveBeenCalledTimes(4);
+		expect(consoleError).toHaveBeenCalled();
 	});
 
 	it("skips pull_request edits that do not change the base branch", async () => {
@@ -925,5 +1126,53 @@ function createWebhookRequest(
 			"x-hub-signature-256": signature,
 		},
 		method: "POST",
+	});
+}
+
+function mockPullRequestDispatchAndQueuedCheck(
+	fetchMock: ReturnType<typeof vi.mocked<typeof fetch>>,
+	options: {
+		existingQueuedCheckRunId?: number;
+	} = {},
+) {
+	const existingQueuedCheckRunId = options.existingQueuedCheckRunId ?? null;
+
+	fetchMock
+		.mockResolvedValueOnce(jsonResponse({ id: 456 }, 200))
+		.mockResolvedValueOnce(
+			jsonResponse({ token: "dispatcher-installation-token" }, 201),
+		)
+		.mockResolvedValueOnce(jsonResponse({ id: 654 }, 200))
+		.mockResolvedValueOnce(
+			jsonResponse({ token: "checker-installation-token" }, 201),
+		)
+		.mockResolvedValueOnce(
+			jsonResponse(
+				{
+					check_runs:
+						existingQueuedCheckRunId === null
+							? []
+							: [
+									{
+										external_id: "linter-service:42:abc123",
+										id: existingQueuedCheckRunId,
+									},
+								],
+				},
+				200,
+			),
+		)
+		.mockResolvedValueOnce(
+			new Response(null, {
+				status: existingQueuedCheckRunId === null ? 201 : 200,
+			}),
+		)
+		.mockResolvedValueOnce(new Response(null, { status: 204 }));
+}
+
+function jsonResponse(body: unknown, status: number): Response {
+	return new Response(JSON.stringify(body), {
+		headers: { "content-type": "application/json" },
+		status,
 	});
 }
