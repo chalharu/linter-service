@@ -1,6 +1,8 @@
 import { SignJWT } from "jose";
 
 export interface Env {
+	GITHUB_CHECKER_APP_ID?: string;
+	GITHUB_CHECKER_APP_PRIVATE_KEY?: string;
 	GITHUB_DISPATCHER_APP_ID: string;
 	GITHUB_DISPATCHER_APP_PRIVATE_KEY: string;
 	GITHUB_CHECKER_WEBHOOK_SECRET: string;
@@ -119,8 +121,13 @@ const FORWARDED_PULL_REQUEST_ACTIONS = new Set([
 ]);
 const CHECK_RUN_SKIP_REASON =
 	"check_run events are not forwarded because pull_request events are authoritative";
+const CHECK_RUNS_PAGE_SIZE = 100;
 const GITHUB_API_VERSION = "2022-11-28";
 const MANAGED_CHECK_RUN_EXTERNAL_ID_PREFIX = "linter-service:";
+const PROCESSING_CHECK_NAME = "linter-service";
+const QUEUED_PROCESSING_CHECK_SUMMARY =
+	"The linter-service workflow request is being queued and should start shortly.";
+const QUEUED_PROCESSING_CHECK_TITLE = `${PROCESSING_CHECK_NAME} is queued`;
 const SELF_WEBHOOK_SKIP_REASON =
 	"webhook events from the dispatch target repository are handled directly";
 const USER_AGENT = "linter-service-webhook-proxy";
@@ -219,6 +226,8 @@ async function handlePullRequestEvent(
 
 	const sourceInstallationId = getSourceInstallationId(payload.installation);
 	const dispatchToken = await createDispatchInstallationToken(env);
+
+	await tryNotifyQueuedProcessingCheck(payload, env);
 
 	await sendRepositoryDispatch(
 		env,
@@ -383,10 +392,15 @@ async function createDispatchInstallationToken(env: Env): Promise<string> {
 		env.GITHUB_DISPATCHER_APP_PRIVATE_KEY,
 		"GITHUB_DISPATCHER_APP_PRIVATE_KEY",
 	);
-	const appJwt = await createAppJwt(appId, privateKey);
+	const appJwt = await createAppJwt(appId, privateKey, "dispatcher");
 	const installationId = await resolveDispatchInstallationId(env, appJwt);
 
-	return createInstallationToken(env, appJwt, installationId);
+	return createInstallationToken(
+		env,
+		appJwt,
+		installationId,
+		"failed to create dispatcher installation token",
+	);
 }
 
 async function resolveDispatchInstallationId(
@@ -395,6 +409,23 @@ async function resolveDispatchInstallationId(
 ): Promise<number> {
 	const owner = requireEnv(env.GITHUB_DISPATCH_OWNER, "GITHUB_DISPATCH_OWNER");
 	const repo = requireEnv(env.GITHUB_DISPATCH_REPO, "GITHUB_DISPATCH_REPO");
+
+	return resolveRepositoryInstallationId(
+		env,
+		appJwt,
+		owner,
+		repo,
+		"failed to resolve dispatcher installation",
+	);
+}
+
+async function resolveRepositoryInstallationId(
+	env: Env,
+	appJwt: string,
+	owner: string,
+	repo: string,
+	errorMessage: string,
+): Promise<number> {
 	const responseText = await fetchGitHubText(
 		`${getGitHubApiBaseUrl(env)}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/installation`,
 		{
@@ -404,14 +435,14 @@ async function resolveDispatchInstallationId(
 			},
 			method: "GET",
 		},
-		"failed to resolve dispatcher installation",
+		errorMessage,
 	);
 	const payload = parseJson(responseText);
 	const installationId = isRecord(payload) ? payload.id : undefined;
 
 	assertPositiveInteger(
 		installationId,
-		"GitHub dispatcher installation response was malformed",
+		"GitHub installation response was malformed",
 		502,
 	);
 
@@ -422,6 +453,7 @@ async function createInstallationToken(
 	env: Env,
 	appJwt: string,
 	installationId: number,
+	errorMessage: string,
 ): Promise<string> {
 	const responseText = await fetchGitHubText(
 		`${getGitHubApiBaseUrl(env)}/app/installations/${installationId}/access_tokens`,
@@ -434,7 +466,7 @@ async function createInstallationToken(
 			},
 			method: "POST",
 		},
-		"failed to create dispatcher installation token",
+		errorMessage,
 	);
 	const payload = parseJson(responseText);
 
@@ -448,9 +480,37 @@ async function createInstallationToken(
 	return payload.token;
 }
 
+async function createCheckerInstallationTokenForRepository(
+	env: Env,
+	owner: string,
+	repo: string,
+): Promise<string> {
+	const appId = requireEnv(env.GITHUB_CHECKER_APP_ID, "GITHUB_CHECKER_APP_ID");
+	const privateKey = requireEnv(
+		env.GITHUB_CHECKER_APP_PRIVATE_KEY,
+		"GITHUB_CHECKER_APP_PRIVATE_KEY",
+	);
+	const appJwt = await createAppJwt(appId, privateKey, "checker");
+	const installationId = await resolveRepositoryInstallationId(
+		env,
+		appJwt,
+		owner,
+		repo,
+		"failed to resolve checker installation",
+	);
+
+	return createInstallationToken(
+		env,
+		appJwt,
+		installationId,
+		"failed to create checker installation token",
+	);
+}
+
 async function createAppJwt(
 	appId: string,
 	privateKeyPem: string,
+	appName: string,
 ): Promise<string> {
 	try {
 		const key = await importAppPrivateKey(privateKeyPem);
@@ -463,8 +523,8 @@ async function createAppJwt(
 			.setIssuer(appId)
 			.sign(key);
 	} catch (error) {
-		console.error("failed to create dispatcher app JWT", error);
-		throw new HttpError(500, "failed to create dispatcher app JWT");
+		console.error(`failed to create ${appName} app JWT`, error);
+		throw new HttpError(500, `failed to create ${appName} app JWT`);
 	}
 }
 
@@ -491,6 +551,206 @@ async function sendRepositoryDispatch(
 		},
 		"failed to send repository_dispatch",
 	);
+}
+
+async function tryNotifyQueuedProcessingCheck(
+	payload: PullRequestEventPayload,
+	env: Env,
+): Promise<void> {
+	if (
+		typeof env.GITHUB_CHECKER_APP_ID !== "string" ||
+		env.GITHUB_CHECKER_APP_ID.trim().length === 0 ||
+		typeof env.GITHUB_CHECKER_APP_PRIVATE_KEY !== "string" ||
+		env.GITHUB_CHECKER_APP_PRIVATE_KEY.trim().length === 0
+	) {
+		console.error(
+			"skipping queued processing check because checker app credentials are not configured",
+		);
+		return;
+	}
+
+	const context = resolvePullRequestProcessingCheckContext(payload);
+
+	if (!context) {
+		console.error(
+			"skipping queued processing check because the pull_request payload is missing source repository metadata or head SHA",
+		);
+		return;
+	}
+
+	try {
+		const checkerToken = await createCheckerInstallationTokenForRepository(
+			env,
+			context.owner,
+			context.repo,
+		);
+
+		await upsertQueuedProcessingCheck(env, checkerToken, context);
+	} catch (error) {
+		console.error("failed to notify queued processing check", {
+			error,
+			externalId: context.externalId,
+			headSha: context.headSha,
+			owner: context.owner,
+			repo: context.repo,
+		});
+	}
+}
+
+function resolvePullRequestProcessingCheckContext(
+	payload: PullRequestEventPayload,
+): {
+	detailsUrl?: string;
+	externalId: string;
+	headSha: string;
+	owner: string;
+	repo: string;
+} | null {
+	const owner =
+		normalizeOptionalString(payload.pull_request.head.repo?.owner?.login) ??
+		normalizeOptionalString(payload.repository.owner?.login);
+	const repo =
+		normalizeOptionalString(payload.pull_request.head.repo?.name) ??
+		normalizeOptionalString(payload.repository.name);
+	const headSha = normalizeOptionalString(payload.pull_request.head.sha);
+
+	if (!owner || !repo || !headSha) {
+		return null;
+	}
+
+	return {
+		detailsUrl:
+			normalizeOptionalString(payload.pull_request.html_url) ??
+			normalizeOptionalString(payload.repository.html_url) ??
+			undefined,
+		externalId: buildProcessingCheckExternalId(
+			payload.pull_request.number,
+			headSha,
+		),
+		headSha,
+		owner,
+		repo,
+	};
+}
+
+function buildProcessingCheckExternalId(
+	pullRequestNumber: number,
+	headSha: string,
+): string {
+	return `${PROCESSING_CHECK_NAME}:${pullRequestNumber}:${headSha}`;
+}
+
+async function upsertQueuedProcessingCheck(
+	env: Env,
+	token: string,
+	context: {
+		detailsUrl?: string;
+		externalId: string;
+		headSha: string;
+		owner: string;
+		repo: string;
+	},
+): Promise<void> {
+	const existingCheckRunId = await findCheckRunIdByExternalId(
+		env,
+		token,
+		context.owner,
+		context.repo,
+		context.headSha,
+		context.externalId,
+	);
+	const output = {
+		summary: QUEUED_PROCESSING_CHECK_SUMMARY,
+		title: QUEUED_PROCESSING_CHECK_TITLE,
+	};
+
+	if (existingCheckRunId !== null) {
+		await fetchGitHubText(
+			`${getGitHubApiBaseUrl(env)}/repos/${encodeURIComponent(context.owner)}/${encodeURIComponent(context.repo)}/check-runs/${existingCheckRunId}`,
+			{
+				body: JSON.stringify({
+					details_url: context.detailsUrl,
+					external_id: context.externalId,
+					output,
+					status: "queued",
+				}),
+				headers: {
+					...buildGitHubHeaders(token),
+					"Content-Type": "application/json",
+				},
+				method: "PATCH",
+			},
+			"failed to update queued processing check",
+		);
+		return;
+	}
+
+	await fetchGitHubText(
+		`${getGitHubApiBaseUrl(env)}/repos/${encodeURIComponent(context.owner)}/${encodeURIComponent(context.repo)}/check-runs`,
+		{
+			body: JSON.stringify({
+				details_url: context.detailsUrl,
+				external_id: context.externalId,
+				head_sha: context.headSha,
+				name: PROCESSING_CHECK_NAME,
+				output,
+				status: "queued",
+			}),
+			headers: {
+				...buildGitHubHeaders(token),
+				"Content-Type": "application/json",
+			},
+			method: "POST",
+		},
+		"failed to create queued processing check",
+	);
+}
+
+async function findCheckRunIdByExternalId(
+	env: Env,
+	token: string,
+	owner: string,
+	repo: string,
+	headSha: string,
+	externalId: string,
+): Promise<number | null> {
+	for (let page = 1; ; page += 1) {
+		const query = new URLSearchParams({
+			check_name: PROCESSING_CHECK_NAME,
+			page: String(page),
+			per_page: String(CHECK_RUNS_PAGE_SIZE),
+		});
+		const responseText = await fetchGitHubText(
+			`${getGitHubApiBaseUrl(env)}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${encodeURIComponent(headSha)}/check-runs?${query.toString()}`,
+			{
+				headers: buildGitHubHeaders(token),
+				method: "GET",
+			},
+			"failed to list queued processing check runs",
+		);
+		const payload = parseJson(responseText);
+		const checkRuns = isRecord(payload) ? payload.check_runs : undefined;
+
+		if (!Array.isArray(checkRuns)) {
+			throw new HttpError(502, "GitHub check runs response was malformed");
+		}
+
+		for (const checkRun of checkRuns) {
+			if (
+				isRecord(checkRun) &&
+				checkRun.external_id === externalId &&
+				typeof checkRun.id === "number" &&
+				Number.isInteger(checkRun.id) &&
+				checkRun.id > 0
+			) {
+				return checkRun.id;
+			}
+		}
+
+		if (checkRuns.length < CHECK_RUNS_PAGE_SIZE) {
+			return null;
+		}
+	}
 }
 
 async function fetchGitHubText(
@@ -646,6 +906,15 @@ function normalizeUser(user: GitHubUser | undefined): JsonRecord | null {
 		login: user.login ?? null,
 		type: user.type ?? null,
 	};
+}
+
+function normalizeOptionalString(value: string | undefined): string | null {
+	if (typeof value !== "string") {
+		return null;
+	}
+
+	const normalizedValue = value.trim();
+	return normalizedValue.length > 0 ? normalizedValue : null;
 }
 
 function requireEnv(value: string | undefined, name: string): string {
