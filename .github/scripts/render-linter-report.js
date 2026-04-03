@@ -4,6 +4,7 @@ const path = require("node:path");
 const CARGO_LINTERS = new Set(["cargo-clippy", "cargo-deny"]);
 const CARGO_DENY_CONFIG_FILE = /(?:^|\/)\.cargo\/config(?:\.toml)?$/u;
 const CARGO_DENY_POLICY_FILE = /(?:^|\/)deny\.toml$/u;
+const MAX_INLINE_PATHS = 10;
 const MAX_RENDERED_PATHS = 100;
 const DETAILS_LIMIT = 60000;
 
@@ -181,19 +182,30 @@ function buildTargetLines(selectedFiles, checkedProjects) {
 
 function formatPathSection(title, paths) {
 	const displayedPaths = paths.slice(0, MAX_RENDERED_PATHS);
-	const lines = [`${title}:`];
+	const pathLines = [];
 
 	for (const currentPath of displayedPaths) {
-		lines.push(`- <code>${escapeHtml(currentPath)}</code>`);
+		pathLines.push(`- <code>${escapeHtml(currentPath)}</code>`);
 	}
 
 	if (paths.length > displayedPaths.length) {
-		lines.push(
+		pathLines.push(
 			`- ... ${paths.length - displayedPaths.length} more path(s) omitted`,
 		);
 	}
 
-	return lines;
+	if (paths.length <= MAX_INLINE_PATHS) {
+		return [`${title}:`, ...pathLines];
+	}
+
+	return [
+		`${title}:`,
+		"",
+		`<details><summary>Show ${paths.length} path(s)</summary>`,
+		"",
+		...pathLines,
+		"</details>",
+	];
 }
 
 function collectProjectTargets(

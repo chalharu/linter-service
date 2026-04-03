@@ -152,7 +152,7 @@ function isLinterEnabled(config, linterName) {
 function isPathExcluded(config, linterName, candidatePath) {
 	const normalizedPath = normalizeRelativePath(candidatePath);
 	return getExcludedPatterns(config, linterName).some((pattern) =>
-		path.posix.matchesGlob(normalizedPath, pattern),
+		matchesExcludedPattern(normalizedPath, pattern),
 	);
 }
 
@@ -177,6 +177,35 @@ function normalizeLoadedConfig(config) {
 	}
 
 	return config;
+}
+
+function matchesExcludedPattern(candidatePath, pattern) {
+	if (path.posix.matchesGlob(candidatePath, pattern)) {
+		return true;
+	}
+
+	if (!pattern.endsWith("/**")) {
+		return false;
+	}
+
+	const directoryPattern = pattern.slice(0, -3);
+	let currentDirectory = path.posix.dirname(candidatePath);
+
+	while (currentDirectory !== "." && currentDirectory.length > 0) {
+		if (path.posix.matchesGlob(currentDirectory, directoryPattern)) {
+			return true;
+		}
+
+		const parentDirectory = path.posix.dirname(currentDirectory);
+
+		if (parentDirectory === currentDirectory) {
+			break;
+		}
+
+		currentDirectory = parentDirectory;
+	}
+
+	return false;
 }
 
 function requireString(value, label) {

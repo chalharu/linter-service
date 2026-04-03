@@ -55,6 +55,44 @@ test("lists checked file paths in a successful non-cargo linter report", () => {
 	}
 });
 
+test("collapses long target path lists in reports", () => {
+	const context = makeTempRepo("render-linter-report-collapsed-paths-");
+	const selectedFiles = Array.from(
+		{ length: 12 },
+		(_, index) => `docs/file-${index + 1}.md`,
+	);
+
+	try {
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "selected-files.txt"),
+			`${selectedFiles.join("\n")}\n`,
+			"utf8",
+		);
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "linter-result.json"),
+			JSON.stringify({ details: "", exit_code: 0 }),
+			"utf8",
+		);
+
+		const report = runFromEnv(
+			createReportEnv(context, {
+				EXIT_CODE: "0",
+				LINTER_NAME: "markdownlint-cli2",
+			}),
+		);
+
+		assert.equal(report.conclusion, "success");
+		assert.match(
+			report.body,
+			/Target file paths:\n\n<details><summary>Show 12 path\(s\)<\/summary>/,
+		);
+		assert.match(report.body, /- <code>docs\/file-1\.md<\/code>/);
+		assert.match(report.body, /- <code>docs\/file-12\.md<\/code>/);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
 test("treats rustfmt as selected Rust files instead of Cargo projects", () => {
 	const context = makeTempRepo("render-linter-report-rustfmt-files-");
 

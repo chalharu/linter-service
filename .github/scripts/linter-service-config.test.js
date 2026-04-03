@@ -54,7 +54,11 @@ test("loads global and per-linter exclude globs with directory normalization", (
 		JSON.stringify(
 			{
 				global: {
-					exclude_paths: ["**/tests/**", "./vendor/"],
+					exclude_paths: [
+						"**/tests/*/target/**",
+						"**/tests/*/sarif.json",
+						"./vendor/",
+					],
 				},
 				linters: {
 					yamllint: {
@@ -74,7 +78,11 @@ test("loads global and per-linter exclude globs with directory normalization", (
 		});
 
 		assert.equal(config.exists, true);
-		assert.deepEqual(config.global.exclude_paths, ["**/tests/**", "vendor/**"]);
+		assert.deepEqual(config.global.exclude_paths, [
+			"**/tests/*/target/**",
+			"**/tests/*/sarif.json",
+			"vendor/**",
+		]);
 		assert.deepEqual(config.linters.yamllint.exclude_paths, [
 			"docs/generated/**",
 		]);
@@ -87,10 +95,34 @@ test("loads global and per-linter exclude globs with directory normalization", (
 			true,
 		);
 		assert.equal(
+			isPathExcluded(
+				config,
+				"yamllint",
+				"dotenv-linter/tests/pass/target/.env",
+			),
+			true,
+		);
+		assert.equal(
+			isPathExcluded(
+				config,
+				"yamllint",
+				"actionlint/tests/pass/target/.github/workflows/test.yml",
+			),
+			true,
+		);
+		assert.equal(
+			isPathExcluded(config, "yamllint", "actionlint/tests/pass/sarif.json"),
+			true,
+		);
+		assert.equal(
 			isPathExcluded(config, "yamllint", "docs/generated/schema.yml"),
 			true,
 		);
 		assert.equal(isPathExcluded(config, "yamllint", "docs/guide.yml"), false);
+		assert.equal(
+			isPathExcluded(config, "yamllint", "actionlint/tests/pass/result.json"),
+			false,
+		);
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}
@@ -134,7 +166,7 @@ test("supports per-linter disable flags", () => {
 test("filters excluded paths while preserving remaining order", () => {
 	const config = {
 		global: {
-			exclude_paths: ["**/tests/**", "**/tests/**/.*", "**/tests/**/.*/**"],
+			exclude_paths: ["**/tests/*/target/**", "**/tests/*/sarif.json"],
 		},
 		linters: {
 			biome: {
@@ -151,9 +183,34 @@ test("filters excluded paths while preserving remaining order", () => {
 			"biome/tests/pass/target/file.js",
 			"dotenv-linter/tests/pass/target/.env",
 			"actionlint/tests/pass/target/.github/workflows/test.yml",
+			"shellcheck/tests/pass/sarif.json",
+			"shellcheck/tests/pass/result.json",
 			"src/lib.js",
 		]),
-		["src/index.js", "src/lib.js"],
+		["src/index.js", "shellcheck/tests/pass/result.json", "src/lib.js"],
+	);
+});
+
+test("matches hidden descendants for directory exclude globs", () => {
+	const config = {
+		global: {
+			exclude_paths: ["fixtures/**"],
+		},
+		linters: {},
+	};
+
+	assert.equal(isPathExcluded(config, "shellcheck", "fixtures/.env"), true);
+	assert.equal(
+		isPathExcluded(config, "shellcheck", "fixtures/.github/workflows/test.yml"),
+		true,
+	);
+	assert.equal(
+		isPathExcluded(config, "shellcheck", "fixtures/scripts/.config/tool.yml"),
+		true,
+	);
+	assert.equal(
+		isPathExcluded(config, "shellcheck", "fixture/result.json"),
+		false,
 	);
 });
 
