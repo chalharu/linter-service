@@ -770,85 +770,11 @@ jobs:
         env:
           DECRYPT_SUMMARIES_OUTCOME: ${{ steps.decrypt_summaries.outcome }}
           LINTER_SUMMARY_PATH: ${{ runner.temp }}/linter-summaries-decrypted
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
+          RUNNER_TEMP: ${{ runner.temp }}
           SELECTED_LINTERS_JSON: ${{ needs.detect-targets.outputs.selected-linters-json }}
         run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          selected_linters = json.loads(os.environ["SELECTED_LINTERS_JSON"])
-          decrypt_outcome = os.environ.get("DECRYPT_SUMMARIES_OUTCOME", "")
-          runner_temp = Path(os.environ["RUNNER_TEMP"])
-          comment_path = runner_temp / "combined-linter-comment.md"
-          summary_root = Path(os.environ["LINTER_SUMMARY_PATH"])
-          summaries = {}
-          for summary_path in sorted(summary_root.glob("linter-summary-*.json")):
-              try:
-                  summary = json.loads(summary_path.read_text(encoding="utf-8"))
-              except json.JSONDecodeError:
-                  continue
-
-              linter_name = summary.get("linter_name")
-              if isinstance(linter_name, str):
-                  summaries[linter_name] = summary
-
-          sections = []
-          failed = 0
-
-          for linter_name in selected_linters:
-              summary = summaries.get(linter_name, {})
-              section = str(summary.get("comment_body") or "").strip()
-              conclusion = str(summary.get("conclusion") or "")
-
-              if not section:
-                  if decrypt_outcome == "failure":
-                      section = (
-                          f"### {linter_name}\n\n"
-                          f"❌ The encrypted `{linter_name}` summary could not be decrypted. See the workflow logs."
-                      )
-                  else:
-                      section = (
-                          f"### {linter_name}\n\n"
-                          f"❌ The `{linter_name}` workflow failed before producing a detailed report. See the workflow logs."
-                      )
-
-              if conclusion != "success":
-                  failed += 1
-
-              if section:
-                  sections.append(section)
-
-          total = len(selected_linters)
-          overall_conclusion = "success" if failed == 0 and decrypt_outcome != "failure" else "failure"
-
-          if decrypt_outcome == "failure":
-              overall_summary = "One or more encrypted linter summaries could not be read. See the workflow logs."
-          elif overall_conclusion == "success":
-              overall_summary = f"All {total} selected linter(s) completed successfully."
-          else:
-              overall_summary = f"{failed} of {total} selected linter(s) reported issues or failed."
-
-          lines = [
-              "<!-- linter-service:results -->",
-              "## linter-service",
-              "",
-              overall_summary,
-              "",
-          ]
-
-          for index, section in enumerate(sections):
-              lines.append(section)
-              if index != len(sections) - 1:
-                  lines.append("")
-
-          comment_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-          output_path = Path(os.environ["GITHUB_OUTPUT"])
-          with output_path.open("a", encoding="utf-8") as fh:
-              fh.write(f"overall_conclusion={overall_conclusion}\n")
-              fh.write(f"overall_summary={overall_summary}\n")
-          PY
+          node "$LINTER_SERVICE_PATH/.github/scripts/render-combined-report.js"
       - name: Upsert combined PR comment
         if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' && steps.decode_repository_context.outputs.comment-enabled == 'true' }}
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
@@ -930,6 +856,7 @@ jobs:
           CHECK_RUN_HEAD_SHA: ${{ steps.decode_repository_context.outputs.source-head-sha }}
           CHECK_RUN_NAME: ${{ steps.decode_repository_context.outputs.processing-check-name }}
           CHECK_RUN_OUTPUT_SUMMARY: ${{ steps.prepare_final_summary.outputs.summary || 'The linter-service workflow failed to generate a combined report.' }}
+          CHECK_RUN_OUTPUT_TEXT_FILE: ${{ runner.temp }}/combined-linter-check-run.md
           CHECK_RUN_OUTPUT_TITLE: ${{ steps.prepare_final_summary.outputs.title || 'linter-service found issues' }}
           CHECK_RUN_OWNER: ${{ steps.decode_repository_context.outputs.source-owner }}
           CHECK_RUN_REPO: ${{ steps.decode_repository_context.outputs.source-repo }}

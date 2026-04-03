@@ -1,3 +1,8 @@
+const fs = require("node:fs");
+
+const CHECK_RUN_OUTPUT_TEXT_LIMIT = 60000;
+const TRUNCATED_OUTPUT_SUFFIX = "\n... truncated ...";
+
 module.exports = async function upsertCheckRun({ github, env }) {
 	const owner = env.CHECK_RUN_OWNER;
 	const repo = env.CHECK_RUN_REPO;
@@ -13,6 +18,11 @@ module.exports = async function upsertCheckRun({ github, env }) {
 		title: env.CHECK_RUN_OUTPUT_TITLE,
 		summary: env.CHECK_RUN_OUTPUT_SUMMARY,
 	};
+	const outputText = resolveOutputText(env);
+
+	if (outputText) {
+		output.text = outputText;
+	}
 	const now = new Date().toISOString();
 	const checkRuns = await github.paginate(
 		github.rest.checks.listForRef,
@@ -67,3 +77,32 @@ module.exports = async function upsertCheckRun({ github, env }) {
 
 	await github.rest.checks.create(createRequest);
 };
+
+function resolveOutputText(env) {
+	if (
+		typeof env.CHECK_RUN_OUTPUT_TEXT === "string" &&
+		env.CHECK_RUN_OUTPUT_TEXT.length > 0
+	) {
+		return truncateOutputText(env.CHECK_RUN_OUTPUT_TEXT);
+	}
+
+	if (
+		typeof env.CHECK_RUN_OUTPUT_TEXT_FILE === "string" &&
+		env.CHECK_RUN_OUTPUT_TEXT_FILE.length > 0 &&
+		fs.existsSync(env.CHECK_RUN_OUTPUT_TEXT_FILE)
+	) {
+		return truncateOutputText(
+			fs.readFileSync(env.CHECK_RUN_OUTPUT_TEXT_FILE, "utf8"),
+		);
+	}
+
+	return undefined;
+}
+
+function truncateOutputText(text) {
+	if (text.length <= CHECK_RUN_OUTPUT_TEXT_LIMIT) {
+		return text;
+	}
+
+	return `${text.slice(0, CHECK_RUN_OUTPUT_TEXT_LIMIT - TRUNCATED_OUTPUT_SUFFIX.length)}${TRUNCATED_OUTPUT_SUFFIX}`;
+}
