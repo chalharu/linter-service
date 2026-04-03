@@ -178,6 +178,32 @@ test("applyWorkflowEnvironment persists GITHUB_PATH and GITHUB_ENV entries", () 
 	}
 });
 
+test("applyWorkflowEnvironment builds PATH when the base env has no PATH", () => {
+	const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "fixture-env-"));
+	const githubPathPath = path.join(tempDir, "github-path.txt");
+	const githubEnvPath = path.join(tempDir, "github-env.txt");
+
+	fs.writeFileSync(githubPathPath, "/tmp/tool/bin\n", "utf8");
+	fs.writeFileSync(githubEnvPath, "", "utf8");
+
+	try {
+		const nextEnv = applyWorkflowEnvironment(
+			{
+				GITHUB_ENV: githubEnvPath,
+				GITHUB_PATH: githubPathPath,
+			},
+			{
+				githubEnvPath,
+				githubPathPath,
+			},
+		);
+
+		assert.equal(nextEnv.PATH, "/tmp/tool/bin");
+	} finally {
+		fs.rmSync(tempDir, { force: true, recursive: true });
+	}
+});
+
 test("normalizeFixtureResult removes temp paths and volatile durations", () => {
 	const repositoryPath = "/tmp/fixture-run/repo";
 	const actual = normalizeFixtureResult({

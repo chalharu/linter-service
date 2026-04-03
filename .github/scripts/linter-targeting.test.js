@@ -5,6 +5,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const {
+	buildLinterJobAssignments,
 	readPatterns,
 	selectFiles,
 	selectLinters,
@@ -74,4 +75,71 @@ test("readPatterns trims blank lines", () => {
 	} finally {
 		fs.rmSync(tempDir, { force: true, recursive: true });
 	}
+});
+
+test("buildLinterJobAssignments groups selected linters in definition order", () => {
+	const assignments = buildLinterJobAssignments({
+		definitions: [
+			{
+				execution_group: "github-actions",
+				name: "actionlint",
+				patterns: ["workflow"],
+			},
+			{
+				execution_group: "github-actions",
+				name: "ghalint",
+				patterns: ["workflow"],
+			},
+			{
+				name: "biome",
+				patterns: ["js"],
+			},
+			{
+				execution_group: "yaml",
+				name: "yamllint",
+				patterns: ["yaml"],
+			},
+			{
+				execution_group: "yaml",
+				name: "yamlfmt",
+				patterns: ["yaml"],
+			},
+		],
+		selectedLinters: ["biome", "yamlfmt", "ghalint", "yamllint", "actionlint"],
+	});
+
+	assert.deepEqual(assignments, [
+		{
+			artifact_name: "group-github-actions",
+			linter_names: ["actionlint", "ghalint"],
+			name: "actionlint + ghalint",
+		},
+		{
+			artifact_name: "biome",
+			linter_names: ["biome"],
+			name: "biome",
+		},
+		{
+			artifact_name: "group-yaml",
+			linter_names: ["yamllint", "yamlfmt"],
+			name: "yamllint + yamlfmt",
+		},
+	]);
+});
+
+test("buildLinterJobAssignments rejects invalid execution group names", () => {
+	assert.throws(
+		() =>
+			buildLinterJobAssignments({
+				definitions: [
+					{
+						execution_group: "yaml fast",
+						name: "yamllint",
+						patterns: ["yaml"],
+					},
+				],
+				selectedLinters: ["yamllint"],
+			}),
+		/execution_group must contain only/u,
+	);
 });

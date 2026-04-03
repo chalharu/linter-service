@@ -45,6 +45,47 @@ function selectLinters({ candidatePaths, definitions, serviceConfig }) {
 	return selectedLinters;
 }
 
+function buildLinterJobAssignments({ definitions, selectedLinters }) {
+	const selectedSet = new Set(selectedLinters);
+	const groupedAssignments = new Map();
+	const assignments = [];
+
+	for (const definition of definitions) {
+		validateDefinition(definition);
+
+		if (!selectedSet.has(definition.name)) {
+			continue;
+		}
+
+		if (typeof definition.execution_group === "string") {
+			const artifactName = `group-${definition.execution_group}`;
+			let assignment = groupedAssignments.get(definition.execution_group);
+
+			if (!assignment) {
+				assignment = {
+					artifact_name: artifactName,
+					linter_names: [],
+					name: "",
+				};
+				groupedAssignments.set(definition.execution_group, assignment);
+				assignments.push(assignment);
+			}
+
+			assignment.linter_names.push(definition.name);
+			assignment.name = assignment.linter_names.join(" + ");
+			continue;
+		}
+
+		assignments.push({
+			artifact_name: definition.name,
+			linter_names: [definition.name],
+			name: definition.name,
+		});
+	}
+
+	return assignments;
+}
+
 function readPatterns(patternPath) {
 	return fs
 		.readFileSync(patternPath, "utf8")
@@ -76,9 +117,20 @@ function validateDefinition(definition) {
 	) {
 		throw new Error("Each linter definition must include name and patterns");
 	}
+
+	if (
+		typeof definition.execution_group !== "undefined" &&
+		(typeof definition.execution_group !== "string" ||
+			!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(definition.execution_group))
+	) {
+		throw new Error(
+			"execution_group must contain only letters, digits, dot, underscore, or hyphen",
+		);
+	}
 }
 
 module.exports = {
+	buildLinterJobAssignments,
 	compilePatterns,
 	readPatterns,
 	selectFiles,
