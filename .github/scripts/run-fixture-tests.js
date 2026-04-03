@@ -11,6 +11,7 @@ const {
 const { renderReport } = require("./render-linter-report.js");
 const { renderSarif } = require("./render-linter-sarif.js");
 const { selectFiles } = require("./linter-targeting.js");
+const { applyWorkflowEnvironment } = require("./workflow-command-env.js");
 
 function runCli(argv = process.argv.slice(2), env = process.env) {
 	const options = parseArgs(argv);
@@ -126,42 +127,6 @@ function installLinterTools({ linterName, repositoryPath }) {
 			githubPathPath,
 		}),
 	};
-}
-
-function applyWorkflowEnvironment(baseEnv, { githubEnvPath, githubPathPath }) {
-	const nextEnv = { ...baseEnv };
-
-	if (fs.existsSync(githubPathPath)) {
-		const pathEntries = fs
-			.readFileSync(githubPathPath, "utf8")
-			.split(/\r?\n/u)
-			.map((line) => line.trim())
-			.filter(Boolean);
-
-		if (pathEntries.length > 0) {
-			nextEnv.PATH = `${pathEntries.join(path.delimiter)}${path.delimiter}${baseEnv.PATH}`;
-		}
-	}
-
-	if (fs.existsSync(githubEnvPath)) {
-		for (const line of fs
-			.readFileSync(githubEnvPath, "utf8")
-			.split(/\r?\n/u)
-			.filter(Boolean)) {
-			const separator = line.indexOf("=");
-
-			if (separator <= 0) {
-				continue;
-			}
-
-			nextEnv[line.slice(0, separator)] = line.slice(separator + 1);
-		}
-	}
-
-	delete nextEnv.GITHUB_ENV;
-	delete nextEnv.GITHUB_PATH;
-
-	return nextEnv;
 }
 
 function runFixtureCase({

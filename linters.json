@@ -2,6 +2,7 @@
   "linters": [
     {
       "name": "actionlint",
+      "execution_group": "github-actions",
       "heading": "### actionlint",
       "no_files": "No matching workflow files were selected for `actionlint`.",
       "success": "✅ No issues were reported for the selected GitHub Actions workflow target(s).",
@@ -14,6 +15,7 @@
     },
     {
       "name": "ghalint",
+      "execution_group": "github-actions",
       "heading": "### ghalint",
       "no_files": "No matching GitHub Actions workflow files were selected for `ghalint`.",
       "success": "✅ No issues were reported for the selected GitHub Actions workflow target(s).",
@@ -62,6 +64,7 @@
     },
     {
       "name": "yamllint",
+      "execution_group": "yaml",
       "heading": "### yamllint",
       "no_files": "No matching YAML files were selected for `yamllint`.",
       "success": "✅ No issues were reported for the selected YAML target(s).",
@@ -74,6 +77,7 @@
     },
     {
       "name": "yamlfmt",
+      "execution_group": "yaml",
       "heading": "### yamlfmt",
       "no_files": "No matching YAML files were selected for `yamlfmt`.",
       "success": "✅ No issues were reported for the selected YAML target(s).",
@@ -195,6 +199,7 @@
     },
     {
       "name": "zizmor",
+      "execution_group": "github-actions",
       "heading": "### zizmor",
       "no_files": "No matching workflow files were selected for `zizmor`.",
       "success": "✅ No issues were reported for the selected GitHub Actions workflow target(s).",

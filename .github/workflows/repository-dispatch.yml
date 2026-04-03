@@ -25,6 +25,7 @@ jobs:
     timeout-minutes: 30
     outputs:
       pull-request-number: ${{ steps.collect.outputs.pull-request-number }}
+      selected-linter-jobs-json: ${{ steps.collect.outputs.selected-linter-jobs-json }}
       selected-linters-json: ${{ steps.collect.outputs.selected-linters-json }}
       skip-reason: ${{ steps.collect.outputs.skip-reason }}
     env:
@@ -125,7 +126,11 @@ jobs:
                   text=True,
               )
               patterns = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-              definitions.append({"name": linter_name, "patterns": patterns})
+              definition = {"name": linter_name, "patterns": patterns}
+              execution_group = item.get("execution_group")
+              if isinstance(execution_group, str) and execution_group:
+                  definition["execution_group"] = execution_group
+              definitions.append(definition)
 
           output_path = Path(os.environ["RUNNER_TEMP"]) / "linter-definitions.json"
           output_path.write_text(json.dumps(definitions), encoding="utf-8")
@@ -190,6 +195,7 @@ jobs:
               ".github/scripts/linter-service-config.js",
             ));
             const {
+              buildLinterJobAssignments,
               selectLinters,
               validateDefinition,
             } = require(path.join(
@@ -220,8 +226,17 @@ jobs:
               );
               core.setOutput("context-path", contextPath);
             };
-            const finalizeOutputs = ({ pullRequestNumber = pullNumberText, selectedLinters, skipReason }) => {
+            const finalizeOutputs = ({
+              pullRequestNumber = pullNumberText,
+              selectedLinterJobs,
+              selectedLinters,
+              skipReason,
+            }) => {
               core.setOutput("pull-request-number", pullRequestNumber);
+              core.setOutput(
+                "selected-linter-jobs-json",
+                JSON.stringify(selectedLinterJobs),
+              );
               core.setOutput("selected-linters-json", JSON.stringify(selectedLinters));
               core.setOutput("skip-reason", skipReason);
             };
@@ -270,6 +285,7 @@ jobs:
               });
               finalizeOutputs({
                 pullRequestNumber,
+                selectedLinterJobs: [],
                 selectedLinters: [],
                 skipReason,
               });
@@ -353,6 +369,10 @@ jobs:
                 definitions,
                 serviceConfig,
               });
+              const selectedLinterJobs = buildLinterJobAssignments({
+                definitions,
+                selectedLinters,
+              });
 
               writeContext({
                 changed_files: currentFiles,
@@ -371,6 +391,7 @@ jobs:
               });
               finalizeOutputs({
                 pullRequestNumber: String(pullNumber),
+                selectedLinterJobs,
                 selectedLinters,
                 skipReason: "",
               });
@@ -412,6 +433,10 @@ jobs:
                 definitions,
                 serviceConfig,
               });
+              const selectedLinterJobs = buildLinterJobAssignments({
+                definitions,
+                selectedLinters,
+              });
 
               writeContext({
                 changed_files: currentFiles,
@@ -430,6 +455,7 @@ jobs:
               });
               finalizeOutputs({
                 pullRequestNumber: "",
+                selectedLinterJobs,
                 selectedLinters,
                 skipReason: "",
               });
@@ -439,12 +465,14 @@ jobs:
             throw new Error(`Unsupported routed event: ${routedEventName}`);
       - name: Report routing status
         env:
+          SELECTED_LINTER_JOBS_JSON: ${{ steps.collect.outputs.selected-linter-jobs-json }}
           ROUTED_EVENT_NAME: ${{ env.ROUTED_EVENT_NAME }}
           SELECTED_LINTERS_JSON: ${{ steps.collect.outputs.selected-linters-json }}
         run: |
           echo "Routing targets resolved."
           echo "Routed event: ${ROUTED_EVENT_NAME}"
           echo "Selected linters: ${SELECTED_LINTERS_JSON}"
+          echo "Selected linter jobs: ${SELECTED_LINTER_JOBS_JSON}"
       - name: Derive artifact passphrase
         env:
           CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
@@ -577,20 +605,21 @@ jobs:
             );
             await upsertCheckRun({ github, env: process.env });
   run-linters:
-    name: ${{ matrix.linter }}
+    name: ${{ matrix.assignment.name }}
     needs:
       - detect-targets
       - notify-processing-started
-    if: ${{ needs.detect-targets.outputs.selected-linters-json != '[]' }}
+    if: ${{ needs.detect-targets.outputs.selected-linter-jobs-json != '[]' }}
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        linter: ${{ fromJSON(needs.detect-targets.outputs.selected-linters-json) }}
+        assignment: ${{ fromJSON(needs.detect-targets.outputs.selected-linter-jobs-json) }}
     uses: ./.github/workflows/lint-common.yml
     with:
-      linter-name: ${{ matrix.linter }}
+      artifact-name: ${{ matrix.assignment.artifact_name }}
+      linter-names-json: ${{ toJSON(matrix.assignment.linter_names) }}
     secrets:
       CHECKER_APP_ID: ${{ secrets.CHECKER_APP_ID }}
       CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
