@@ -1,6 +1,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
+const { parseExactPackageSpec } = require("./npm-package-spec.js");
+
 function runFromEnv(env = process.env) {
 	const repositoryPath = requireEnv(env, "SOURCE_REPOSITORY_PATH");
 	return loadLinterServiceConfig({ repositoryPath });
@@ -95,16 +97,89 @@ function normalizeLinterConfigs(value) {
 			);
 		}
 
-		entries[linterName] = {
+		const entry = {
 			disabled: currentConfig.disabled === true,
+			disabled_explicit:
+				currentConfig.disabled === true || currentConfig.disabled === false,
 			exclude_paths: normalizeGlobList(
 				currentConfig.exclude_paths,
 				`linters.${linterName}.exclude_paths`,
 			),
 		};
+
+		if (linterName === "textlint") {
+			entry.preset_packages = normalizeTextlintPresetPackages({
+				presetPackage: currentConfig.preset_package,
+				presetPackages: currentConfig.preset_packages,
+				label: `linters.${linterName}`,
+			});
+
+			if (
+				currentConfig.disabled === false &&
+				entry.preset_packages.length === 0
+			) {
+				throw new Error(
+					`linters.${linterName}.preset_package or linters.${linterName}.preset_packages is required when textlint is enabled`,
+				);
+			}
+		}
+
+		entries[linterName] = entry;
 	}
 
 	return entries;
+}
+
+function normalizeTextlintPresetPackages({
+	label,
+	presetPackage,
+	presetPackages,
+}) {
+	if (presetPackage !== undefined && presetPackages !== undefined) {
+		throw new Error(
+			`${label}.preset_package and ${label}.preset_packages cannot be used together`,
+		);
+	}
+
+	if (presetPackage !== undefined) {
+		return [
+			normalizeExactPackageSpec(presetPackage, `${label}.preset_package`),
+		];
+	}
+
+	if (presetPackages === undefined) {
+		return [];
+	}
+
+	if (!Array.isArray(presetPackages)) {
+		throw new Error(`${label}.preset_packages must be an array`);
+	}
+
+	if (presetPackages.length === 0) {
+		throw new Error(`${label}.preset_packages must not be empty`);
+	}
+
+	const normalized = presetPackages.map((entry, index) =>
+		normalizeExactPackageSpec(entry, `${label}.preset_packages[${index}]`),
+	);
+	const seenNames = new Set();
+
+	for (const spec of normalized) {
+		const { name } = parseExactPackageSpec(spec, `${label}.preset_packages`);
+		if (seenNames.has(name)) {
+			throw new Error(
+				`${label}.preset_packages must not contain duplicate package names`,
+			);
+		}
+		seenNames.add(name);
+	}
+
+	return normalized;
+}
+
+function normalizeExactPackageSpec(value, label) {
+	const { spec } = parseExactPackageSpec(value, label);
+	return spec;
 }
 
 function normalizeGlobList(value, label) {
@@ -136,17 +211,46 @@ function normalizeRelativePath(value) {
 
 function getExcludedPatterns(config, linterName) {
 	const normalized = normalizeLoadedConfig(config);
-	const linterConfig = normalized.linters[linterName] || {
-		disabled: false,
-		exclude_paths: [],
-	};
+	const linterConfig = getLinterConfig(normalized, linterName);
 
 	return [...normalized.global.exclude_paths, ...linterConfig.exclude_paths];
 }
 
-function isLinterEnabled(config, linterName) {
+function getLinterConfig(config, linterName) {
 	const normalized = normalizeLoadedConfig(config);
-	return normalized.linters[linterName]?.disabled !== true;
+	const linterConfig = normalized.linters[linterName];
+
+	return (
+		linterConfig || {
+			disabled: false,
+			disabled_explicit: false,
+			exclude_paths: [],
+			preset_packages: [],
+		}
+	);
+}
+
+function getTextlintPresetPackages(config) {
+	return [...getLinterConfig(config, "textlint").preset_packages];
+}
+
+function isLinterEnabled(config, linterName, { defaultDisabled = false } = {}) {
+	const normalized = normalizeLoadedConfig(config);
+	const linterConfig = normalized.linters[linterName];
+
+	if (!linterConfig) {
+		return defaultDisabled !== true;
+	}
+
+	if (linterConfig.disabled === true) {
+		return false;
+	}
+
+	if (defaultDisabled) {
+		return linterConfig.disabled_explicit === true;
+	}
+
+	return true;
 }
 
 function isPathExcluded(config, linterName, candidatePath) {
@@ -232,7 +336,9 @@ if (require.main === module) {
 
 module.exports = {
 	filterExcludedPaths,
+	getLinterConfig,
 	getExcludedPatterns,
+	getTextlintPresetPackages,
 	isLinterEnabled,
 	isPathExcluded,
 	loadLinterServiceConfig,

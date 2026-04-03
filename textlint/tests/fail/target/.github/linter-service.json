@@ -1,0 +1,10 @@
+{
+  "linters": {
+    "textlint": {
+      "disabled": false,
+      "preset_packages": [
+        "textlint-rule-preset-ja-technical-writing@12.0.2"
+      ]
+    }
+  }
+}

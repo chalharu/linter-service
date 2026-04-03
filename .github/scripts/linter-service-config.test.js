@@ -6,6 +6,7 @@ const test = require("node:test");
 
 const {
 	filterExcludedPaths,
+	getTextlintPresetPackages,
 	isLinterEnabled,
 	isPathExcluded,
 	loadLinterServiceConfig,
@@ -158,6 +159,208 @@ test("supports per-linter disable flags", () => {
 		assert.equal(isLinterEnabled(config, "actionlint"), false);
 		assert.equal(isLinterEnabled(config, "ghalint"), true);
 		assert.equal(isLinterEnabled(config, "yamllint"), true);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("requires explicit enablement and supports legacy textlint preset_package", () => {
+	const context = makeTempRepo();
+
+	fs.writeFileSync(
+		path.join(context.repoDir, ".github", "linter-service.json"),
+		JSON.stringify(
+			{
+				linters: {
+					textlint: {
+						disabled: false,
+						preset_package: "textlint-rule-preset-ja-technical-writing@12.0.2",
+					},
+				},
+			},
+			null,
+			2,
+		),
+		"utf8",
+	);
+
+	try {
+		const config = loadLinterServiceConfig({
+			repositoryPath: context.repoDir,
+		});
+
+		assert.equal(
+			isLinterEnabled(config, "textlint", { defaultDisabled: true }),
+			true,
+		);
+		assert.deepEqual(getTextlintPresetPackages(config), [
+			"textlint-rule-preset-ja-technical-writing@12.0.2",
+		]);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("supports multiple textlint preset_packages", () => {
+	const context = makeTempRepo();
+
+	fs.writeFileSync(
+		path.join(context.repoDir, ".github", "linter-service.json"),
+		JSON.stringify(
+			{
+				linters: {
+					textlint: {
+						disabled: false,
+						preset_packages: [
+							"textlint-rule-preset-ja-technical-writing@12.0.2",
+							"textlint-rule-preset-ja-spacing@4.0.0",
+						],
+					},
+				},
+			},
+			null,
+			2,
+		),
+		"utf8",
+	);
+
+	try {
+		const config = loadLinterServiceConfig({
+			repositoryPath: context.repoDir,
+		});
+
+		assert.equal(
+			isLinterEnabled(config, "textlint", { defaultDisabled: true }),
+			true,
+		);
+		assert.deepEqual(getTextlintPresetPackages(config), [
+			"textlint-rule-preset-ja-technical-writing@12.0.2",
+			"textlint-rule-preset-ja-spacing@4.0.0",
+		]);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("default-disabled textlint stays disabled without explicit disabled false", () => {
+	const config = {
+		global: {
+			exclude_paths: [],
+		},
+		linters: {
+			textlint: {
+				disabled: false,
+				disabled_explicit: false,
+				exclude_paths: [],
+				preset_packages: ["textlint-rule-preset-ja-technical-writing@12.0.2"],
+			},
+		},
+	};
+
+	assert.equal(
+		isLinterEnabled(config, "textlint", { defaultDisabled: true }),
+		false,
+	);
+});
+
+test("rejects invalid textlint preset package configuration", () => {
+	const context = makeTempRepo();
+
+	fs.writeFileSync(
+		path.join(context.repoDir, ".github", "linter-service.json"),
+		JSON.stringify(
+			{
+				linters: {
+					textlint: {
+						disabled: false,
+						preset_package: "textlint-rule-preset-ja-technical-writing",
+					},
+				},
+			},
+			null,
+			2,
+		),
+		"utf8",
+	);
+
+	try {
+		assert.throws(
+			() =>
+				loadLinterServiceConfig({
+					repositoryPath: context.repoDir,
+				}),
+			/exact version/u,
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("rejects duplicate textlint preset package names", () => {
+	const context = makeTempRepo();
+
+	fs.writeFileSync(
+		path.join(context.repoDir, ".github", "linter-service.json"),
+		JSON.stringify(
+			{
+				linters: {
+					textlint: {
+						disabled: false,
+						preset_packages: [
+							"textlint-rule-preset-ja-technical-writing@12.0.2",
+							"textlint-rule-preset-ja-technical-writing@12.0.3",
+						],
+					},
+				},
+			},
+			null,
+			2,
+		),
+		"utf8",
+	);
+
+	try {
+		assert.throws(
+			() =>
+				loadLinterServiceConfig({
+					repositoryPath: context.repoDir,
+				}),
+			/duplicate package names/u,
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("rejects mixing textlint preset_package and preset_packages", () => {
+	const context = makeTempRepo();
+
+	fs.writeFileSync(
+		path.join(context.repoDir, ".github", "linter-service.json"),
+		JSON.stringify(
+			{
+				linters: {
+					textlint: {
+						disabled: false,
+						preset_package: "textlint-rule-preset-ja-technical-writing@12.0.2",
+						preset_packages: ["textlint-rule-preset-ja-spacing@4.0.0"],
+					},
+				},
+			},
+			null,
+			2,
+		),
+		"utf8",
+	);
+
+	try {
+		assert.throws(
+			() =>
+				loadLinterServiceConfig({
+					repositoryPath: context.repoDir,
+				}),
+			/cannot be used together/u,
+		);
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}

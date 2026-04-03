@@ -64,6 +64,90 @@ test("selectLinters skips disabled linters and returns matching names", () => {
 	assert.deepEqual(selected, ["actionlint", "biome"]);
 });
 
+test("selectLinters requires explicit enablement for default-disabled linters", () => {
+	const context = fs.mkdtempSync(path.join(os.tmpdir(), "linter-targeting-"));
+	fs.writeFileSync(path.join(context, ".textlintrc"), "{}\n", "utf8");
+
+	try {
+		const selectedWithoutEnable = selectLinters({
+			candidatePaths: ["README.md"],
+			definitions: [
+				{
+					default_disabled: true,
+					name: "textlint",
+					patterns: ["\\.(?:md|markdown|txt)$"],
+					required_root_files: [".textlintrc"],
+				},
+			],
+			repositoryPath: context,
+			serviceConfig: {
+				global: {
+					exclude_paths: [],
+				},
+				linters: {},
+			},
+		});
+		const selectedWithEnable = selectLinters({
+			candidatePaths: ["README.md"],
+			definitions: [
+				{
+					default_disabled: true,
+					name: "textlint",
+					patterns: ["\\.(?:md|markdown|txt)$"],
+					required_root_files: [".textlintrc"],
+				},
+			],
+			repositoryPath: context,
+			serviceConfig: {
+				global: {
+					exclude_paths: [],
+				},
+				linters: {
+					textlint: {
+						disabled: false,
+						disabled_explicit: true,
+						exclude_paths: [],
+						preset_package: "textlint-rule-preset-ja-technical-writing@12.0.2",
+					},
+				},
+			},
+		});
+
+		assert.deepEqual(selectedWithoutEnable, []);
+		assert.deepEqual(selectedWithEnable, ["textlint"]);
+	} finally {
+		fs.rmSync(context, { force: true, recursive: true });
+	}
+});
+
+test("selectLinters skips linters whose required root files are missing", () => {
+	const context = fs.mkdtempSync(path.join(os.tmpdir(), "linter-targeting-"));
+
+	try {
+		const selected = selectLinters({
+			candidatePaths: ["README.md"],
+			definitions: [
+				{
+					name: "textlint",
+					patterns: ["\\.(?:md|markdown|txt)$"],
+					required_root_files: [".textlintrc"],
+				},
+			],
+			repositoryPath: context,
+			serviceConfig: {
+				global: {
+					exclude_paths: [],
+				},
+				linters: {},
+			},
+		});
+
+		assert.deepEqual(selected, []);
+	} finally {
+		fs.rmSync(context, { force: true, recursive: true });
+	}
+});
+
 test("readPatterns trims blank lines", () => {
 	const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "linter-targeting-"));
 	const patternPath = path.join(tempDir, "patterns.txt");

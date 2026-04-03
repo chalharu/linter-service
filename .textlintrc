@@ -1,0 +1,11 @@
+{
+  "rules": {
+    "preset-ja-technical-writing": {
+      "sentence-length": {
+        "max": 140
+      },
+      "no-mix-dearu-desumasu": false
+    },
+    "@textlint-ja/preset-ai-writing": true
+  }
+}

@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const path = require("node:path");
 
 const {
 	filterExcludedPaths,
@@ -20,13 +21,26 @@ function selectFiles({ candidatePaths, linterName, patterns, serviceConfig }) {
 	);
 }
 
-function selectLinters({ candidatePaths, definitions, serviceConfig }) {
+function selectLinters({
+	candidatePaths,
+	definitions,
+	repositoryPath,
+	serviceConfig,
+}) {
 	const selectedLinters = [];
 
 	for (const definition of definitions) {
 		validateDefinition(definition);
 
-		if (!isLinterEnabled(serviceConfig, definition.name)) {
+		if (
+			!isLinterEnabled(serviceConfig, definition.name, {
+				defaultDisabled: definition.default_disabled === true,
+			})
+		) {
+			continue;
+		}
+
+		if (!hasRequiredRootFiles(definition, repositoryPath)) {
 			continue;
 		}
 
@@ -43,6 +57,31 @@ function selectLinters({ candidatePaths, definitions, serviceConfig }) {
 	}
 
 	return selectedLinters;
+}
+
+function hasRequiredRootFiles(definition, repositoryPath) {
+	if (!Array.isArray(definition.required_root_files)) {
+		return true;
+	}
+
+	if (typeof repositoryPath !== "string" || repositoryPath.length === 0) {
+		return false;
+	}
+
+	const resolvedRepositoryPath = path.resolve(repositoryPath);
+
+	return definition.required_root_files.every((requiredPath) => {
+		const normalized = normalizeRelativePath(requiredPath);
+		const resolvedPath = path.resolve(resolvedRepositoryPath, normalized);
+		const relativePath = path.relative(resolvedRepositoryPath, resolvedPath);
+
+		return (
+			relativePath !== ".." &&
+			!relativePath.startsWith(`..${path.sep}`) &&
+			!path.isAbsolute(relativePath) &&
+			fs.existsSync(resolvedPath)
+		);
+	});
 }
 
 function buildLinterJobAssignments({ definitions, selectedLinters }) {
@@ -125,6 +164,26 @@ function validateDefinition(definition) {
 	) {
 		throw new Error(
 			"execution_group must contain only letters, digits, dot, underscore, or hyphen",
+		);
+	}
+
+	if (
+		typeof definition.default_disabled !== "undefined" &&
+		typeof definition.default_disabled !== "boolean"
+	) {
+		throw new Error("default_disabled must be a boolean when present");
+	}
+
+	if (
+		typeof definition.required_root_files !== "undefined" &&
+		(!Array.isArray(definition.required_root_files) ||
+			definition.required_root_files.some(
+				(filePath) =>
+					typeof filePath !== "string" || filePath.trim().length === 0,
+			))
+	) {
+		throw new Error(
+			"required_root_files must be an array of non-empty strings",
 		);
 	}
 }
