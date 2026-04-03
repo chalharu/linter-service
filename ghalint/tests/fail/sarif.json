@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/ghalint"
+      },
+      "results": [
+        {
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": ".github/workflows/workflow.yml"
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "<timestamp> ERR the job violates policies program=ghalint version=1.5.5 workflow_file_path=.github/workflows/workflow.yml policy_name=job_permissions reference=https://github.com/suzuki-shunsuke/ghalint/blob/main/docs/policies/001.md job_name=test error=\"job should have permissions\""
+          },
+          "properties": {
+            "linter_name": "ghalint"
+          },
+          "ruleId": "ghalint/diagnostic"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/chalharu/linter-service",
+          "name": "linter-service/ghalint",
+          "rules": [
+            {
+              "id": "ghalint/diagnostic",
+              "name": "ghalint/diagnostic",
+              "shortDescription": {
+                "text": "ghalint/diagnostic"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

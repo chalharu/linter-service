@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "==> hadolint --no-color Dockerfile",
+    "exit_code": 0
+  },
+  "selected_files": [
+    "Dockerfile"
+  ]
+}

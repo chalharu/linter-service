@@ -1,0 +1,9 @@
+{
+  "global": {
+    "exclude_paths": [
+      "**/tests/*/target/**",
+      "**/tests/*/sarif.json"
+    ]
+  },
+  "linters": {}
+}

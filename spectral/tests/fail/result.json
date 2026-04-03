@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "service.yaml:1:1 error require-version \"version is required\"",
+    "exit_code": 1
+  },
+  "selected_files": [
+    "service.yaml"
+  ]
+}

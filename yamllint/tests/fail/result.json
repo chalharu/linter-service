@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "::group::config.yaml\n::error file=config.yaml,line=3,col=8::3:8 syntax error: mapping values are not allowed here (syntax)\n::endgroup::",
+    "exit_code": 1
+  },
+  "selected_files": [
+    "config.yaml"
+  ]
+}

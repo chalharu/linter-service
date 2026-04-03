@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "==> rustfmt --check src/lib.rs\nDiff in src/lib.rs:1:\n-pub fn demo( )->i32{1}\n+pub fn demo() -> i32 {\n+    1\n+}",
+    "exit_code": 1
+  },
+  "selected_files": [
+    "src/lib.rs"
+  ]
+}

@@ -7,10 +7,10 @@ const {
 	cleanupTempRepo,
 	makeTempRepo,
 	writeFile,
-} = require("./linters/cargo-linter-test-lib.js");
+} = require("./cargo-linter-test-lib.js");
 const { runFromEnv } = require("./render-linter-report.js");
 
-const configPath = path.join(__dirname, "linters/config.json");
+const configPath = path.join(__dirname, "..", "..", "linters.json");
 
 test("lists checked file paths in a successful non-cargo linter report", () => {
 	const context = makeTempRepo("render-linter-report-non-cargo-");
@@ -18,8 +18,7 @@ test("lists checked file paths in a successful non-cargo linter report", () => {
 	try {
 		fs.writeFileSync(
 			path.join(context.runnerTemp, "selected-files.txt"),
-			[".github/workflows/ci.yml", ".github/workflows/release.yml"].join("\n") +
-				"\n",
+			`${[".github/workflows/ci.yml", ".github/workflows/release.yml"].join("\n")}\n`,
 			"utf8",
 		);
 		fs.writeFileSync(
@@ -56,6 +55,44 @@ test("lists checked file paths in a successful non-cargo linter report", () => {
 	}
 });
 
+test("collapses long target path lists in reports", () => {
+	const context = makeTempRepo("render-linter-report-collapsed-paths-");
+	const selectedFiles = Array.from(
+		{ length: 12 },
+		(_, index) => `docs/file-${index + 1}.md`,
+	);
+
+	try {
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "selected-files.txt"),
+			`${selectedFiles.join("\n")}\n`,
+			"utf8",
+		);
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "linter-result.json"),
+			JSON.stringify({ details: "", exit_code: 0 }),
+			"utf8",
+		);
+
+		const report = runFromEnv(
+			createReportEnv(context, {
+				EXIT_CODE: "0",
+				LINTER_NAME: "markdownlint-cli2",
+			}),
+		);
+
+		assert.equal(report.conclusion, "success");
+		assert.match(
+			report.body,
+			/Target file paths:\n\n<details><summary>Show 12 path\(s\)<\/summary>/,
+		);
+		assert.match(report.body, /- <code>docs\/file-1\.md<\/code>/);
+		assert.match(report.body, /- <code>docs\/file-12\.md<\/code>/);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
 test("treats rustfmt as selected Rust files instead of Cargo projects", () => {
 	const context = makeTempRepo("render-linter-report-rustfmt-files-");
 
@@ -64,7 +101,7 @@ test("treats rustfmt as selected Rust files instead of Cargo projects", () => {
 	try {
 		fs.writeFileSync(
 			path.join(context.runnerTemp, "selected-files.txt"),
-			["src/lib.rs", "crates/member/src/lib.rs"].join("\n") + "\n",
+			`${["src/lib.rs", "crates/member/src/lib.rs"].join("\n")}\n`,
 			"utf8",
 		);
 		fs.writeFileSync(
@@ -104,8 +141,7 @@ test("lists checked Cargo projects alongside changed file paths", () => {
 	try {
 		fs.writeFileSync(
 			path.join(context.runnerTemp, "selected-files.txt"),
-			["src/lib.rs", "src/main.rs", "crates/member/src/lib.rs"].join("\n") +
-				"\n",
+			`${["src/lib.rs", "src/main.rs", "crates/member/src/lib.rs"].join("\n")}\n`,
 			"utf8",
 		);
 		fs.writeFileSync(
@@ -153,7 +189,7 @@ test("lists checked Cargo projects for cargo-deny dependency target files", () =
 	try {
 		fs.writeFileSync(
 			path.join(context.runnerTemp, "selected-files.txt"),
-			["Cargo.lock", "crates/member/deny.toml"].join("\n") + "\n",
+			`${["Cargo.lock", "crates/member/deny.toml"].join("\n")}\n`,
 			"utf8",
 		);
 		fs.writeFileSync(
@@ -208,7 +244,7 @@ edition = "2021"
 	try {
 		fs.writeFileSync(
 			path.join(context.runnerTemp, "selected-files.txt"),
-			["deny.toml"].join("\n") + "\n",
+			`${["deny.toml"].join("\n")}\n`,
 			"utf8",
 		);
 		fs.writeFileSync(
@@ -241,7 +277,7 @@ test("includes checked targets before diagnostic details on failure", () => {
 	try {
 		fs.writeFileSync(
 			path.join(context.runnerTemp, "selected-files.txt"),
-			["openapi/spec.yaml"].join("\n") + "\n",
+			`${["openapi/spec.yaml"].join("\n")}\n`,
 			"utf8",
 		);
 		fs.writeFileSync(
@@ -278,7 +314,7 @@ test("renders target paths safely when they contain Markdown-breaking backticks"
 	try {
 		fs.writeFileSync(
 			path.join(context.runnerTemp, "selected-files.txt"),
-			["docs/with`tick`.md"].join("\n") + "\n",
+			`${["docs/with`tick`.md"].join("\n")}\n`,
 			"utf8",
 		);
 		fs.writeFileSync(

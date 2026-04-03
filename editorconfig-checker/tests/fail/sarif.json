@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/editorconfig-checker"
+      },
+      "results": [
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main.rs"
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "src/main.rs:"
+          },
+          "properties": {
+            "linter_name": "editorconfig-checker"
+          },
+          "ruleId": "editorconfig-checker/diagnostic"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/chalharu/linter-service",
+          "name": "linter-service/editorconfig-checker",
+          "rules": [
+            {
+              "id": "editorconfig-checker/diagnostic",
+              "name": "editorconfig-checker/diagnostic",
+              "shortDescription": {
+                "text": "editorconfig-checker/diagnostic"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

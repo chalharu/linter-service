@@ -8,7 +8,7 @@ const {
 	cleanupTempRepo,
 	makeTempRepo,
 	writeFile,
-} = require("./linters/cargo-linter-test-lib.js");
+} = require("./cargo-linter-test-lib.js");
 const uploadSarif = require("./upload-sarif.js");
 
 test("uploads each SARIF file, uses the PR ref, and waits for completion", async () => {

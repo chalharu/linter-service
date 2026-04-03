@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "config.yaml:1: yamlfmt would reformat this file\n\nThe following formatting differences were found:\n\nconfig.yaml:\n- name:  demo  name: demo\n- version:  1  version: 1",
+    "exit_code": 1
+  },
+  "selected_files": [
+    "config.yaml"
+  ]
+}

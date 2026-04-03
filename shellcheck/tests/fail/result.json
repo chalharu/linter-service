@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "In script.sh line 4:\necho $name\n     ^---^ SC2086 (info): Double quote to prevent globbing and word splitting.\n\nDid you mean:\necho \"$name\"\n\nFor more information:\n  https://www.shellcheck.net/wiki/SC2086 -- Double quote to prevent globbing ...",
+    "exit_code": 1
+  },
+  "selected_files": [
+    "script.sh"
+  ]
+}

@@ -1,0 +1,8 @@
+rules:
+  require-version:
+    description: version is required
+    severity: error
+    given: $
+    then:
+      field: version
+      function: truthy

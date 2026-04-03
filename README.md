@@ -33,8 +33,11 @@ GitHub Actions が共通ルールで lint します。
 |------|------|
 | `.github/workflows/repository-dispatch.yml` | router workflow |
 | `.github/workflows/lint-common.yml` | 共通 reusable workflow |
-| `.github/scripts/linters/*.sh` | linter ごとの実装 |
-| `.github/workflows/ci.yml` | `worker/` の型検査・lint・テスト |
+| `.github/linter-service.json` | source repo 側の exclude / disable 設定 |
+| `linters.json` | linter 定義と report/SARIF 文言 |
+| `<linter>/` | linter ごとの script / fixture test / helper |
+| `.github/scripts/` | shared helper / renderer / artifact utility |
+| `.github/workflows/ci.yml` | `worker/` 検証と fixture test CI |
 | `worker/` | Webhook を受ける Cloudflare Worker |
 
 ## 共有 linter 一覧
@@ -63,73 +66,133 @@ default branch push では repository 全体の tracked file path から対象 l
 | `shellcheck` | `*.bash`, `*.ksh`, `*.sh` | 対象 script の場所から親へ向けて `.shellcheckrc` / `shellcheckrc` を探します。 | - |
 | `zizmor` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | `zizmor.yml` / `zizmor.yaml` / `.github/zizmor.yml` / `.github/zizmor.yaml` | 共有 workflow は `--offline` で実行します。 |
 
+## `.github/linter-service.json`
+
+利用 repository 側で `.github/linter-service.json` を置くと、shared workflow の
+target selection を制御できます。file がない場合は従来どおり全 linter / 全 path を対象にします。
+
+```json
+{
+  "global": {
+    "exclude_paths": [
+      "**/generated/**"
+    ]
+  },
+  "linters": {
+    "yamllint": {
+      "exclude_paths": [
+        "docs/openapi/**"
+      ]
+    },
+    "zizmor": {
+      "disabled": true
+    }
+  }
+}
+```
+
+- `exclude_paths` は repo-relative glob pattern です。
+- global exclude と linter ごとの exclude は両方適用されます。
+- `disabled: true` の linter は選択対象から外れます。
+- この repository 自身では fixture 群を通常 lint から外すため、root の
+  `.github/linter-service.json` に `**/tests/*/target/**` と
+  `**/tests/*/sarif.json` を設定し、`result.json` は lint 対象のままにしています。
+
 ## 共有 linter の追加方法
 
-新しい共有 linter は、通常は workflow を追加せずに data-driven な定義だけを足します。
-基本的には `.github/scripts/linters/` と `.github/scripts/linters/config.json` と
-この `README.md` を更新すれば済みます。
+新しい共有 linter は、通常は workflow を増やさずに root の `linters.json` と
+root 直下の `<name>/` directory を追加します。`.github/scripts/` には shared script だけを置きます。
 
-1. `.github/scripts/linters/<name>.sh` を追加します。
-   `patterns`, `install`, `run` の 3 mode を実装してください。
-   `repository-dispatch.yml` は `patterns` の regex で対象 linter を選び、
-   `lint-common.yml` は一致した target file path を `run` に渡します。
+1. root に `<name>/` directory を追加し、最低限 `patterns.sh`, `install.sh`,
+   `run.sh` を置きます。共通 helper が必要なら同じ directory に `common.sh`
+   を置いて構いません。`repository-dispatch.yml` は
+   `<name>/patterns.sh` の regex で対象 linter を選び、`lint-common.yml` は
+   一致した target file path を `<name>/run.sh` に渡します。
+
+   ```text
+    <name>/
+      common.sh                # optional shared helpers
+      patterns.sh
+      install.sh
+      run.sh
+      tests/
+        pass/
+          target/
+          result.json
+          sarif.json
+        fail/
+          target/
+          result.json
+          sarif.json
+      <name>.test.js           # optional focused unit/integration test
+      render-linter-sarif.test.js
+    ```
+
+   現在の repository では mode ごとの実装を `patterns.sh` / `install.sh` / `run.sh`
+   に分け、共有 helper だけを `common.sh` に置いています。fixture test は
+   `tests/[test-name]/target/` を temp repository として初期化して実行し、
+   実結果を `result.json` / `sarif.json` と比較します。
 
    ```bash
+   # common.sh
+   #!/usr/bin/env bash
+
+   set -euo pipefail
+
+   script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+   # shellcheck source=../.github/scripts/linter-library.sh
+   source "$script_dir/../.github/scripts/linter-library.sh"
+   ```
+
+   ```bash
+   # patterns.sh
    #!/usr/bin/env bash
    set -euo pipefail
 
    script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-   # shellcheck source=../linter-library.sh
-   source "$script_dir/../linter-library.sh"
+   # shellcheck source=./common.sh
+   source "$script_dir/common.sh"
 
-   mode=${1-}
-   if [ "$#" -gt 0 ]; then
-     shift
-   fi
-
-   case "$mode" in
-     patterns)
-       cat <<'EOF'
+   cat <<'EOF'
    \.(?:ext)$
    EOF
-       ;;
-     install)
-       : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
-       # tool install
-       ;;
-     run)
-       : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
-       output_file="$RUNNER_TEMP/linter-output.txt"
-       linter_lib::run_and_emit_json "$output_file" your-linter "$@"
-       ;;
-     *)
-       echo "usage: $0 {patterns|install|run}" >&2
-       exit 1
-       ;;
-   esac
    ```
 
-2. `install` は runner 既定 tool を再利用できるならそれを優先し、
+   ```bash
+   # run.sh
+   #!/usr/bin/env bash
+   set -euo pipefail
+
+   script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+   # shellcheck source=./common.sh
+   source "$script_dir/common.sh"
+
+   : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
+   output_file="$RUNNER_TEMP/linter-output.txt"
+   linter_lib::run_and_emit_json "$output_file" your-linter "$@"
+   ```
+
+2. `install.sh` は runner 既定 tool を再利用できるならそれを優先し、
    足りない場合だけ `$RUNNER_TEMP` 配下へ install して
    `linter_lib::add_path` で PATH に追加します。
-   単純な例は `actionlint.sh` や `taplo.sh`、
-   repository ごとの解決が必要な例は `cargo-clippy.sh` を参照してください。
+   単純な例は `actionlint/install.sh` や `taplo/install.sh`、
+   repository ごとの解決が必要な例は `cargo-clippy/install.sh` を参照してください。
 
-3. `run` は changed file path をそのまま tool に渡せるかを先に確認します。
-   `rustfmt.sh` は selected Rust file をそのまま `rustfmt --check` に渡します。
+3. `run.sh` は changed file path をそのまま tool に渡せるかを先に確認します。
+   `rustfmt/run.sh` は selected Rust file をそのまま `rustfmt --check` に渡します。
    そのまま扱えない場合は wrapper 側で package / workspace / temp repo に
-   変換します。`cargo-clippy.sh` は Cargo package ごとにまとめ、
-   `markdownlint-cli2.sh` は temp repo を組み立てて changed file だけを検査します。
+   変換します。`cargo-clippy/run.sh` は Cargo package ごとにまとめ、
+   `markdownlint-cli2/run.sh` は temp repo を組み立てて changed file だけを検査します。
 
 4. 利用 repository 側の config を読む linter や、
    compile / build によって repository code を実行する linter は、
    untrusted pull request でも安全に扱えることを確認してください。
    JavaScript のように任意コード実行につながる config は許可せず、
    静的 config のみを受けるか、wrapper で明示的に reject します。
-   `markdownlint-cli2.sh` と `spectral.sh` は config 側の実例で、
+   `markdownlint-cli2/common.sh` と `spectral/common.sh` は config 側の実例で、
    `cargo-clippy` は Docker container 実行と `.cargo/config*` reject の実例です。
 
-5. `.github/scripts/linters/config.json` に entry を追加します。
+5. root の `linters.json` に entry を追加します。
    ここが comment 見出し、成功 / 失敗文言、fallback message の source of truth です。
    通常は linter を増やすために `repository-dispatch.yml` や
    `lint-common.yml` を個別修正する必要はありません。
@@ -137,16 +200,22 @@ default branch push では repository 全体の tracked file path から対象 l
 6. この `README.md` の「共有 linter 一覧」に、
    対象ファイル、設定ファイル、制限事項を 1 行追記します。
 
-7. wrapper に path 解決、config 探索、package grouping のような
-   非自明な処理がある場合は、
-   `.github/scripts/linters/<name>.test.js` のような focused test を追加します。
-   単純な wrapper でも `shellcheck -x -P SCRIPTDIR` は通してください。
+7. 各 linter は `tests/pass/` と `tests/fail/` のように、最低 2 fixture を持たせます。
+   `target/` には lint 対象 repo をそのまま置き、`result.json` には
+   `selected_files` / `checked_projects` / `result` の expected JSON を、
+   `sarif.json` には normalized SARIF を保存します。
+   path 解決、config 探索、package grouping のような
+   非自明な処理がある場合は `<name>/<name>.test.js` のような focused unit test を追加します。
+   SARIF renderer の unit test が必要なら `<name>/render-linter-sarif.test.js` も更新し、
+   shell script には `shellcheck -x -P SCRIPTDIR` を通してください。
 
 8. 変更後は、触った面に応じて既存の validation を実行します。
    例:
-   - `node --test .github/scripts/linters/<name>.test.js`
-   - `shellcheck -x -P SCRIPTDIR .github/scripts/linters/<name>.sh`
-   - `markdownlint-cli2 --no-globs :README.md`
+   - `node .github/scripts/run-fixture-tests.js <name>`
+   - `node --test <name>/<name>.test.js`
+   - `node --test <name>/render-linter-sarif.test.js`
+   - `shellcheck -x -P SCRIPTDIR <name>/*.sh`
+   - `markdownlint-cli2 --no-globs README.md`
    - `git diff --check`
 
 ## 詳細

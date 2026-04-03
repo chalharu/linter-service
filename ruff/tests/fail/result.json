@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "main.py:1:8: F401 [*] `os` imported but unused\nFound 1 error.\n[*] 1 fixable with the `--fix` option.",
+    "exit_code": 1
+  },
+  "selected_files": [
+    "main.py"
+  ]
+}

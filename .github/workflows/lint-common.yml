@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 30
     env:
       LINTER_NAME: ${{ inputs.linter-name }}
-      LINTER_CONFIG_PATH: ${{ github.workspace }}/linter-service/.github/scripts/linters/config.json
+      LINTER_CONFIG_PATH: ${{ github.workspace }}/linter-service/linters.json
       LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
       SOURCE_REPOSITORY_PATH: ${{ github.workspace }}/source-repo
     steps:
@@ -92,39 +92,20 @@ jobs:
         id: select_files
         env:
           CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
+          OUTPUT_PATH: ${{ runner.temp }}/selected-files.txt
           PATTERN_PATH: ${{ runner.temp }}/linter-patterns.txt
         run: |
-          script_path="$LINTER_SERVICE_PATH/.github/scripts/linters/$LINTER_NAME.sh"
-          bash "$script_path" patterns > "$PATTERN_PATH"
-
-          python3 - <<'PY' > "$RUNNER_TEMP/selected-files.txt"
-          import json
-          import os
-          import re
-          from pathlib import Path
-
-          context = json.loads(Path(os.environ["CONTEXT_PATH"]).read_text(encoding="utf-8"))
-          patterns = [
-              re.compile(line.strip(), re.IGNORECASE)
-              for line in Path(os.environ["PATTERN_PATH"]).read_text(encoding="utf-8").splitlines()
-              if line.strip()
-          ]
-
-          for path in context["changed_files"]:
-              if any(pattern.search(path) for pattern in patterns):
-                  print(path)
-          PY
-
-          count=$(wc -l < "$RUNNER_TEMP/selected-files.txt" | tr -d ' ')
-          echo "count=$count" >> "$GITHUB_OUTPUT"
+          script_path="$LINTER_SERVICE_PATH/$LINTER_NAME/patterns.sh"
+          bash "$script_path" > "$PATTERN_PATH"
+          node "$LINTER_SERVICE_PATH/.github/scripts/select-lint-targets.js"
       - name: Install linter tool
         id: install_tool
         if: ${{ steps.select_files.outputs.count != '0' }}
         run: |
-          script_path="$LINTER_SERVICE_PATH/.github/scripts/linters/$LINTER_NAME.sh"
+          script_path="$LINTER_SERVICE_PATH/$LINTER_NAME/install.sh"
           (
             cd "$LINTER_SERVICE_PATH" || exit 1
-            bash "$script_path" install
+            bash "$script_path"
           )
       - name: Run linter
         id: run_linter
@@ -132,11 +113,11 @@ jobs:
         env:
           RESULT_PATH: ${{ runner.temp }}/linter-result.json
         run: |
-          script_path="$LINTER_SERVICE_PATH/.github/scripts/linters/$LINTER_NAME.sh"
+          script_path="$LINTER_SERVICE_PATH/$LINTER_NAME/run.sh"
           mapfile -t files < "$RUNNER_TEMP/selected-files.txt"
           (
             cd "$SOURCE_REPOSITORY_PATH" || exit 1
-            bash "$script_path" run "${files[@]}" > "$RESULT_PATH"
+            bash "$script_path" "${files[@]}" > "$RESULT_PATH"
           )
 
           python3 - <<'PY'

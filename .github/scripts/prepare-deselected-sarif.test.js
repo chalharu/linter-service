@@ -7,7 +7,7 @@ const {
 	cleanupTempRepo,
 	makeTempRepo,
 	writeFile,
-} = require("./linters/cargo-linter-test-lib.js");
+} = require("./cargo-linter-test-lib.js");
 const prepareDeselectedSarif = require("./prepare-deselected-sarif.js");
 
 test("writes empty SARIF files for enabled deselected linters", () => {

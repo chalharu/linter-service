@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "==> rustfmt --check src/lib.rs",
+    "exit_code": 0
+  },
+  "selected_files": [
+    "src/lib.rs"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "checked_projects": [
+    "Cargo.toml"
+  ],
+  "result": {
+    "details": "==> docker run seed writable rustup home\n\n==> docker run cargo fetch --manifest-path Cargo.toml\n\n==> docker run cargo clippy --manifest-path Cargo.toml --all-targets -- -D warnings\n    Checking fixture-pass v0.1.0 (/work)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in <duration>",
+    "exit_code": 0
+  },
+  "selected_files": [
+    "src/lib.rs"
+  ]
+}

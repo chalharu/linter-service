@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/ruff"
+      },
+      "results": [
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "main.py"
+                },
+                "region": {
+                  "startColumn": 8,
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "F401 [*] `os` imported but unused"
+          },
+          "properties": {
+            "linter_name": "ruff"
+          },
+          "ruleId": "F401"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/chalharu/linter-service",
+          "name": "linter-service/ruff",
+          "rules": [
+            {
+              "id": "F401",
+              "name": "F401",
+              "shortDescription": {
+                "text": "F401"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

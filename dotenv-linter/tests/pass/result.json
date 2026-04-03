@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "Checking .env\n\nNo problems found",
+    "exit_code": 0
+  },
+  "selected_files": [
+    ".env"
+  ]
+}

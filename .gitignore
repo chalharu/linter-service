@@ -74,6 +74,8 @@ docs/_build/
 # PyBuilder
 .pybuilder/
 target/
+!*/tests/*/target/
+!*/tests/*/target/**
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -136,6 +138,8 @@ celerybeat.pid
 
 # Environments
 .env
+!*/tests/*/target/.env
+!*/tests/*/target/.env*
 .envrc
 .venv
 env/

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/dotenv-linter"
+      },
+      "results": [],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/chalharu/linter-service",
+          "name": "linter-service/dotenv-linter",
+          "rules": []
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

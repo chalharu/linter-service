@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "Checked 1 file in <duration>. No fixes applied.",
+    "exit_code": 0
+  },
+  "selected_files": [
+    "src/index.js"
+  ]
+}

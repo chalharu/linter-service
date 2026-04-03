@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "🌈 zizmor v1.23.1\n INFO audit: zizmor: 🌈 completed .github/workflows/workflow.yml\nwarning[artipacked]: credential persistence through GitHub Actions artifacts\n --> .github/workflows/workflow.yml:7:9\n  |\n7 |       - uses: actions/checkout@v4\n  |         ^^^^^^^^^^^^^^^^^^^^^^^^^ does not set persist-credentials: false\n  |\n  = note: audit confidence → Low\n  = note: this finding has an auto-fix\n  = help: audit documentation → https://docs.zizmor.sh/audits/#artipacked\n\nwarning[excessive-permissions]: overly broad permissions\n --> .github/workflows/workflow.yml:4:3\n  |\n4 | /   test:\n5 | |     runs-on: ubuntu-latest\n6 | |     steps:\n7 | |       - uses: actions/checkout@v4\n  | |                                  ^\n  | |                                  |\n  | |__________________________________this job\n  |                                    default permissions used due to no permissions: block\n  |\n  = note: audit confidence → Medium\n  = help: audit documentation → https://docs.zizmor.sh/audits/#excessive-permissions\n\nerror[unpinned-uses]: unpinned action reference\n --> .github/workflows/workflow.yml:7:15\n  |\n7 |       - uses: actions/checkout@v4\n  |               ^^^^^^^^^^^^^^^^^^^ action is not pinned to a hash (required by blanket policy)\n  |\n  = note: audit confidence → High\n  = help: audit documentation → https://docs.zizmor.sh/audits/#unpinned-uses\n\n6 findings (3 suppressed, 1 fixable): 0 informational, 0 low, 2 medium, 1 high",
+    "exit_code": 14
+  },
+  "selected_files": [
+    ".github/workflows/workflow.yml"
+  ]
+}

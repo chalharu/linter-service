@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/taplo"
+      },
+      "results": [
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "config.toml"
+                },
+                "region": {
+                  "startColumn": 1,
+                  "startLine": 3
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "9"
+          },
+          "properties": {
+            "linter_name": "taplo"
+          },
+          "ruleId": "taplo/diagnostic"
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "config.toml"
+                },
+                "region": {
+                  "startColumn": 9,
+                  "startLine": 3
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "invalid TOML"
+          },
+          "properties": {
+            "linter_name": "taplo"
+          },
+          "ruleId": "taplo/diagnostic"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/chalharu/linter-service",
+          "name": "linter-service/taplo",
+          "rules": [
+            {
+              "id": "taplo/diagnostic",
+              "name": "taplo/diagnostic",
+              "shortDescription": {
+                "text": "taplo/diagnostic"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

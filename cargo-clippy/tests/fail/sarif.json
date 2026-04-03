@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/cargo-clippy"
+      },
+      "results": [
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib.rs"
+                },
+                "region": {
+                  "startColumn": 24,
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "writing `&Vec` instead of `&[_]` involves a new object where a slice will do"
+          },
+          "properties": {
+            "linter_name": "cargo-clippy"
+          },
+          "ruleId": "cargo-clippy/diagnostic"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/chalharu/linter-service",
+          "name": "linter-service/cargo-clippy",
+          "rules": [
+            {
+              "id": "cargo-clippy/diagnostic",
+              "name": "cargo-clippy/diagnostic",
+              "shortDescription": {
+                "text": "cargo-clippy/diagnostic"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

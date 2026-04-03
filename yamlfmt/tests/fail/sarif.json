@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/yamlfmt"
+      },
+      "results": [
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "config.yaml"
+                },
+                "region": {
+                  "startColumn": 1,
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "yamlfmt would reformat this file"
+          },
+          "properties": {
+            "linter_name": "yamlfmt"
+          },
+          "ruleId": "yamlfmt/diagnostic"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/chalharu/linter-service",
+          "name": "linter-service/yamlfmt",
+          "rules": [
+            {
+              "id": "yamlfmt/diagnostic",
+              "name": "yamlfmt/diagnostic",
+              "shortDescription": {
+                "text": "yamlfmt/diagnostic"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

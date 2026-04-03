@@ -33,6 +33,9 @@ jobs:
       SOURCE_DEFAULT_BRANCH: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.repository.default_branch || github.event.repository.default_branch }}
       SOURCE_HEAD_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.event_name == 'push' && github.ref_name || github.event_name == 'repository_dispatch' && github.event.client_payload.event_name == 'push' && github.event.client_payload.push.ref_name || github.event.client_payload.pull_request.head.ref || '' }}
       SOURCE_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.event_name == 'push' && github.sha || github.event_name == 'repository_dispatch' && github.event.client_payload.event_name == 'push' && github.event.client_payload.push.after || github.event.client_payload.pull_request.head.sha || '' }}
+      SOURCE_REPOSITORY_NAME: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.name || github.event_name == 'repository_dispatch' && github.event.client_payload.event_name == 'pull_request' && github.event.client_payload.pull_request.head.repo.name || github.event_name == 'repository_dispatch' && github.event.client_payload.repository.name || github.event.repository.name }}
+      SOURCE_REPOSITORY_OWNER: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.owner.login || github.event_name == 'repository_dispatch' && github.event.client_payload.event_name == 'pull_request' && github.event.client_payload.pull_request.head.repo.owner.login || github.event_name == 'repository_dispatch' && github.event.client_payload.repository.owner.login || github.event.repository.owner.login }}
+      SOURCE_REPOSITORY_PATH: ${{ github.workspace }}/source-routing-repo
       TARGET_REPOSITORY_NAME: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.repository.name || github.event.repository.name }}
       TARGET_REPOSITORY_OWNER: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.repository.owner.login || github.event.repository.owner.login }}
     steps:
@@ -91,7 +94,7 @@ jobs:
       - name: Build linter definitions
         id: build_linter_definitions
         env:
-          LINTER_CONFIG_PATH: ${{ github.workspace }}/linter-service/.github/scripts/linters/config.json
+          LINTER_CONFIG_PATH: ${{ github.workspace }}/linter-service/linters.json
           LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
         run: |
           python3 - <<'PY'
@@ -103,7 +106,7 @@ jobs:
           config_path = Path(os.environ["LINTER_CONFIG_PATH"])
           config_data = json.loads(config_path.read_text(encoding="utf-8"))
           linters = config_data.get("linters", [])
-          script_root = Path(os.environ["LINTER_SERVICE_PATH"]) / ".github" / "scripts" / "linters"
+          script_root = Path(os.environ["LINTER_SERVICE_PATH"])
           definitions = []
 
           if not isinstance(linters, list):
@@ -114,9 +117,9 @@ jobs:
                   raise SystemExit("each linter config entry must include a name")
 
               linter_name = item["name"]
-              script_path = script_root / f"{linter_name}.sh"
+              script_path = script_root / linter_name / "patterns.sh"
               result = subprocess.run(
-                  ["bash", str(script_path), "patterns"],
+                  ["bash", str(script_path)],
                   capture_output=True,
                   check=True,
                   text=True,
@@ -141,26 +144,37 @@ jobs:
           permission-pull-requests: read
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ env.TARGET_REPOSITORY_NAME }}
-      - name: Check out source repository for push routing
-        if: ${{ env.ROUTED_EVENT_NAME == 'push' }}
+      - name: Get source repository config token
+        id: get_source_config_token
+        continue-on-error: true
+        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        with:
+          app-id: ${{ secrets.CHECKER_APP_ID }}
+          owner: ${{ env.SOURCE_REPOSITORY_OWNER }}
+          permission-contents: read
+          private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
+          repositories: ${{ env.SOURCE_REPOSITORY_NAME }}
+      - name: Check out source repository for lint targeting
+        if: ${{ steps.get_source_config_token.outcome == 'success' && env.SOURCE_HEAD_SHA != '' }}
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           path: source-routing-repo
           persist-credentials: false
           ref: ${{ env.SOURCE_HEAD_SHA }}
-          repository: ${{ env.TARGET_REPOSITORY_OWNER }}/${{ env.TARGET_REPOSITORY_NAME }}
-          token: ${{ steps.get_checker_token.outputs.token }}
+          repository: ${{ env.SOURCE_REPOSITORY_OWNER }}/${{ env.SOURCE_REPOSITORY_NAME }}
+          token: ${{ steps.get_source_config_token.outputs.token }}
       - name: Collect lint targets context
         id: collect
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
           LINTER_DEFINITIONS_PATH: ${{ steps.build_linter_definitions.outputs.path }}
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
           PULL_REQUEST_NUMBER: ${{ env.PULL_REQUEST_NUMBER }}
           ROUTED_EVENT_NAME: ${{ env.ROUTED_EVENT_NAME }}
           SOURCE_DEFAULT_BRANCH: ${{ env.SOURCE_DEFAULT_BRANCH }}
           SOURCE_HEAD_REF: ${{ env.SOURCE_HEAD_REF }}
           SOURCE_HEAD_SHA: ${{ env.SOURCE_HEAD_SHA }}
-          SOURCE_REPOSITORY_PATH: ${{ github.workspace }}/source-routing-repo
+          SOURCE_REPOSITORY_PATH: ${{ env.SOURCE_REPOSITORY_PATH }}
           TARGET_REPOSITORY_NAME: ${{ env.TARGET_REPOSITORY_NAME }}
           TARGET_REPOSITORY_OWNER: ${{ env.TARGET_REPOSITORY_OWNER }}
         with:
@@ -169,6 +183,19 @@ jobs:
             const childProcess = require("node:child_process");
             const fs = require("node:fs");
             const path = require("node:path");
+            const {
+              loadLinterServiceConfig,
+            } = require(path.join(
+              process.env.LINTER_SERVICE_PATH,
+              ".github/scripts/linter-service-config.js",
+            ));
+            const {
+              selectLinters,
+              validateDefinition,
+            } = require(path.join(
+              process.env.LINTER_SERVICE_PATH,
+              ".github/scripts/linter-targeting.js",
+            ));
             const owner = process.env.TARGET_REPOSITORY_OWNER;
             const repo = process.env.TARGET_REPOSITORY_NAME;
             const routedEventName = process.env.ROUTED_EVENT_NAME;
@@ -177,6 +204,7 @@ jobs:
             const sourceDefaultBranch = process.env.SOURCE_DEFAULT_BRANCH || "";
             const sourceHeadRefFromPayload = process.env.SOURCE_HEAD_REF || "";
             const sourceHeadShaFromPayload = process.env.SOURCE_HEAD_SHA || "";
+            const sourceRepositoryPath = process.env.SOURCE_REPOSITORY_PATH || "";
             const definitions = JSON.parse(
               fs.readFileSync(process.env.LINTER_DEFINITIONS_PATH, "utf8"),
             );
@@ -197,29 +225,24 @@ jobs:
               core.setOutput("selected-linters-json", JSON.stringify(selectedLinters));
               core.setOutput("skip-reason", skipReason);
             };
-            const buildPatterns = (definition) =>
-              definition.patterns.map((pattern) => {
-                if (typeof pattern !== "string") {
-                  throw new Error("Linter patterns must be strings");
-                }
-
-                return new RegExp(pattern, "i");
-              });
-            const selectLinters = (targetFiles) => {
-              const selectedLinters = [];
-
-              for (const definition of definitions) {
-                const patterns = buildPatterns(definition);
-                const selected = targetFiles.some((candidatePath) =>
-                  patterns.some((pattern) => pattern.test(candidatePath)),
+            const defaultServiceConfig = {
+              exists: false,
+              global: {
+                exclude_paths: [],
+              },
+              linters: {},
+            };
+            const loadSourceServiceConfig = () => {
+              if (!sourceRepositoryPath || !fs.existsSync(sourceRepositoryPath)) {
+                core.warning(
+                  "source repository checkout was unavailable during target detection; falling back to default linter-service config",
                 );
-
-                if (selected) {
-                  selectedLinters.push(definition.name);
-                }
+                return defaultServiceConfig;
               }
 
-              return selectedLinters;
+              return loadLinterServiceConfig({
+                repositoryPath: sourceRepositoryPath,
+              });
             };
             const writeSkipContext = ({
               commentEnabled,
@@ -265,15 +288,10 @@ jobs:
             }
 
             for (const definition of definitions) {
-              if (
-                !definition ||
-                typeof definition !== "object" ||
-                typeof definition.name !== "string" ||
-                !Array.isArray(definition.patterns)
-              ) {
-                throw new Error("Each linter definition must include name and patterns");
-              }
+              validateDefinition(definition);
             }
+
+            const serviceConfig = loadSourceServiceConfig();
 
             if (isNonRoutingPullRequestEdit) {
               const skipReason =
@@ -330,7 +348,11 @@ jobs:
                 throw new Error("pull request head SHA is required");
               }
 
-              const selectedLinters = selectLinters(currentFiles);
+              const selectedLinters = selectLinters({
+                candidatePaths: currentFiles,
+                definitions,
+                serviceConfig,
+              });
 
               writeContext({
                 changed_files: currentFiles,
@@ -385,7 +407,11 @@ jobs:
                 })
                 .split(/\r?\n/u)
                 .filter(Boolean);
-              const selectedLinters = selectLinters(currentFiles);
+              const selectedLinters = selectLinters({
+                candidatePaths: currentFiles,
+                definitions,
+                serviceConfig,
+              });
 
               writeContext({
                 changed_files: currentFiles,
@@ -732,7 +758,7 @@ jobs:
       - name: Prepare deselected SARIF placeholders
         if: ${{ always() }}
         env:
-          LINTER_CONFIG_PATH: ${{ github.workspace }}/linter-service/.github/scripts/linters/config.json
+          LINTER_CONFIG_PATH: ${{ github.workspace }}/linter-service/linters.json
           LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
           OUTPUT_ROOT: ${{ runner.temp }}/linter-sarifs-decrypted
           SELECTED_LINTERS_JSON: ${{ needs.detect-targets.outputs.selected-linters-json }}
