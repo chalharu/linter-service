@@ -68,7 +68,7 @@ jobs:
             node .github/scripts/run-fixture-tests.js "${{ matrix.linter }}"
           fi
       - name: Upload recorded fixture outputs
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.fixture-mode == 'write' }}
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.fixture-mode == 'write' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: fixture-record-${{ matrix.linter }}
