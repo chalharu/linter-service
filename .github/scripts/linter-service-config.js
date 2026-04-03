@@ -108,17 +108,18 @@ function normalizeLinterConfigs(value) {
 		};
 
 		if (linterName === "textlint") {
-			entry.preset_package = normalizeOptionalPresetPackage(
-				currentConfig.preset_package,
-				`linters.${linterName}.preset_package`,
-			);
+			entry.preset_packages = normalizeTextlintPresetPackages({
+				presetPackage: currentConfig.preset_package,
+				presetPackages: currentConfig.preset_packages,
+				label: `linters.${linterName}`,
+			});
 
 			if (
 				currentConfig.disabled === false &&
-				typeof entry.preset_package !== "string"
+				entry.preset_packages.length === 0
 			) {
 				throw new Error(
-					`linters.${linterName}.preset_package is required when textlint is enabled`,
+					`linters.${linterName}.preset_package or linters.${linterName}.preset_packages is required when textlint is enabled`,
 				);
 			}
 		}
@@ -129,11 +130,54 @@ function normalizeLinterConfigs(value) {
 	return entries;
 }
 
-function normalizeOptionalPresetPackage(value, label) {
-	if (value === undefined) {
-		return null;
+function normalizeTextlintPresetPackages({
+	label,
+	presetPackage,
+	presetPackages,
+}) {
+	if (presetPackage !== undefined && presetPackages !== undefined) {
+		throw new Error(
+			`${label}.preset_package and ${label}.preset_packages cannot be used together`,
+		);
 	}
 
+	if (presetPackage !== undefined) {
+		return [
+			normalizeExactPackageSpec(presetPackage, `${label}.preset_package`),
+		];
+	}
+
+	if (presetPackages === undefined) {
+		return [];
+	}
+
+	if (!Array.isArray(presetPackages)) {
+		throw new Error(`${label}.preset_packages must be an array`);
+	}
+
+	if (presetPackages.length === 0) {
+		throw new Error(`${label}.preset_packages must not be empty`);
+	}
+
+	const normalized = presetPackages.map((entry, index) =>
+		normalizeExactPackageSpec(entry, `${label}.preset_packages[${index}]`),
+	);
+	const seenNames = new Set();
+
+	for (const spec of normalized) {
+		const { name } = parseExactPackageSpec(spec, `${label}.preset_packages`);
+		if (seenNames.has(name)) {
+			throw new Error(
+				`${label}.preset_packages must not contain duplicate package names`,
+			);
+		}
+		seenNames.add(name);
+	}
+
+	return normalized;
+}
+
+function normalizeExactPackageSpec(value, label) {
 	const { spec } = parseExactPackageSpec(value, label);
 	return spec;
 }
@@ -181,13 +225,13 @@ function getLinterConfig(config, linterName) {
 			disabled: false,
 			disabled_explicit: false,
 			exclude_paths: [],
-			preset_package: null,
+			preset_packages: [],
 		}
 	);
 }
 
-function getTextlintPresetPackage(config) {
-	return getLinterConfig(config, "textlint").preset_package;
+function getTextlintPresetPackages(config) {
+	return [...getLinterConfig(config, "textlint").preset_packages];
 }
 
 function isLinterEnabled(config, linterName, { defaultDisabled = false } = {}) {
@@ -294,7 +338,7 @@ module.exports = {
 	filterExcludedPaths,
 	getLinterConfig,
 	getExcludedPatterns,
-	getTextlintPresetPackage,
+	getTextlintPresetPackages,
 	isLinterEnabled,
 	isPathExcluded,
 	loadLinterServiceConfig,

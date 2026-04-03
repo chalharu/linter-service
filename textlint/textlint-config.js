@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const {
-	getTextlintPresetPackage,
+	getTextlintPresetPackages,
 	isLinterEnabled,
 	loadLinterServiceConfig,
 } = require("../.github/scripts/linter-service-config.js");
@@ -22,15 +22,19 @@ function resolveTextlintRuntime({ repositoryPath, outputPath }) {
 		);
 	}
 
-	const presetPackage = getTextlintPresetPackage(serviceConfig);
-	if (typeof presetPackage !== "string") {
+	const presetPackages = getTextlintPresetPackages(serviceConfig);
+	if (!Array.isArray(presetPackages) || presetPackages.length === 0) {
 		throw new Error(
-			"textlint requires linters.textlint.preset_package in .github/linter-service.json",
+			"textlint requires linters.textlint.preset_package or linters.textlint.preset_packages in .github/linter-service.json",
 		);
 	}
 
-	const { name: presetPackageName, spec: presetPackageSpec } =
-		parseExactPackageSpec(presetPackage, "linters.textlint.preset_package");
+	const resolvedPresetPackages = presetPackages.map((presetPackage, index) =>
+		parseExactPackageSpec(
+			presetPackage,
+			`linters.textlint.preset_packages[${index}]`,
+		),
+	);
 	const configPath = path.join(resolvedRepositoryPath, ".textlintrc");
 	const config = loadStaticTextlintConfig({ configPath });
 
@@ -45,8 +49,7 @@ function resolveTextlintRuntime({ repositoryPath, outputPath }) {
 
 	return {
 		configPath,
-		presetPackageName,
-		presetPackageSpec,
+		presetPackages: resolvedPresetPackages,
 	};
 }
 
