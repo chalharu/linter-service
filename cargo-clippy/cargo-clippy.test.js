@@ -624,3 +624,69 @@ edition = "2021"
 		cleanupTempRepo(context.tempDir);
 	}
 });
+
+test("cargo-clippy.sh collapses a workspace member-only selection to the workspace root", () => {
+	const context = makeTempRepo("cargo-clippy-workspace-member-only-");
+	const tooling = setupDockerTooling(context);
+
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		`[workspace]
+members = ["crates/member"]
+resolver = "2"
+`,
+	);
+	writeFile(
+		path.join(context.repoDir, "crates/member/Cargo.toml"),
+		`[package]
+name = "member"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+	writeFile(
+		path.join(context.repoDir, "crates/member/src/lib.rs"),
+		"pub fn member_lib() {}\n",
+	);
+
+	try {
+		const output = execFileSync("bash", [runPath, "crates/member/src/lib.rs"], {
+			cwd: context.repoDir,
+			encoding: "utf8",
+			env: {
+				...process.env,
+				...tooling.env,
+				PATH: `${context.binDir}:${process.env.PATH}`,
+				RUNNER_TEMP: context.runnerTemp,
+			},
+		});
+		const result = JSON.parse(output);
+
+		assert.equal(result.exit_code, 0);
+		assert.deepEqual(
+			fs
+				.readFileSync(tooling.dockerFetchManifestLog, "utf8")
+				.trim()
+				.split("\n"),
+			["Cargo.toml"],
+		);
+		assert.deepEqual(
+			fs.readFileSync(tooling.dockerManifestLog, "utf8").trim().split("\n"),
+			["Cargo.toml"],
+		);
+		assert.match(
+			result.details,
+			/docker run cargo fetch --manifest-path Cargo\.toml/,
+		);
+		assert.match(
+			result.details,
+			/docker run cargo clippy --manifest-path Cargo\.toml --all-targets -- -D warnings/,
+		);
+		assert.doesNotMatch(
+			result.details,
+			/crates\/member\/Cargo\.toml --all-targets -- -D warnings/,
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});

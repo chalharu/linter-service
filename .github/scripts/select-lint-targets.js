@@ -1,5 +1,4 @@
 const fs = require("node:fs");
-const path = require("node:path");
 
 const { loadLinterServiceConfig } = require("./linter-service-config.js");
 const { readPatterns, selectFiles } = require("./linter-targeting.js");

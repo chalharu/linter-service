@@ -10,13 +10,6 @@ const {
 	selectLinters,
 } = require("./linter-targeting.js");
 
-const defaultConfig = {
-	global: {
-		exclude_paths: [],
-	},
-	linters: {},
-};
-
 test("selectFiles applies linter patterns and exclude globs", () => {
 	const selected = selectFiles({
 		candidatePaths: [

@@ -134,7 +134,7 @@ test("supports per-linter disable flags", () => {
 test("filters excluded paths while preserving remaining order", () => {
 	const config = {
 		global: {
-			exclude_paths: ["**/tests/**"],
+			exclude_paths: ["**/tests/**", "**/tests/**/.*", "**/tests/**/.*/**"],
 		},
 		linters: {
 			biome: {
@@ -149,6 +149,8 @@ test("filters excluded paths while preserving remaining order", () => {
 			"src/index.js",
 			"vendor/schema.json",
 			"biome/tests/pass/target/file.js",
+			"dotenv-linter/tests/pass/target/.env",
+			"actionlint/tests/pass/target/.github/workflows/test.yml",
 			"src/lib.js",
 		]),
 		["src/index.js", "src/lib.js"],

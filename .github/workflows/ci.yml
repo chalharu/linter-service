@@ -18,7 +18,10 @@ permissions:
   contents: read
 jobs:
   fixture-test-matrix:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
       linters: ${{ steps.collect.outputs.linters }}
     steps:
@@ -61,11 +64,12 @@ jobs:
       - name: Run fixture tests
         env:
           FIXTURE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.fixture-mode || 'verify' }}
+          LINTER_NAME: ${{ matrix.linter }}
         run: |
           if [ "$FIXTURE_MODE" = "write" ]; then
-            node .github/scripts/run-fixture-tests.js --write "${{ matrix.linter }}"
+            node .github/scripts/run-fixture-tests.js --write "$LINTER_NAME"
           else
-            node .github/scripts/run-fixture-tests.js "${{ matrix.linter }}"
+            node .github/scripts/run-fixture-tests.js "$LINTER_NAME"
           fi
       - name: Upload recorded fixture outputs
         if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.fixture-mode == 'write' }}
@@ -78,6 +82,8 @@ jobs:
           if-no-files-found: error
           retention-days: 1
   validate-worker:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

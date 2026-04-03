@@ -481,6 +481,65 @@ edition = "2021"
 	}
 });
 
+test("cargo-deny.sh keeps a workspace-root run while using the nearest member deny.toml", () => {
+	const context = makeTempRepo("cargo-deny-workspace-member-config-");
+	const argsLog = path.join(context.tempDir, "cargo-deny-args.log");
+
+	createCargoDenyStub(context.binDir);
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		`[workspace]
+members = ["crates/member"]
+resolver = "2"
+`,
+	);
+	writeFile(path.join(context.repoDir, "Cargo.lock"), "version = 3\n");
+	writeFile(
+		path.join(context.repoDir, "crates/member/Cargo.toml"),
+		`[package]
+name = "member"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+	writeFile(
+		path.join(context.repoDir, "crates/member/deny.toml"),
+		"[graph]\nall-features = false\n",
+	);
+
+	try {
+		const output = execFileSync("bash", [runPath, "crates/member/deny.toml"], {
+			cwd: context.repoDir,
+			encoding: "utf8",
+			env: createEnv(context, {
+				CARGO_DENY_ARGS_LOG: argsLog,
+			}),
+		});
+		const result = JSON.parse(output);
+
+		assert.equal(result.exit_code, 0);
+		assert.equal(result.cargo_deny_runs.length, 1);
+		assert.equal(result.cargo_deny_runs[0].manifest_path, "Cargo.toml");
+		assert.equal(
+			result.cargo_deny_runs[0].config_path,
+			"crates/member/deny.toml",
+		);
+		assert.deepEqual(fs.readFileSync(argsLog, "utf8").trim().split("\n"), [
+			"--format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output --config crates/member/deny.toml",
+		]);
+		assert.match(
+			result.details,
+			/cargo-deny --format json --color never --log-level warn --all-features --manifest-path Cargo\.toml check --audit-compatible-output --config crates\/member\/deny\.toml/,
+		);
+		assert.doesNotMatch(
+			result.details,
+			/--manifest-path crates\/member\/Cargo\.toml check --audit-compatible-output/,
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
 test("cargo-deny.sh maps repo-root deny.toml to nested Cargo manifests", () => {
 	const context = makeTempRepo("cargo-deny-root-policy-");
 	const argsLog = path.join(context.tempDir, "cargo-deny-args.log");
