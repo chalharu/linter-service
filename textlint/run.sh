@@ -54,8 +54,6 @@ install_textlint_presets() {
 
 run_textlint() {
   local exit_code min_release_age_days path runtime_json safe_config_path
-  local -a preset_args=()
-  local -a preset_names=()
   local -a preset_specs=()
   safe_config_path="$temp_repo/.textlintrc"
 
@@ -77,14 +75,6 @@ process.stdout.write(
 NODE
   )"
 
-  mapfile -t preset_names < <(
-    node - "$runtime_json" <<'NODE'
-const runtime = JSON.parse(process.argv[2]);
-for (const preset of runtime.presetPackages) {
-  process.stdout.write(`${preset.name}\n`);
-}
-NODE
-  )
   mapfile -t preset_specs < <(
     node - "$runtime_json" <<'NODE'
 const runtime = JSON.parse(process.argv[2]);
@@ -93,10 +83,6 @@ for (const preset of runtime.presetPackages) {
 }
 NODE
   )
-
-  for path in "${preset_names[@]}"; do
-    preset_args+=(--preset "$path")
-  done
 
   min_release_age_days=$(textlint_npm_min_release_age_days)
   install_textlint_presets "$min_release_age_days" "${preset_specs[@]}" >/dev/null
@@ -122,7 +108,6 @@ NODE
       --config .textlintrc \
       --format unix \
       --no-color \
-      "${preset_args[@]}" \
       --rules-base-directory /rules/node_modules \
       "${files[@]}" \
     >"$raw_output_path" 2>&1; then

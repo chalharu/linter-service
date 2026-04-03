@@ -13,6 +13,7 @@ const {
 
 const {
 	loadStaticTextlintConfig,
+	getTextlintPresetRuleKey,
 	resolveTextlintRuntime,
 } = require("./textlint-config.js");
 
@@ -105,7 +106,18 @@ esac
 	);
 }
 
-test("resolveTextlintRuntime supports multiple preset_packages and writes a safe config copy", () => {
+test("getTextlintPresetRuleKey converts package names to textlint preset rule keys", () => {
+	assert.equal(
+		getTextlintPresetRuleKey("textlint-rule-preset-ja-technical-writing"),
+		"preset-ja-technical-writing",
+	);
+	assert.equal(
+		getTextlintPresetRuleKey("@textlint-ja/textlint-rule-preset-ai-writing"),
+		"@textlint-ja/preset-ai-writing",
+	);
+});
+
+test("resolveTextlintRuntime injects configured preset packages into a safe config copy", () => {
 	const context = makeTempRepo("textlint-config-");
 	const outputPath = path.join(context.tempDir, "safe", ".textlintrc");
 
@@ -118,7 +130,7 @@ test("resolveTextlintRuntime supports multiple preset_packages and writes a safe
 						disabled: false,
 						preset_packages: [
 							"textlint-rule-preset-ja-technical-writing@12.0.2",
-							"textlint-rule-preset-ja-spacing@4.0.0",
+							"@textlint-ja/textlint-rule-preset-ai-writing@1.6.1",
 						],
 					},
 				},
@@ -132,8 +144,11 @@ test("resolveTextlintRuntime supports multiple preset_packages and writes a safe
 		JSON.stringify(
 			{
 				rules: {
-					"preset-ja-technical-writing": true,
-					"preset-ja-spacing": true,
+					"preset-ja-technical-writing": {
+						"sentence-length": {
+							max: 140,
+						},
+					},
 				},
 			},
 			null,
@@ -154,15 +169,19 @@ test("resolveTextlintRuntime supports multiple preset_packages and writes a safe
 				version: "12.0.2",
 			},
 			{
-				name: "textlint-rule-preset-ja-spacing",
-				spec: "textlint-rule-preset-ja-spacing@4.0.0",
-				version: "4.0.0",
+				name: "@textlint-ja/textlint-rule-preset-ai-writing",
+				spec: "@textlint-ja/textlint-rule-preset-ai-writing@1.6.1",
+				version: "1.6.1",
 			},
 		]);
 		assert.deepEqual(JSON.parse(fs.readFileSync(outputPath, "utf8")), {
 			rules: {
-				"preset-ja-technical-writing": true,
-				"preset-ja-spacing": true,
+				"@textlint-ja/preset-ai-writing": true,
+				"preset-ja-technical-writing": {
+					"sentence-length": {
+						max: 140,
+					},
+				},
 			},
 		});
 	} finally {
@@ -247,7 +266,7 @@ test("textlint install builds a dedicated container image when missing", () => {
 	}
 });
 
-test("textlint run installs hardened preset packages and passes every preset to textlint in a container", () => {
+test("textlint run installs hardened preset packages and uses the merged safe config in a container", () => {
 	const context = makeTempRepo("textlint-run-");
 	const dockerBuildArgsLog = path.join(
 		context.tempDir,
@@ -278,7 +297,7 @@ test("textlint run installs hardened preset packages and passes every preset to 
 						disabled: false,
 						preset_packages: [
 							"textlint-rule-preset-ja-technical-writing@12.0.2",
-							"textlint-rule-preset-ja-spacing@4.0.0",
+							"@textlint-ja/textlint-rule-preset-ai-writing@1.6.1",
 						],
 					},
 				},
@@ -292,8 +311,11 @@ test("textlint run installs hardened preset packages and passes every preset to 
 		JSON.stringify(
 			{
 				rules: {
-					"preset-ja-technical-writing": true,
-					"preset-ja-spacing": true,
+					"preset-ja-technical-writing": {
+						"sentence-length": {
+							max: 140,
+						},
+					},
 				},
 			},
 			null,
@@ -324,16 +346,30 @@ test("textlint run installs hardened preset packages and passes every preset to 
 		assert.match(result.details, /^README\.md:1:1: sample diagnostic/mu);
 		assert.match(
 			fs.readFileSync(dockerNpmInstallLog, "utf8"),
-			/npm install --prefix \/rules --ignore-scripts --loglevel=error --no-audit --no-fund --no-save --package-lock=false --update-notifier=false --min-release-age 3 textlint-rule-preset-ja-technical-writing@12\.0\.2 textlint-rule-preset-ja-spacing@4\.0\.0/u,
+			/npm install --prefix \/rules --ignore-scripts --loglevel=error --no-audit --no-fund --no-save --package-lock=false --update-notifier=false --min-release-age 3 textlint-rule-preset-ja-technical-writing@12\.0\.2 @textlint-ja\/textlint-rule-preset-ai-writing@1\.6\.1/u,
 		);
 		assert.match(fs.readFileSync(dockerRunArgsLog, "utf8"), /--network=none/u);
-		assert.match(
+		assert.doesNotMatch(
 			fs.readFileSync(dockerTextlintArgsLog, "utf8"),
-			/--preset textlint-rule-preset-ja-technical-writing/u,
+			/--preset/u,
 		);
-		assert.match(
-			fs.readFileSync(dockerTextlintArgsLog, "utf8"),
-			/--preset textlint-rule-preset-ja-spacing/u,
+		assert.deepEqual(
+			JSON.parse(
+				fs.readFileSync(
+					path.join(context.runnerTemp, "textlint", "repo", ".textlintrc"),
+					"utf8",
+				),
+			),
+			{
+				rules: {
+					"@textlint-ja/preset-ai-writing": true,
+					"preset-ja-technical-writing": {
+						"sentence-length": {
+							max: 140,
+						},
+					},
+				},
+			},
 		);
 		assert.match(
 			fs.readFileSync(dockerTextlintArgsLog, "utf8"),
