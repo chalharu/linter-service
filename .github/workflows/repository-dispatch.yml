@@ -170,7 +170,7 @@ jobs:
           token: ${{ steps.get_source_config_token.outputs.token }}
       - name: Collect lint targets context
         id: collect
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           LINTER_DEFINITIONS_PATH: ${{ steps.build_linter_definitions.outputs.path }}
           LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
@@ -573,7 +573,7 @@ jobs:
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ steps.decode_source_context.outputs.source-repo }}
       - name: Notify processing start
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           CHECK_RUN_EXTERNAL_ID: ${{ steps.decode_source_context.outputs.processing-check-external-id }}
           CHECK_RUN_HEAD_SHA: ${{ steps.decode_source_context.outputs.source-head-sha }}
@@ -806,7 +806,7 @@ jobs:
           node "$LINTER_SERVICE_PATH/.github/scripts/render-combined-report.js"
       - name: Upsert combined PR comment
         if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' && steps.decode_repository_context.outputs.comment-enabled == 'true' }}
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           COMMENT_FILE: ${{ runner.temp }}/combined-linter-comment.md
           COMMENT_MARKER: '<!-- linter-service:results -->'
@@ -825,7 +825,7 @@ jobs:
         id: upload_sarif
         if: ${{ always() }}
         continue-on-error: true
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
           SARIF_HEAD_SHA: ${{ steps.decode_repository_context.outputs.source-head-sha }}
@@ -878,7 +878,7 @@ jobs:
           PY
       - name: Finalize processing check run
         if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           CHECK_RUN_CONCLUSION: ${{ steps.prepare_final_summary.outputs.conclusion || 'failure' }}
           CHECK_RUN_EXTERNAL_ID: ${{ steps.decode_repository_context.outputs.processing-check-external-id }}
