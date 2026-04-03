@@ -1,0 +1,12 @@
+{
+  "checked_projects": [
+    "crates/member/Cargo.toml"
+  ],
+  "result": {
+    "details": "==> docker run seed writable rustup home\n\n==> docker run cargo fetch --manifest-path Cargo.toml\n\n==> docker run cargo clippy --manifest-path Cargo.toml --all-targets -- -D warnings\n    Checking workspace-pass-member v0.1.0 (/work/crates/member)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in <duration>",
+    "exit_code": 0
+  },
+  "selected_files": [
+    "crates/member/src/lib.rs"
+  ]
+}

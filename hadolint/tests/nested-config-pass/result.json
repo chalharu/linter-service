@@ -1,0 +1,12 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "==> hadolint --no-color --config .hadolint.yml Dockerfile\n\n==> hadolint --no-color --config .hadolint.yml containers/base.containerfile\n\n==> hadolint --no-color --config services/api/.hadolint.yaml services/api/Dockerfile.dev",
+    "exit_code": 0
+  },
+  "selected_files": [
+    "Dockerfile",
+    "containers/base.containerfile",
+    "services/api/Dockerfile.dev"
+  ]
+}

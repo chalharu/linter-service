@@ -1,0 +1,49 @@
+{
+  "checked_projects": [
+    "Cargo.toml",
+    "crates/member/Cargo.toml"
+  ],
+  "result": {
+    "cargo_deny_runs": [
+      {
+        "audit_reports": [
+          {
+            "lockfile": {
+              "dependency-count": 1
+            },
+            "settings": {
+              "ignore": [],
+              "informational_warnings": [
+                "notice",
+                "unmaintained",
+                "unsound"
+              ],
+              "severity": null,
+              "target_arch": [],
+              "target_os": []
+            },
+            "vulnerabilities": {
+              "count": 0,
+              "found": false,
+              "list": []
+            },
+            "warnings": {}
+          }
+        ],
+        "command": "cargo-deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output --config deny.toml",
+        "config_path": "deny.toml",
+        "diagnostics": [],
+        "exit_code": 0,
+        "manifest_path": "Cargo.toml"
+      }
+    ],
+    "details": "==> cargo-deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output --config deny.toml",
+    "exit_code": 0
+  },
+  "selected_files": [
+    "Cargo.lock",
+    "Cargo.toml",
+    "crates/member/Cargo.toml",
+    "deny.toml"
+  ]
+}
