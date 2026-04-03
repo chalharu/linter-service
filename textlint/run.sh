@@ -78,20 +78,20 @@ NODE
   )"
 
   mapfile -t preset_names < <(
-    node -e '
-const runtime = JSON.parse(process.argv[1]);
+    node - "$runtime_json" <<'NODE'
+const runtime = JSON.parse(process.argv[2]);
 for (const preset of runtime.presetPackages) {
   process.stdout.write(`${preset.name}\n`);
 }
-' "$runtime_json"
+NODE
   )
   mapfile -t preset_specs < <(
-    node -e '
-const runtime = JSON.parse(process.argv[1]);
+    node - "$runtime_json" <<'NODE'
+const runtime = JSON.parse(process.argv[2]);
 for (const preset of runtime.presetPackages) {
   process.stdout.write(`${preset.spec}\n`);
 }
-' "$runtime_json"
+NODE
   )
 
   for path in "${preset_names[@]}"; do
