@@ -350,7 +350,7 @@ function sanitizeFixtureString(value, repositoryPath) {
 	return normalized
 		.replace(
 			/(error: could not compile `([^`]+)` \((?:lib|lib test)\) due to 1 previous error)\n(warning: build failed, waiting for other jobs to finish\.\.\.)\n(error: could not compile `\2` \((?:lib|lib test)\) due to 1 previous error)/gu,
-			(_, firstError, crateName, warningLine, secondError) => {
+			(_, firstError, _crateName, warningLine, secondError) => {
 				const orderedErrors = [firstError, secondError].sort(
 					compareCargoClippyCompileErrors,
 				);
