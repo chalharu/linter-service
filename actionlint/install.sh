@@ -16,3 +16,4 @@ curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/downl
   bash "$RUNNER_TEMP/download-actionlint.bash" latest
 )
 linter_lib::add_path "$bin_dir"
+bash "$script_dir/../shellcheck/install.sh"

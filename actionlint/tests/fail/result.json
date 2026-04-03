@@ -1,7 +1,7 @@
 {
   "checked_projects": [],
   "result": {
-    "details": ".github/workflows/workflow.yml:7:35: got unexpected character '\"' while lexing expression, expecting 'a'..'z', 'A'..'Z', '_', '0'..'9', ''', '}', '(', ')', '[', ']', '.', '!', '<', '>', '=', '&', '|', '*', ',', ' '. do you mean string literals? only single quotes are available for string delimiter [expression]\n  |\n7 |       - run: echo \"${{ github.ref \"\n  |                                   ^",
+    "details": ".github/workflows/workflow.yml:7:9: shellcheck reported issue in this script: SC1009:info:1:7: The mentioned syntax error was in this parameter expansion [shellcheck]\n  |\n7 |       - run: echo \"${{ github.ref \"\n  |         ^~~~\n.github/workflows/workflow.yml:7:9: shellcheck reported issue in this script: SC1072:error:2:1: Expected end of double quoted string. Fix any mentioned problems and try again [shellcheck]\n  |\n7 |       - run: echo \"${{ github.ref \"\n  |         ^~~~\n.github/workflows/workflow.yml:7:9: shellcheck reported issue in this script: SC1073:error:1:22: Couldn't parse this double quoted string. Fix to allow more checks [shellcheck]\n  |\n7 |       - run: echo \"${{ github.ref \"\n  |         ^~~~\n.github/workflows/workflow.yml:7:35: got unexpected character '\"' while lexing expression, expecting 'a'..'z', 'A'..'Z', '_', '0'..'9', ''', '}', '(', ')', '[', ']', '.', '!', '<', '>', '=', '&', '|', '*', ',', ' '. do you mean string literals? only single quotes are available for string delimiter [expression]\n  |\n7 |       - run: echo \"${{ github.ref \"\n  |                                   ^",
     "exit_code": 1
   },
   "selected_files": [

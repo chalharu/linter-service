@@ -28,6 +28,75 @@
             "linter_name": "actionlint"
           },
           "ruleId": "actionlint/diagnostic"
+        },
+        {
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": ".github/workflows/workflow.yml"
+                },
+                "region": {
+                  "startColumn": 9,
+                  "startLine": 7
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "shellcheck reported issue in this script: SC1009:info:1:7: The mentioned syntax error was in this parameter expansion [shellcheck]"
+          },
+          "properties": {
+            "linter_name": "actionlint"
+          },
+          "ruleId": "SC1009"
+        },
+        {
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": ".github/workflows/workflow.yml"
+                },
+                "region": {
+                  "startColumn": 9,
+                  "startLine": 7
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "shellcheck reported issue in this script: SC1072:error:2:1: Expected end of double quoted string. Fix any mentioned problems and try again [shellcheck]"
+          },
+          "properties": {
+            "linter_name": "actionlint"
+          },
+          "ruleId": "SC1072"
+        },
+        {
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": ".github/workflows/workflow.yml"
+                },
+                "region": {
+                  "startColumn": 9,
+                  "startLine": 7
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "shellcheck reported issue in this script: SC1073:error:1:22: Couldn't parse this double quoted string. Fix to allow more checks [shellcheck]"
+          },
+          "properties": {
+            "linter_name": "actionlint"
+          },
+          "ruleId": "SC1073"
         }
       ],
       "tool": {
@@ -40,6 +109,27 @@
               "name": "actionlint/diagnostic",
               "shortDescription": {
                 "text": "actionlint/diagnostic"
+              }
+            },
+            {
+              "id": "SC1009",
+              "name": "SC1009",
+              "shortDescription": {
+                "text": "SC1009"
+              }
+            },
+            {
+              "id": "SC1072",
+              "name": "SC1072",
+              "shortDescription": {
+                "text": "SC1072"
+              }
+            },
+            {
+              "id": "SC1073",
+              "name": "SC1073",
+              "shortDescription": {
+                "text": "SC1073"
               }
             }
           ]
