@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "INFO taplo:format_files:collect_files: found files total=1 excluded=0 files=[\"config.toml\"] cwd=\".\"",
+    "exit_code": 0
+  },
+  "selected_files": [
+    "config.toml"
+  ]
+}

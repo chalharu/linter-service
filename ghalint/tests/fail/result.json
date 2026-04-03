@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "<timestamp> ERR the job violates policies program=ghalint version=1.5.5 workflow_file_path=.github/workflows/workflow.yml policy_name=job_permissions reference=https://github.com/suzuki-shunsuke/ghalint/blob/main/docs/policies/001.md job_name=test error=\"job should have permissions\"\n<timestamp> ERR the job violates policies program=ghalint version=1.5.5 workflow_file_path=.github/workflows/workflow.yml policy_name=job_timeout_minutes_is_required reference=https://github.com/suzuki-shunsuke/ghalint/blob/main/docs/policies/012.md job_name=test error=\"job's timeout-minutes is required\"",
+    "exit_code": 1
+  },
+  "selected_files": [
+    ".github/workflows/workflow.yml"
+  ]
+}

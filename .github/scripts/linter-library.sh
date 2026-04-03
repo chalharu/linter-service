@@ -225,9 +225,8 @@ linter_lib::emit_json_result() {
   local output_file=$2
   local python_bin
 
-  python_bin=$(linter_lib::python_cmd)
-
-  "$python_bin" - "$exit_code" "$output_file" <<'PY'
+  if python_bin="$(linter_lib::python_cmd 2>/dev/null)"; then
+    "$python_bin" - "$exit_code" "$output_file" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -237,6 +236,30 @@ output_path = Path(sys.argv[2])
 details = output_path.read_text(encoding="utf-8").strip() if output_path.exists() else ""
 print(json.dumps({"details": details, "exit_code": exit_code}))
 PY
+    return 0
+  fi
+
+  if command -v node >/dev/null 2>&1; then
+    node - "$exit_code" "$output_file" <<'NODE'
+const fs = require("node:fs");
+
+const [exitCodeRaw, outputPath] = process.argv.slice(2);
+const details =
+  outputPath && fs.existsSync(outputPath)
+    ? fs.readFileSync(outputPath, "utf8").trim()
+    : "";
+process.stdout.write(
+  JSON.stringify({
+    details,
+    exit_code: Number.parseInt(exitCodeRaw, 10),
+  }),
+);
+NODE
+    return 0
+  fi
+
+  echo "python3, python, or node is required" >&2
+  return 1
 }
 
 linter_lib::run_and_emit_json() {

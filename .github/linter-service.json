@@ -1,0 +1,8 @@
+{
+  "global": {
+    "exclude_paths": [
+      "**/tests/**"
+    ]
+  },
+  "linters": {}
+}

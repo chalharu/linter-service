@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": ".github/workflows/workflow.yml:7:35: got unexpected character '\"' while lexing expression, expecting 'a'..'z', 'A'..'Z', '_', '0'..'9', ''', '}', '(', ')', '[', ']', '.', '!', '<', '>', '=', '&', '|', '*', ',', ' '. do you mean string literals? only single quotes are available for string delimiter [expression]\n  |\n7 |       - run: echo \"${{ github.ref \"\n  |                                   ^",
+    "exit_code": 1
+  },
+  "selected_files": [
+    ".github/workflows/workflow.yml"
+  ]
+}

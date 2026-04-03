@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "Checking .env\n.env:2 DuplicatedKey: The KEY key is duplicated\n\nFound 1 problem",
+    "exit_code": 1
+  },
+  "selected_files": [
+    ".env"
+  ]
+}

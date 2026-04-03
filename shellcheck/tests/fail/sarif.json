@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/shellcheck"
+      },
+      "results": [
+        {
+          "level": "note",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "script.sh"
+                },
+                "region": {
+                  "startColumn": 1,
+                  "startLine": 4
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "SC2086 (info): Double quote to prevent globbing and word splitting."
+          },
+          "properties": {
+            "linter_name": "shellcheck"
+          },
+          "ruleId": "SC2086"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/chalharu/linter-service",
+          "name": "linter-service/shellcheck",
+          "rules": [
+            {
+              "id": "SC2086",
+              "name": "SC2086",
+              "shortDescription": {
+                "text": "SC2086"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

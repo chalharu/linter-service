@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "markdownlint-cli2 v0.22.0 (markdownlint v0.40.0)\nFinding: :README.md\nLinting: 1 file(s)\nSummary: 2 error(s)\nREADME.md:1:1 error MD018/no-missing-space-atx No space after hash on atx style heading [Context: \"#Title\"]\nREADME.md:1 error MD041/first-line-heading/first-line-h1 First line in a file should be a top-level heading [Context: \"#Title\"]",
+    "exit_code": 1
+  },
+  "selected_files": [
+    "README.md"
+  ]
+}

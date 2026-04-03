@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/markdownlint-cli2"
+      },
+      "results": [
+        {
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "README.md"
+                },
+                "region": {
+                  "startColumn": 1,
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "1 error MD018/no-missing-space-atx No space after hash on atx style heading [Context: \"#Title\"]"
+          },
+          "properties": {
+            "linter_name": "markdownlint-cli2"
+          },
+          "ruleId": "MD018"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/chalharu/linter-service",
+          "name": "linter-service/markdownlint-cli2",
+          "rules": [
+            {
+              "id": "MD018",
+              "name": "MD018",
+              "shortDescription": {
+                "text": "MD018"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

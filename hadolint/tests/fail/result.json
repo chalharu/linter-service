@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "==> hadolint --no-color Dockerfile\nDockerfile:1 DL3007 warning: Using latest is prone to errors if the image will ever update. Pin the version explicitly to a release tag\nDockerfile:2 DL3008 warning: Pin versions in apt get install. Instead of `apt-get install <package>` use `apt-get install <package>=<version>`\nDockerfile:2 DL3015 info: Avoid additional packages by specifying `--no-install-recommends`\nDockerfile:2 DL3009 info: Delete the apt lists (/var/lib/apt/lists) after installing something",
+    "exit_code": 1
+  },
+  "selected_files": [
+    "Dockerfile"
+  ]
+}

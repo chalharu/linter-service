@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "INFO taplo:format_files:collect_files: found files total=1 excluded=0 files=[\"config.toml\"] cwd=\".\"\nerror: invalid TOML\n  ┌─ config.toml:3:9\n  │  \n3 │   [package\n  │ ╭────────^\n4 │ │ name = \"demo\"\n  │ ╰^ expected \"]\"\n\nERROR operation failed error=some files were not formatted due to syntax errors",
+    "exit_code": 1
+  },
+  "selected_files": [
+    "config.toml"
+  ]
+}

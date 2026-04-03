@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/hadolint"
+      },
+      "results": [
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "Dockerfile"
+                },
+                "region": {
+                  "startColumn": 1,
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "warning: Using latest is prone to errors if the image will ever update. Pin the version explicitly to a release tag"
+          },
+          "properties": {
+            "linter_name": "hadolint"
+          },
+          "ruleId": "DL3007"
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "Dockerfile"
+                },
+                "region": {
+                  "startColumn": 1,
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "warning: Pin versions in apt get install. Instead of `apt-get install <package>` use `apt-get install <package>=<version>`"
+          },
+          "properties": {
+            "linter_name": "hadolint"
+          },
+          "ruleId": "DL3008"
+        },
+        {
+          "level": "note",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "Dockerfile"
+                },
+                "region": {
+                  "startColumn": 1,
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "info: Delete the apt lists (/var/lib/apt/lists) after installing something"
+          },
+          "properties": {
+            "linter_name": "hadolint"
+          },
+          "ruleId": "DL3009"
+        },
+        {
+          "level": "note",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "Dockerfile"
+                },
+                "region": {
+                  "startColumn": 1,
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "info: Avoid additional packages by specifying `--no-install-recommends`"
+          },
+          "properties": {
+            "linter_name": "hadolint"
+          },
+          "ruleId": "DL3015"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/chalharu/linter-service",
+          "name": "linter-service/hadolint",
+          "rules": [
+            {
+              "id": "DL3007",
+              "name": "DL3007",
+              "shortDescription": {
+                "text": "DL3007"
+              }
+            },
+            {
+              "id": "DL3008",
+              "name": "DL3008",
+              "shortDescription": {
+                "text": "DL3008"
+              }
+            },
+            {
+              "id": "DL3009",
+              "name": "DL3009",
+              "shortDescription": {
+                "text": "DL3009"
+              }
+            },
+            {
+              "id": "DL3015",
+              "name": "DL3015",
+              "shortDescription": {
+                "text": "DL3015"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

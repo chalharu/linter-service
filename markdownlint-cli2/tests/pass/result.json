@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "markdownlint-cli2 v0.22.0 (markdownlint v0.40.0)\nFinding: :README.md\nLinting: 1 file(s)\nSummary: 0 error(s)",
+    "exit_code": 0
+  },
+  "selected_files": [
+    "README.md"
+  ]
+}

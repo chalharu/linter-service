@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/dotenv-linter"
+      },
+      "results": [
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": ".env"
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Checking .env"
+          },
+          "properties": {
+            "linter_name": "dotenv-linter"
+          },
+          "ruleId": "dotenv-linter/diagnostic"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/chalharu/linter-service",
+          "name": "linter-service/dotenv-linter",
+          "rules": [
+            {
+              "id": "dotenv-linter/diagnostic",
+              "name": "dotenv-linter/diagnostic",
+              "shortDescription": {
+                "text": "dotenv-linter/diagnostic"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}
