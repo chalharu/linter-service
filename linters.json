@@ -39,6 +39,19 @@
       }
     },
     {
+      "name": "trivy",
+      "heading": "### trivy",
+      "no_files": "No matching Dockerfile or Containerfile files were selected for `trivy`.",
+      "success": "✅ No misconfigurations were reported for the selected Dockerfile or Containerfile target(s).",
+      "failure": "❌ Misconfigurations were reported for the selected Dockerfile or Containerfile target(s).",
+      "infra_failure": "❌ The `trivy` workflow failed before producing a detailed report. See the workflow logs.",
+      "details_fallback": "trivy did not produce diagnostic output before the job failed.",
+      "sarif": {
+        "enabled": true,
+        "default_level": "warning"
+      }
+    },
+    {
       "name": "dotenv-linter",
       "heading": "### dotenv-linter",
       "no_files": "No matching .env files were selected for `dotenv-linter`.",

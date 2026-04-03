@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/trivy"
+      },
+      "results": [
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "Dockerfile"
+                },
+                "region": {
+                  "startColumn": 1,
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "warning DS-0001 (MEDIUM): Specify a tag in the 'FROM' statement for image 'ubuntu'"
+          },
+          "properties": {
+            "linter_name": "trivy"
+          },
+          "ruleId": "DS-0001"
+        },
+        {
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "Dockerfile"
+                },
+                "region": {
+                  "startColumn": 1,
+                  "startLine": 2
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "error DS-0002 (HIGH): Last USER command in Dockerfile should not be 'root'"
+          },
+          "properties": {
+            "linter_name": "trivy"
+          },
+          "ruleId": "DS-0002"
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "Dockerfile"
+                },
+                "region": {
+                  "startColumn": 1,
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "warning DS-0026 (LOW): Add HEALTHCHECK instruction in your Dockerfile"
+          },
+          "properties": {
+            "linter_name": "trivy"
+          },
+          "ruleId": "DS-0026"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/chalharu/linter-service",
+          "name": "linter-service/trivy",
+          "rules": [
+            {
+              "id": "DS-0001",
+              "name": "DS-0001",
+              "shortDescription": {
+                "text": "DS-0001"
+              }
+            },
+            {
+              "id": "DS-0002",
+              "name": "DS-0002",
+              "shortDescription": {
+                "text": "DS-0002"
+              }
+            },
+            {
+              "id": "DS-0026",
+              "name": "DS-0026",
+              "shortDescription": {
+                "text": "DS-0026"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}
