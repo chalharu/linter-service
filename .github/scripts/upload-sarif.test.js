@@ -196,6 +196,43 @@ test("soft-skips repositories where code scanning is unavailable", async () => {
 	}
 });
 
+test("soft-skips SARIF upload when the target branch ref does not exist", async () => {
+	const context = makeTempRepo("upload-sarif-missing-ref-");
+	const sarifRoot = path.join(context.tempDir, "sarif");
+
+	fs.mkdirSync(sarifRoot, { recursive: true });
+	writeFile(
+		path.join(sarifRoot, "example.sarif"),
+		'{"version":"2.1.0","runs":[]}',
+	);
+
+	try {
+		const outcome = await uploadSarif({
+			env: {
+				SARIF_HEAD_SHA: "abc123",
+				SARIF_OWNER: "octo",
+				SARIF_REF: "feature/test",
+				SARIF_REPO: "demo",
+				SARIF_ROOT: sarifRoot,
+			},
+			github: {
+				request: async () => {
+					const error = new Error(
+						"ref 'refs/heads/feature/test' not found in this repository",
+					);
+					error.status = 422;
+					error.response = { data: { message: error.message } };
+					throw error;
+				},
+			},
+		});
+
+		assert.deepEqual(outcome, { skipped: 1, uploaded: 0 });
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
 test("fails when GitHub reports SARIF processing errors", async () => {
 	const context = makeTempRepo("upload-sarif-processing-failed-");
 	const sarifRoot = path.join(context.tempDir, "sarif");

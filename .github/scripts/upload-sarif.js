@@ -67,7 +67,7 @@ module.exports = async function uploadSarif({ github, env }) {
 				uploadId,
 			});
 		} catch (error) {
-			if (isUnsupportedCodeScanningError(error)) {
+			if (isSkippableSarifUploadError(error)) {
 				console.warn(
 					`Skipping SARIF upload for ${owner}/${repo}: ${extractErrorMessage(error)}`,
 				);
@@ -249,6 +249,21 @@ function isUnsupportedCodeScanningError(error) {
 	);
 }
 
+function isMissingRefError(error) {
+	const message = extractErrorMessage(error);
+
+	return (
+		error?.status === 422 &&
+		/ref ['"`]?(?:refs\/heads\/)?[^'"`]+['"`]? not found in this repository/iu.test(
+			message,
+		)
+	);
+}
+
+function isSkippableSarifUploadError(error) {
+	return isUnsupportedCodeScanningError(error) || isMissingRefError(error);
+}
+
 function extractErrorMessage(error) {
 	if (typeof error?.response?.data?.message === "string") {
 		return error.response.data.message;
@@ -262,6 +277,8 @@ function extractErrorMessage(error) {
 }
 
 module.exports.gzipAndEncodeSarif = gzipAndEncodeSarif;
+module.exports.isMissingRefError = isMissingRefError;
+module.exports.isSkippableSarifUploadError = isSkippableSarifUploadError;
 module.exports.isUnsupportedCodeScanningError = isUnsupportedCodeScanningError;
 module.exports.normalizeRef = normalizeRef;
 module.exports.resolveSarifRef = resolveSarifRef;
