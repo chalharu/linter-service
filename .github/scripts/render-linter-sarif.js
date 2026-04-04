@@ -642,12 +642,14 @@ function buildFallbackResults({
 	targetPaths,
 }) {
 	const summaryMessage = summarizeDetails(details, linterName);
-	const mentionedPaths = targetPaths.filter((targetPath) =>
-		details.includes(targetPath),
-	);
+	const collectedFallbackPaths = collectFallbackPaths({
+		details,
+		linterName,
+		targetPaths,
+	});
 	const fallbackPaths =
-		mentionedPaths.length > 0
-			? mentionedPaths
+		collectedFallbackPaths.length > 0
+			? collectedFallbackPaths
 			: targetPaths.length > 0
 				? targetPaths
 				: [null];
@@ -674,6 +676,46 @@ function buildFallbackResults({
 	}
 
 	return dedupeResults(results);
+}
+
+function collectFallbackPaths({ details, linterName, targetPaths }) {
+	const explicitPaths = extractFallbackPaths({
+		details,
+		linterName,
+		targetPaths,
+	});
+
+	if (explicitPaths.length > 0) {
+		return explicitPaths;
+	}
+
+	return targetPaths.filter((targetPath) => details.includes(targetPath));
+}
+
+function extractFallbackPaths({ details, linterName, targetPaths }) {
+	if (linterName !== "rustfmt") {
+		return [];
+	}
+
+	const targetSet = new Set(targetPaths);
+	const fallbackPaths = [];
+
+	for (const match of details.matchAll(
+		/^Diff in (?<filePath>.+?)(?::\d+| at line \d+):\s*$/gmu,
+	)) {
+		const filePath = match.groups?.filePath;
+		if (
+			!filePath ||
+			!targetSet.has(filePath) ||
+			fallbackPaths.includes(filePath)
+		) {
+			continue;
+		}
+
+		fallbackPaths.push(filePath);
+	}
+
+	return fallbackPaths;
 }
 
 function createResult({

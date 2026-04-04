@@ -6,6 +6,7 @@ const {
 	fs,
 	makeTempRepo,
 	path,
+	readPinnedVersion,
 	writeExecutable,
 	writeFile,
 } = require("../.github/scripts/cargo-linter-test-lib.js");
@@ -27,23 +28,18 @@ function createCurlStub(binDir) {
 	writeExecutable(
 		path.join(binDir, "curl"),
 		`#!/usr/bin/env bash
-set -euo pipefail
-out_file=""
-write_format=""
-url=""
-while [ "$#" -gt 0 ]; do
+	set -euo pipefail
+	out_file=""
+	url=""
+	while [ "$#" -gt 0 ]; do
   case "$1" in
     -o)
       out_file="$2"
       shift 2
       ;;
-    -w)
-      write_format="$2"
-      shift 2
-      ;;
-    -f|-s|-S|-L|-fsSL)
-      shift
-      ;;
+	    -f|-s|-S|-L|-fsSL)
+	      shift
+	      ;;
     http://*|https://*)
       url="$1"
       shift
@@ -52,18 +48,9 @@ while [ "$#" -gt 0 ]; do
       shift
       ;;
   esac
-done
-printf '%s\\n' "$url" >> "$CURL_URL_LOG"
-if [ "$url" = "https://github.com/editorconfig-checker/editorconfig-checker/releases/latest" ]; then
-  if [ -n "$out_file" ] && [ "$out_file" != "/dev/null" ]; then
-    : > "$out_file"
-  fi
-  if [ "$write_format" = "%{url_effective}" ]; then
-    printf '%s' "\${EDITORCONFIG_RELEASE_URL:-https://github.com/editorconfig-checker/editorconfig-checker/releases/tag/v9.9.9}"
-  fi
-  exit 0
-fi
-printf 'archive' > "$out_file"
+	done
+	printf '%s\\n' "$url" >> "$CURL_URL_LOG"
+	printf 'archive' > "$out_file"
 `,
 	);
 }
@@ -157,10 +144,14 @@ test("editorconfig-checker.sh patterns match text-like files and skip common bin
 	assert.equal(matches("dist/app.min.js"), false);
 });
 
-test("editorconfig-checker.sh install downloads the latest Linux amd64 release archive", () => {
+test("editorconfig-checker.sh install downloads the pinned Linux amd64 release archive", () => {
 	const context = makeTempRepo("editorconfig-install-");
 	const curlUrlLog = path.join(context.tempDir, "curl-urls.log");
 	const tarArchiveLog = path.join(context.tempDir, "tar-archives.log");
+	const version = readPinnedVersion(
+		installPath,
+		"editorconfig_checker_version",
+	);
 
 	createCurlStub(context.binDir);
 	createTarStub(context.binDir);
@@ -172,15 +163,12 @@ test("editorconfig-checker.sh install downloads the latest Linux amd64 release a
 			encoding: "utf8",
 			env: createEnv(context, {
 				CURL_URL_LOG: curlUrlLog,
-				EDITORCONFIG_RELEASE_URL:
-					"https://github.com/editorconfig-checker/editorconfig-checker/releases/tag/v3.6.1",
 				TAR_ARCHIVE_LOG: tarArchiveLog,
 			}),
 		});
 
 		assert.deepEqual(fs.readFileSync(curlUrlLog, "utf8").trim().split("\n"), [
-			"https://github.com/editorconfig-checker/editorconfig-checker/releases/latest",
-			"https://github.com/editorconfig-checker/editorconfig-checker/releases/download/v3.6.1/ec-linux-amd64.tar.gz",
+			`https://github.com/editorconfig-checker/editorconfig-checker/releases/download/${version}/ec-linux-amd64.tar.gz`,
 		]);
 		assert.equal(
 			fs.readFileSync(tarArchiveLog, "utf8").trim(),

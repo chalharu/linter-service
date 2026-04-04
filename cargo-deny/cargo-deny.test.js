@@ -6,6 +6,7 @@ const {
 	fs,
 	makeTempRepo,
 	path,
+	readPinnedVersion,
 	writeExecutable,
 	writeFile,
 } = require("../.github/scripts/cargo-linter-test-lib.js");
@@ -75,23 +76,18 @@ function createCurlStub(binDir) {
 	writeExecutable(
 		path.join(binDir, "curl"),
 		`#!/usr/bin/env bash
-set -euo pipefail
-out_file=""
-write_format=""
-url=""
-while [ "$#" -gt 0 ]; do
+	set -euo pipefail
+	out_file=""
+	url=""
+	while [ "$#" -gt 0 ]; do
   case "$1" in
     -o)
       out_file="$2"
       shift 2
       ;;
-    -w)
-      write_format="$2"
-      shift 2
-      ;;
-    -f|-s|-S|-L|-fsSL)
-      shift
-      ;;
+	    -f|-s|-S|-L|-fsSL)
+	      shift
+	      ;;
     http://*|https://*)
       url="$1"
       shift
@@ -102,21 +98,13 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 printf '%s\\n' "$url" >> "$CURL_URL_LOG"
-case "$url" in
-  https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init)
-    cp "$RUSTUP_INIT_SOURCE" "$out_file"
-    ;;
-  https://github.com/EmbarkStudios/cargo-deny/releases/latest)
-    if [ -n "$out_file" ] && [ "$out_file" != "/dev/null" ]; then
-      : > "$out_file"
-    fi
-    if [ "$write_format" = "%{url_effective}" ]; then
-      printf '%s' "\${CARGO_DENY_RELEASE_URL:-https://github.com/EmbarkStudios/cargo-deny/releases/tag/0.19.0}"
-    fi
-    ;;
-  https://github.com/EmbarkStudios/cargo-deny/releases/download/*)
-    cp "$CARGO_DENY_ASSET_SOURCE" "$out_file"
-    ;;
+	case "$url" in
+	  https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init)
+	    cp "$RUSTUP_INIT_SOURCE" "$out_file"
+	    ;;
+	  https://github.com/EmbarkStudios/cargo-deny/releases/download/*)
+	    cp "$CARGO_DENY_ASSET_SOURCE" "$out_file"
+	    ;;
   *)
     echo "unexpected curl url: $url" >&2
     exit 1
@@ -312,11 +300,15 @@ test("cargo-deny.sh patterns match Cargo dependency and policy files", () => {
 	assert.equal(matches("README.md"), false);
 });
 
-test("cargo-deny.sh install downloads the latest release archive and extracts cargo-deny", () => {
+test("cargo-deny.sh install downloads the pinned release archive and extracts cargo-deny", () => {
 	const context = makeTempRepo("cargo-deny-install-");
 	const curlUrlLog = path.join(context.tempDir, "curl-urls.log");
 	const rustupInitLog = path.join(context.tempDir, "rustup-init.log");
-	const version = "0.19.0";
+	const version = readPinnedVersion(installPath, "cargo_deny_version");
+	const toolchainVersion = readPinnedVersion(
+		installPath,
+		"rust_toolchain_version",
+	);
 	const assetPath = path.join(
 		context.tempDir,
 		`cargo-deny-${version}-x86_64-unknown-linux-musl.tar.gz`,
@@ -333,8 +325,6 @@ test("cargo-deny.sh install downloads the latest release archive and extracts ca
 			encoding: "utf8",
 			env: createEnv(context, {
 				CARGO_DENY_ASSET_SOURCE: assetPath,
-				CARGO_DENY_RELEASE_URL:
-					"https://github.com/EmbarkStudios/cargo-deny/releases/tag/0.19.0",
 				CURL_URL_LOG: curlUrlLog,
 				RUSTUP_INIT_ARGS_LOG: rustupInitLog,
 				RUSTUP_INIT_SOURCE: rustupInitPath,
@@ -343,12 +333,14 @@ test("cargo-deny.sh install downloads the latest release archive and extracts ca
 
 		assert.deepEqual(fs.readFileSync(curlUrlLog, "utf8").trim().split("\n"), [
 			"https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init",
-			"https://github.com/EmbarkStudios/cargo-deny/releases/latest",
-			"https://github.com/EmbarkStudios/cargo-deny/releases/download/0.19.0/cargo-deny-0.19.0-x86_64-unknown-linux-musl.tar.gz",
+			`https://github.com/EmbarkStudios/cargo-deny/releases/download/${version}/cargo-deny-${version}-x86_64-unknown-linux-musl.tar.gz`,
 		]);
 		assert.match(
 			fs.readFileSync(rustupInitLog, "utf8"),
-			/--profile minimal --default-toolchain stable --no-modify-path/,
+			new RegExp(
+				`--profile minimal --default-toolchain ${toolchainVersion} --no-modify-path`,
+				"u",
+			),
 		);
 		assert.equal(
 			fs.existsSync(path.join(context.runnerTemp, "cargo/bin/cargo-deny")),

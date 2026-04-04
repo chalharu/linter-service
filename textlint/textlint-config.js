@@ -16,10 +16,8 @@ function resolveTextlintRuntime({ repositoryPath, outputPath }) {
 		repositoryPath: resolvedRepositoryPath,
 	});
 
-	if (!isLinterEnabled(serviceConfig, "textlint", { defaultDisabled: true })) {
-		throw new Error(
-			"textlint is disabled; set linters.textlint.disabled to false in .github/linter-service.json to enable it",
-		);
+	if (!isLinterEnabled(serviceConfig, "textlint")) {
+		throw new Error("textlint is disabled in .github/linter-service.json");
 	}
 
 	const presetPackages = getTextlintPresetPackages(serviceConfig);

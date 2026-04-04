@@ -7,8 +7,9 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$script_dir/common.sh"
 
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
-version="$(linter_lib::resolve_latest_github_release_tag koalaman shellcheck)"
-asset="shellcheck-${version}.linux.x86_64.tar.gz"
+# renovate: datasource=github-releases depName=koalaman/shellcheck
+shellcheck_version="v0.11.0"
+asset="shellcheck-${shellcheck_version}.linux.x86_64.tar.gz"
 archive_path="$RUNNER_TEMP/$asset"
 extract_dir="$RUNNER_TEMP/shellcheck-extract"
 bin_dir="$RUNNER_TEMP/shellcheck/bin"
@@ -16,8 +17,8 @@ bin_dir="$RUNNER_TEMP/shellcheck/bin"
 rm -rf "$extract_dir" "$bin_dir"
 mkdir -p "$extract_dir" "$bin_dir"
 
-curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/$version/$asset" -o "$archive_path"
+curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/$shellcheck_version/$asset" -o "$archive_path"
 tar -xzf "$archive_path" -C "$extract_dir"
-cp "$extract_dir/shellcheck-$version/shellcheck" "$bin_dir/shellcheck"
+cp "$extract_dir/shellcheck-$shellcheck_version/shellcheck" "$bin_dir/shellcheck"
 chmod +x "$bin_dir/shellcheck"
 linter_lib::add_path "$bin_dir"

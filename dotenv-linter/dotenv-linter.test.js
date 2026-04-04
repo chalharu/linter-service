@@ -6,6 +6,7 @@ const {
 	fs,
 	makeTempRepo,
 	path,
+	readPinnedVersion,
 	writeExecutable,
 	writeFile,
 } = require("../.github/scripts/cargo-linter-test-lib.js");
@@ -38,23 +39,18 @@ function createCurlStub(binDir) {
 	writeExecutable(
 		path.join(binDir, "curl"),
 		`#!/usr/bin/env bash
-set -euo pipefail
-out_file=""
-write_format=""
-url=""
-while [ "$#" -gt 0 ]; do
+	set -euo pipefail
+	out_file=""
+	url=""
+	while [ "$#" -gt 0 ]; do
   case "$1" in
     -o)
       out_file="$2"
       shift 2
       ;;
-    -w)
-      write_format="$2"
-      shift 2
-      ;;
-    -f|-s|-S|-L|-fsSL)
-      shift
-      ;;
+	    -f|-s|-S|-L|-fsSL)
+	      shift
+	      ;;
     http://*|https://*)
       url="$1"
       shift
@@ -63,18 +59,9 @@ while [ "$#" -gt 0 ]; do
       shift
       ;;
   esac
-done
-printf '%s\\n' "$url" >> "$CURL_URL_LOG"
-if [ "$url" = "https://github.com/dotenv-linter/dotenv-linter/releases/latest" ]; then
-  if [ -n "$out_file" ] && [ "$out_file" != "/dev/null" ]; then
-    : > "$out_file"
-  fi
-  if [ "$write_format" = "%{url_effective}" ]; then
-    printf '%s' "\${DOTENV_LINTER_RELEASE_URL:-https://github.com/dotenv-linter/dotenv-linter/releases/tag/v9.9.9}"
-  fi
-  exit 0
-fi
-cp "$DOTENV_LINTER_ASSET_SOURCE" "$out_file"
+	done
+	printf '%s\\n' "$url" >> "$CURL_URL_LOG"
+	cp "$DOTENV_LINTER_ASSET_SOURCE" "$out_file"
 `,
 	);
 }
@@ -117,13 +104,12 @@ test("dotenv-linter.sh patterns match .env-prefixed files", () => {
 	assert.equal(matches("config/app.env"), false);
 });
 
-test("dotenv-linter.sh install downloads the latest Linux x86_64 release archive", () => {
+test("dotenv-linter.sh install downloads the pinned Linux x86_64 release archive", () => {
 	const context = makeTempRepo("dotenv-linter-install-");
 	const curlUrlLog = path.join(context.tempDir, "curl-urls.log");
-	const assetPath = path.join(
-		context.tempDir,
-		"dotenv-linter-linux-x86_64.tar.gz",
-	);
+	const version = readPinnedVersion(installPath, "dotenv_linter_version");
+	const assetName = "dotenv-linter-linux-x86_64.tar.gz";
+	const assetPath = path.join(context.tempDir, assetName);
 
 	createReleaseAsset(assetPath);
 	createCurlStub(context.binDir);
@@ -135,14 +121,11 @@ test("dotenv-linter.sh install downloads the latest Linux x86_64 release archive
 			env: createEnv(context, {
 				CURL_URL_LOG: curlUrlLog,
 				DOTENV_LINTER_ASSET_SOURCE: assetPath,
-				DOTENV_LINTER_RELEASE_URL:
-					"https://github.com/dotenv-linter/dotenv-linter/releases/tag/v4.0.0",
 			}),
 		});
 
 		assert.deepEqual(fs.readFileSync(curlUrlLog, "utf8").trim().split("\n"), [
-			"https://github.com/dotenv-linter/dotenv-linter/releases/latest",
-			"https://github.com/dotenv-linter/dotenv-linter/releases/download/v4.0.0/dotenv-linter-linux-x86_64.tar.gz",
+			`https://github.com/dotenv-linter/dotenv-linter/releases/download/${version}/${assetName}`,
 		]);
 		assert.equal(
 			fs.existsSync(

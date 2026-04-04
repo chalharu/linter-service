@@ -49,9 +49,10 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 - default branch push では tracked file path 全体から選択する。
 - `.github/linter-service.json` がない場合は、`初期選択` 列で有効な linter を
    この file による除外パス設定なしで選択する。
-- `textlint` のような `初期選択` 列で無効な linter と、`linters.json` の
-   `required_root_files` に列挙した repo root 必須 file がそろわない linter は
-   自動選択しない。
+- `linters.json` の `required_root_files` に列挙した repo root 必須 file が
+  そろわない linter と、追加 runtime config が足りない linter は自動選択しない。
+- `textlint` は repo root の `.textlintrc` と
+  `linters.textlint.preset_packages` の両方がそろった場合だけ自動選択する。
 - 設定ファイルの変更時は、対応 linter の target file path 全体を再評価する。
 - 設定ファイル変更の再評価条件は、各 linter directory の
   `config_trigger_patterns.sh` が正本である。
@@ -72,7 +73,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | `shellcheck` | `*.bash`, `*.ksh`, `*.sh` | 対象 script の親方向の `.shellcheckrc`, `shellcheckrc` | ✅ |
 | `spectral` | `*.json`, `*.yaml`, `*.yml` | `.spectral.yml`, `.spectral.yaml`, `.spectral.json` | ✅ |
 | `taplo` | `*.toml` | 左から順に `.taplo.toml`, `taplo.toml` | ✅ |
-| `textlint` | `*.md`, `*.markdown`, `*.txt` | repo root の `.textlintrc` | ❌ |
+| `textlint` | `*.md`, `*.markdown`, `*.txt` | repo root の `.textlintrc` | ✅ |
 | `trivy` | `Dockerfile`, `Dockerfile.*`, `Containerfile`, `Containerfile.*`, `*.dockerfile`, `*.containerfile` | repo root の `trivy.yaml`, `trivy.yml`, `.trivyignore` | ✅ |
 | `yamlfmt` | `*.yaml`, `*.yml` | 左から順に `.yamlfmt`, `yamlfmt.yml`, `yamlfmt.yaml`, `.yamlfmt.yaml`, `.yamlfmt.yml` | ✅ |
 | `yamllint` | `*.yaml`, `*.yml` | 左から順に `.yamllint`, `.yamllint.yaml`, `.yamllint.yml` | ✅ |
@@ -91,7 +92,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | `rustfmt` | selected Rust file path の直接 `rustfmt --check` 実行。 |
 | `spectral` | `.spectral.js` 非対応、未配置時は `spectral:oas`、unknown format は無視。 |
 | `taplo` | 未配置時の既定 `fmt --check`。 |
-| `textlint` | repo root の `.textlintrc` のみ対応、YAML, JS, comment 付き config は非対応、`disabled: false` と exact version 付き `preset_packages` 指定時のみ動作。 |
+| `textlint` | repo root の `.textlintrc` のみ対応、YAML, JS, comment 付き config は非対応、exact version 付き `preset_packages` がある場合だけ自動選択する。 |
 | `trivy` | Dockerfile, Containerfile misconfiguration scan 専用、SHA pin した official image での最小権限実行。 |
 | `yamlfmt` | repo root config の明示指定、未配置時は temp default config 利用。 |
 | `zizmor` | `--offline` 実行。 |
@@ -101,8 +102,8 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 - 利用 repository 側の target selection 制御用である。
 - この file がない場合は、`初期選択` 列で有効な linter を、この file による
    除外パス設定なしで処理対象にする。
-- `初期選択` 列で無効な linter と、`linters.json` の `required_root_files` に
-   列挙した repo root 必須 file がそろわない linter は自動選択しない。
+- `linters.json` の `required_root_files` に列挙した repo root 必須 file と、
+  linter ごとの追加 runtime config がそろわない場合は自動選択しない。
 
 ```json
 {
@@ -118,7 +119,6 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
       ]
     },
     "textlint": {
-      "disabled": false,
       "preset_packages": [
         "textlint-rule-preset-ja-technical-writing@12.0.2"
       ]
@@ -133,9 +133,9 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | 項目 | スコープ | 内容 |
 | --- | --- | --- |
 | `global.exclude_paths` | 全 linter | repo-relative glob pattern。全 linter への適用。 |
-| `linters.<name>.disabled` | 個別 linter | `true` で選択対象外。`false` で `初期選択` 列で無効な linter の明示有効化。 |
+| `linters.<name>.disabled` | 個別 linter | `true` で選択対象外。`false` は明示的な無効化解除として扱う。 |
 | `linters.<name>.exclude_paths` | 個別 linter | repo-relative glob pattern。global exclude との併用。 |
-| `linters.textlint.preset_packages` | `textlint` | exact version 付き npm package spec の配列。`textlint` 有効化時の必須項目。 |
+| `linters.textlint.preset_packages` | `textlint` | exact version 付き npm package spec の配列。`.textlintrc` と併せて `textlint` 自動選択時の必須項目。 |
 
 ## 共有 linter の追加方法
 

@@ -8,6 +8,8 @@ source "$script_dir/common.sh"
 
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
 rustfmt_prepare_env
+# renovate: datasource=rust depName=rust versioning=semver
+rust_toolchain_version="1.94.1"
 
 if command -v rustfmt >/dev/null 2>&1 && rustfmt --version >/dev/null 2>&1; then
   exit 0
@@ -26,7 +28,7 @@ chmod +x "$rustup_init"
 "$rustup_init" \
   -y \
   --profile minimal \
-  --default-toolchain stable \
+  --default-toolchain "$rust_toolchain_version" \
   --component rustfmt \
   --no-modify-path \
   >/dev/null

@@ -7,6 +7,7 @@ const {
 	fs,
 	makeTempRepo,
 	path,
+	readPinnedVersion,
 	writeExecutable,
 	writeFile,
 } = require("../.github/scripts/cargo-linter-test-lib.js");
@@ -207,6 +208,7 @@ test("loadStaticTextlintConfig rejects non-JSON .textlintrc content", () => {
 
 test("textlint install builds a dedicated container image when missing", () => {
 	const context = makeTempRepo("textlint-install-");
+	const version = readPinnedVersion(installPath, "textlint_version");
 	const dockerBuildArgsLog = path.join(
 		context.tempDir,
 		"docker-build-args.log",
@@ -260,7 +262,10 @@ test("textlint install builds a dedicated container image when missing", () => {
 			fs.readFileSync(dockerfileCopy, "utf8"),
 			/--min-release-age=3/u,
 		);
-		assert.match(fs.readFileSync(dockerfileCopy, "utf8"), /textlint@15\.5\.2/u);
+		assert.match(
+			fs.readFileSync(dockerfileCopy, "utf8"),
+			new RegExp(`textlint@${version.replaceAll(".", "\\.")}`, "u"),
+		);
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}

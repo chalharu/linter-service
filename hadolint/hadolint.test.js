@@ -6,6 +6,7 @@ const {
 	fs,
 	makeTempRepo,
 	path,
+	readPinnedVersion,
 	writeExecutable,
 	writeFile,
 } = require("../.github/scripts/cargo-linter-test-lib.js");
@@ -29,21 +30,16 @@ function createCurlStub(binDir) {
 		`#!/usr/bin/env bash
 set -euo pipefail
 out_file=""
-write_format=""
-url=""
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    -o)
-      out_file="$2"
-      shift 2
-      ;;
-    -w)
-      write_format="$2"
-      shift 2
-      ;;
-    -f|-s|-S|-L|-fsSL)
-      shift
-      ;;
+  url=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -o)
+        out_file="$2"
+        shift 2
+        ;;
+      -f|-s|-S|-L|-fsSL)
+        shift
+        ;;
     http://*|https://*)
       url="$1"
       shift
@@ -54,15 +50,6 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 printf '%s\\n' "$url" >> "$CURL_URL_LOG"
-if [ "$url" = "https://github.com/hadolint/hadolint/releases/latest" ]; then
-  if [ -n "$out_file" ] && [ "$out_file" != "/dev/null" ]; then
-    : > "$out_file"
-  fi
-  if [ "$write_format" = "%{url_effective}" ]; then
-    printf '%s' "\${HADOLINT_RELEASE_URL:-https://github.com/hadolint/hadolint/releases/tag/v9.9.9}"
-  fi
-  exit 0
-fi
 cat > "$out_file" <<'EOF'
 #!/usr/bin/env bash
 exit 0
@@ -110,9 +97,10 @@ test("hadolint.sh patterns match Dockerfile and Containerfile naming conventions
 	assert.equal(matches(".dockerignore"), false);
 });
 
-test("hadolint.sh install downloads the latest Linux x86_64 release binary", () => {
+test("hadolint.sh install downloads the pinned Linux x86_64 release binary", () => {
 	const context = makeTempRepo("hadolint-install-");
 	const curlUrlLog = path.join(context.tempDir, "curl-urls.log");
+	const version = readPinnedVersion(installPath, "hadolint_version");
 
 	createCurlStub(context.binDir);
 
@@ -122,14 +110,11 @@ test("hadolint.sh install downloads the latest Linux x86_64 release binary", () 
 			encoding: "utf8",
 			env: createEnv(context, {
 				CURL_URL_LOG: curlUrlLog,
-				HADOLINT_RELEASE_URL:
-					"https://github.com/hadolint/hadolint/releases/tag/v2.14.0",
 			}),
 		});
 
 		assert.deepEqual(fs.readFileSync(curlUrlLog, "utf8").trim().split("\n"), [
-			"https://github.com/hadolint/hadolint/releases/latest",
-			"https://github.com/hadolint/hadolint/releases/download/v2.14.0/hadolint-linux-x86_64",
+			`https://github.com/hadolint/hadolint/releases/download/${version}/hadolint-linux-x86_64`,
 		]);
 		assert.equal(
 			fs.existsSync(path.join(context.runnerTemp, "hadolint/bin/hadolint")),

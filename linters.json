@@ -57,7 +57,6 @@
     },
     {
       "name": "textlint",
-      "default_disabled": true,
       "isolated": true,
       "required_root_files": [
         ".textlintrc"

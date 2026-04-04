@@ -1,12 +1,7 @@
 rules:
   secrets-outside-env:
-    # `config.allow` is configurable in zizmor v1.24.0 and later.
-    # Keep the temporary line-level ignores below until this repository
-    # upgrades, then remove them as tracked in issue #23.
-    config:
-      allow:
-        - CHECKER_APP_ID
-        - CHECKER_PRIVATE_KEY
+    # Current stable zizmor does not yet support secret allowlists for this
+    # audit, so keep the ignore list scoped to the specific known findings.
     ignore:
       - lint-common.yml:42
       - lint-common.yml:81

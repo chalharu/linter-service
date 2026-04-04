@@ -84,7 +84,16 @@ test("selectLinters includes linters whose config trigger paths changed", () => 
 				global: {
 					exclude_paths: [],
 				},
-				linters: {},
+				linters: {
+					textlint: {
+						disabled: false,
+						disabled_explicit: true,
+						exclude_paths: [],
+						preset_packages: [
+							"textlint-rule-preset-ja-technical-writing@12.0.2",
+						],
+					},
+				},
 			},
 		});
 
@@ -94,16 +103,15 @@ test("selectLinters includes linters whose config trigger paths changed", () => 
 	}
 });
 
-test("selectLinters requires explicit enablement for default-disabled linters", () => {
+test("selectLinters skips textlint until preset_packages are configured", () => {
 	const context = fs.mkdtempSync(path.join(os.tmpdir(), "linter-targeting-"));
 	fs.writeFileSync(path.join(context, ".textlintrc"), "{}\n", "utf8");
 
 	try {
-		const selectedWithoutEnable = selectLinters({
+		const selectedWithoutPresetPackages = selectLinters({
 			candidatePaths: ["README.md"],
 			definitions: [
 				{
-					default_disabled: true,
 					name: "textlint",
 					patterns: ["\\.(?:md|markdown|txt)$"],
 					required_root_files: [".textlintrc"],
@@ -114,14 +122,20 @@ test("selectLinters requires explicit enablement for default-disabled linters", 
 				global: {
 					exclude_paths: [],
 				},
-				linters: {},
+				linters: {
+					textlint: {
+						disabled: false,
+						disabled_explicit: true,
+						exclude_paths: [],
+						preset_packages: [],
+					},
+				},
 			},
 		});
-		const selectedWithEnable = selectLinters({
+		const selectedWithPresetPackages = selectLinters({
 			candidatePaths: ["README.md"],
 			definitions: [
 				{
-					default_disabled: true,
 					name: "textlint",
 					patterns: ["\\.(?:md|markdown|txt)$"],
 					required_root_files: [".textlintrc"],
@@ -145,8 +159,8 @@ test("selectLinters requires explicit enablement for default-disabled linters", 
 			},
 		});
 
-		assert.deepEqual(selectedWithoutEnable, []);
-		assert.deepEqual(selectedWithEnable, ["textlint"]);
+		assert.deepEqual(selectedWithoutPresetPackages, []);
+		assert.deepEqual(selectedWithPresetPackages, ["textlint"]);
 	} finally {
 		fs.rmSync(context, { force: true, recursive: true });
 	}

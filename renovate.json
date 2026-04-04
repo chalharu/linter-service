@@ -5,7 +5,17 @@
     "helpers:pinGitHubActionDigests",
     ":disableRateLimiting"
   ],
-  "enabledManagers": ["github-actions"],
+  "enabledManagers": ["github-actions", "custom.regex"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update pinned linter installer versions",
+      "managerFilePatterns": ["/(^|/)[^/]+/install\\.sh$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)(?: versioning=(?<versioning>[^\\s]+))?\\s+[A-Za-z0-9_]+_version=\"(?<currentValue>[^\"]+)\""
+      ]
+    }
+  ],
   "labels": ["dependencies", "renovate", "renovate-gate-wait-3d"],
   "dependencyDashboard": true,
   "prCreation": "immediate",
@@ -35,6 +45,11 @@
         "pinDigest"
       ],
       "branchTopic": "{{{depNameSanitized}}}{{#if newVersion}}__v{{{newVersion}}}{{/if}}{{#if newDigestShort}}__d{{{newDigestShort}}}{{/if}}"
+    },
+    {
+      "description": "Hold pinned linter installer updates for three days",
+      "matchManagers": ["custom.regex"],
+      "minimumReleaseAge": "3 days"
     }
   ]
 }

@@ -8,7 +8,7 @@ const {
 	makeTempRepo,
 	writeFile,
 } = require("./cargo-linter-test-lib.js");
-const { runFromEnv } = require("./render-linter-report.js");
+const { renderReport, runFromEnv } = require("./render-linter-report.js");
 
 const configPath = path.join(__dirname, "..", "..", "linters.json");
 
@@ -302,6 +302,71 @@ test("includes checked targets before diagnostic details on failure", () => {
 			/Target file paths:\n- <code>openapi\/spec\.yaml<\/code>\n\n<details><summary>Details<\/summary>/,
 		);
 		assert.match(report.body, /line 2: unexpected field/);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("renders rustfmt failure summaries from issue target counts instead of echoed checks", () => {
+	const context = makeTempRepo("render-linter-report-rustfmt-failure-");
+	const selectedFiles = [
+		"src/lib.rs",
+		"src/main.rs",
+		"crates/member/src/lib.rs",
+		"crates/member/src/main.rs",
+		"examples/demo.rs",
+		"tests/basic.rs",
+		"tests/advanced.rs",
+		"benches/bench.rs",
+		"tools/helper.rs",
+	];
+
+	try {
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "selected-files.txt"),
+			`${selectedFiles.join("\n")}\n`,
+			"utf8",
+		);
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "linter-result.json"),
+			JSON.stringify({
+				details: `${selectedFiles
+					.map((filePath) => `==> rustfmt --check ${filePath}`)
+					.join("\n")}\nDiff in src/lib.rs at line 1:\n`,
+				exit_code: 1,
+			}),
+			"utf8",
+		);
+
+		const report = renderReport({
+			configPath,
+			exitCodeRaw: "1",
+			installOutcome: "success",
+			linterName: "rustfmt",
+			resultPath: path.join(context.runnerTemp, "linter-result.json"),
+			runOutcome: "success",
+			selectedFilesPath: path.join(context.runnerTemp, "selected-files.txt"),
+			selectOutcome: "success",
+			sourceRepositoryPath: context.repoDir,
+			targetStats: {
+				counts_known: true,
+				issue_count: 1,
+				issue_target_count: 1,
+				passed_target_count: 8,
+				target_count: 9,
+				target_kind: "file",
+			},
+		});
+
+		assert.equal(report.conclusion, "failure");
+		assert.equal(
+			report.summaryText,
+			"❌ 8 / 9 files passed; 1 file reported issues.",
+		);
+		assert.match(
+			report.body,
+			/❌ 8 \/ 9 files passed; 1 file reported issues\./,
+		);
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}

@@ -8,6 +8,10 @@ source "$script_dir/common.sh"
 
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
 cargo_deny_prepare_env
+# renovate: datasource=rust depName=rust versioning=semver
+rust_toolchain_version="1.94.1"
+# renovate: datasource=github-releases depName=EmbarkStudios/cargo-deny
+cargo_deny_version="0.19.0"
 
 if command -v cargo >/dev/null 2>&1 && cargo --version >/dev/null 2>&1 && \
    command -v cargo-deny >/dev/null 2>&1 && cargo-deny --version >/dev/null 2>&1; then
@@ -28,21 +32,20 @@ if ! command -v cargo >/dev/null 2>&1 || ! cargo --version >/dev/null 2>&1; then
   "$rustup_init" \
     -y \
     --profile minimal \
-    --default-toolchain stable \
+    --default-toolchain "$rust_toolchain_version" \
     --no-modify-path \
     >/dev/null
 fi
 
-version="$(linter_lib::resolve_latest_github_release_tag EmbarkStudios cargo-deny)"
-asset="cargo-deny-${version}-x86_64-unknown-linux-musl.tar.gz"
+asset="cargo-deny-${cargo_deny_version}-x86_64-unknown-linux-musl.tar.gz"
 archive_path="$RUNNER_TEMP/$asset"
 extract_dir="$RUNNER_TEMP/cargo-deny-extract"
-release_dir="$extract_dir/cargo-deny-${version}-x86_64-unknown-linux-musl"
+release_dir="$extract_dir/cargo-deny-${cargo_deny_version}-x86_64-unknown-linux-musl"
 
 rm -rf "$extract_dir"
 mkdir -p "$extract_dir" "$CARGO_HOME/bin"
 
-curl -fsSL "https://github.com/EmbarkStudios/cargo-deny/releases/download/$version/$asset" -o "$archive_path"
+curl -fsSL "https://github.com/EmbarkStudios/cargo-deny/releases/download/$cargo_deny_version/$asset" -o "$archive_path"
 tar -xzf "$archive_path" -C "$extract_dir"
 cp "$release_dir/cargo-deny" "$CARGO_HOME/bin/cargo-deny"
 chmod +x "$CARGO_HOME/bin/cargo-deny"

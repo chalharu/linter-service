@@ -164,7 +164,7 @@ test("supports per-linter disable flags", () => {
 	}
 });
 
-test("requires explicit enablement and supports textlint preset_packages", () => {
+test("supports textlint preset_packages when textlint is enabled", () => {
 	const context = makeTempRepo();
 
 	fs.writeFileSync(
@@ -191,10 +191,7 @@ test("requires explicit enablement and supports textlint preset_packages", () =>
 			repositoryPath: context.repoDir,
 		});
 
-		assert.equal(
-			isLinterEnabled(config, "textlint", { defaultDisabled: true }),
-			true,
-		);
+		assert.equal(isLinterEnabled(config, "textlint"), true);
 		assert.deepEqual(getTextlintPresetPackages(config), [
 			"textlint-rule-preset-ja-technical-writing@12.0.2",
 		]);
@@ -263,10 +260,7 @@ test("supports multiple textlint preset_packages", () => {
 			repositoryPath: context.repoDir,
 		});
 
-		assert.equal(
-			isLinterEnabled(config, "textlint", { defaultDisabled: true }),
-			true,
-		);
+		assert.equal(isLinterEnabled(config, "textlint"), true);
 		assert.deepEqual(getTextlintPresetPackages(config), [
 			"textlint-rule-preset-ja-technical-writing@12.0.2",
 			"textlint-rule-preset-ja-spacing@4.0.0",
@@ -276,25 +270,22 @@ test("supports multiple textlint preset_packages", () => {
 	}
 });
 
-test("default-disabled textlint stays disabled without explicit disabled false", () => {
+test("textlint remains disabled when configured disabled", () => {
 	const config = {
 		global: {
 			exclude_paths: [],
 		},
 		linters: {
 			textlint: {
-				disabled: false,
-				disabled_explicit: false,
+				disabled: true,
+				disabled_explicit: true,
 				exclude_paths: [],
 				preset_packages: ["textlint-rule-preset-ja-technical-writing@12.0.2"],
 			},
 		},
 	};
 
-	assert.equal(
-		isLinterEnabled(config, "textlint", { defaultDisabled: true }),
-		false,
-	);
+	assert.equal(isLinterEnabled(config, "textlint"), false);
 });
 
 test("rejects invalid textlint preset package configuration", () => {
