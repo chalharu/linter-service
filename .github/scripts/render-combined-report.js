@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const COMMENT_MARKER = "<!-- linter-service:results -->";
+const MAX_TARGET_PATHS = 50;
 
 function runFromEnv(env = process.env) {
 	const report = renderCombinedReport({
@@ -40,27 +41,29 @@ function renderCombinedReport({
 	summaryRoot,
 }) {
 	const summaries = readLinterSummaries(summaryRoot);
-	const sections = [];
+	const rows = [];
+	const detailSections = [];
 	let failed = 0;
 
 	for (const linterName of selectedLinters) {
-		const summary = summaries.get(linterName) ?? {};
-		const conclusion = String(summary.conclusion || "");
-		let section = String(summary.comment_body || "").trim();
+		const summary = normalizeSummary(
+			summaries.get(linterName) ??
+				buildFallbackSummary({
+					decryptOutcome,
+					linterName,
+				}),
+			linterName,
+		);
 
-		if (!section) {
-			section = buildFallbackSection({
-				decryptOutcome,
-				linterName,
-			});
-		}
-
-		if (conclusion !== "success") {
+		if (summary.conclusion !== "success") {
 			failed += 1;
 		}
 
-		if (section) {
-			sections.push(section);
+		rows.push(summary);
+
+		const detailSection = buildDetailSection(summary);
+		if (detailSection) {
+			detailSections.push(detailSection);
 		}
 	}
 
@@ -87,8 +90,12 @@ function renderCombinedReport({
 	];
 	const checkRunLines = ["## linter-service", "", overallSummary, ""];
 
-	appendSections(commentLines, sections);
-	appendSections(checkRunLines, sections);
+	appendSummaryTable(commentLines, rows);
+	appendSummaryTable(checkRunLines, rows);
+	appendTargetDetails(commentLines, rows);
+	appendTargetDetails(checkRunLines, rows);
+	appendFailureDetails(commentLines, detailSections);
+	appendFailureDetails(checkRunLines, detailSections);
 
 	return {
 		checkRunText: `${checkRunLines.join("\n")}\n`,
@@ -111,29 +118,246 @@ function writeCombinedReportFiles({ checkRunText, commentBody, runnerTemp }) {
 	);
 }
 
-function appendSections(lines, sections) {
-	for (const [index, section] of sections.entries()) {
-		lines.push(section);
-		if (index !== sections.length - 1) {
+function appendSummaryTable(lines, rows) {
+	if (rows.length === 0) {
+		return;
+	}
+
+	lines.push(
+		"| Linter | Result | Checked | Passed | Issues |",
+		"| --- | --- | --- | ---: | ---: |",
+	);
+
+	for (const row of rows) {
+		lines.push(
+			[
+				"|",
+				` \`${row.linterName}\` `,
+				"|",
+				` ${escapeTableCell(buildResultLabel(row.status))} `,
+				"|",
+				` ${escapeTableCell(formatCheckedMetric(row))} `,
+				"|",
+				` ${escapeTableCell(formatCountMetric(row.passedTargetCount))} `,
+				"|",
+				` ${escapeTableCell(formatCountMetric(row.issueTargetCount))} `,
+				"|",
+			].join(""),
+		);
+	}
+}
+
+function appendTargetDetails(lines, rows) {
+	const targetSections = rows
+		.map((row) => buildTargetSection(row))
+		.filter(Boolean);
+
+	if (targetSections.length === 0) {
+		return;
+	}
+
+	lines.push("");
+
+	for (const [index, targetSection] of targetSections.entries()) {
+		lines.push(targetSection);
+		if (index !== targetSections.length - 1) {
 			lines.push("");
 		}
 	}
 }
 
-function buildFallbackSection({ decryptOutcome, linterName }) {
-	if (decryptOutcome === "failure") {
-		return [
-			`### ${linterName}`,
-			"",
-			`❌ The encrypted \`${linterName}\` summary could not be decrypted. See the workflow logs.`,
-		].join("\n");
+function appendFailureDetails(lines, detailSections) {
+	if (detailSections.length === 0) {
+		return;
 	}
 
-	return [
-		`### ${linterName}`,
+	lines.push(
 		"",
-		`❌ The \`${linterName}\` workflow failed before producing a detailed report. See the workflow logs.`,
-	].join("\n");
+		`<details><summary>Show details for ${detailSections.length} failing linter(s)</summary>`,
+		"",
+	);
+
+	for (const [index, detailSection] of detailSections.entries()) {
+		lines.push(detailSection);
+		if (index !== detailSections.length - 1) {
+			lines.push("");
+		}
+	}
+
+	lines.push("", "</details>");
+}
+
+function buildDetailSection(summary) {
+	if (!isFailureLikeStatus(summary.status)) {
+		return "";
+	}
+
+	const lines = [`### ${summary.linterName}`, ""];
+
+	if (summary.status === "failure" && summary.detailsText.length > 0) {
+		lines.push("```text", summary.detailsText, "```");
+		return lines.join("\n");
+	}
+
+	lines.push(stripLeadingStatusMarker(summary.summaryText));
+	return lines.join("\n");
+}
+
+function buildTargetSection(summary) {
+	if (
+		summary.selectedFiles.length === 0 &&
+		summary.checkedProjects.length === 0
+	) {
+		return "";
+	}
+
+	const lines = [
+		`<details><summary>Show checked targets for ${escapeHtml(summary.linterName)}</summary>`,
+		"",
+	];
+
+	appendPathGroup(lines, "Target file paths", summary.selectedFiles);
+	if (summary.checkedProjects.length > 0) {
+		if (summary.selectedFiles.length > 0) {
+			lines.push("");
+		}
+		appendPathGroup(lines, "Cargo project targets", summary.checkedProjects);
+	}
+
+	lines.push("", "</details>");
+	return lines.join("\n");
+}
+
+function appendPathGroup(lines, title, paths) {
+	if (paths.length === 0) {
+		return;
+	}
+
+	const displayedPaths = paths.slice(0, MAX_TARGET_PATHS);
+	lines.push(`${title}:`);
+
+	for (const currentPath of displayedPaths) {
+		lines.push(`- <code>${escapeHtml(currentPath)}</code>`);
+	}
+
+	if (paths.length > displayedPaths.length) {
+		lines.push(
+			`- ... ${paths.length - displayedPaths.length} more path(s) omitted`,
+		);
+	}
+}
+
+function buildFallbackSummary({ decryptOutcome, linterName }) {
+	const summaryText =
+		decryptOutcome === "failure"
+			? `❌ The encrypted \`${linterName}\` summary could not be decrypted. See the workflow logs.`
+			: `❌ The \`${linterName}\` workflow failed before producing a detailed report. See the workflow logs.`;
+
+	return {
+		checked_projects: [],
+		conclusion: "failure",
+		counts_known: false,
+		details_text: summaryText,
+		issue_count: null,
+		issue_target_count: null,
+		linter_name: linterName,
+		passed_target_count: null,
+		selected_files: [],
+		status: "missing_summary",
+		summary_text: summaryText,
+		target_count: null,
+		target_kind: "file",
+	};
+}
+
+function buildResultLabel(status) {
+	switch (status) {
+		case "success":
+			return "✅ Pass";
+		case "no_targets":
+			return "⚪ No targets";
+		case "infra_failure":
+			return "❌ Failed";
+		case "missing_summary":
+			return "❌ Missing summary";
+		default:
+			return "❌ Issues";
+	}
+}
+
+function normalizeSummary(summary, linterName) {
+	const normalizedConclusion =
+		typeof summary?.conclusion === "string" && summary.conclusion.length > 0
+			? summary.conclusion
+			: "failure";
+	const summaryText =
+		typeof summary?.summary_text === "string" &&
+		summary.summary_text.trim().length > 0
+			? summary.summary_text.trim()
+			: extractSummaryText(summary?.comment_body);
+	const status =
+		typeof summary?.status === "string" && summary.status.length > 0
+			? summary.status
+			: normalizedConclusion === "success"
+				? "success"
+				: "failure";
+	const countsKnown =
+		typeof summary?.counts_known === "boolean"
+			? summary.counts_known
+			: normalizedConclusion === "success" || status === "no_targets";
+	const targetCount = normalizeTargetCount(summary);
+	const issueTargetCount = normalizeOptionalCount(summary?.issue_target_count);
+	const passedTargetCount = normalizeOptionalCount(
+		summary?.passed_target_count,
+	);
+
+	return {
+		checkedProjects: normalizeStringArray(summary?.checked_projects),
+		conclusion: normalizedConclusion,
+		countsKnown,
+		detailsText:
+			typeof summary?.details_text === "string"
+				? summary.details_text.trim()
+				: "",
+		issueTargetCount:
+			issueTargetCount !== null ? issueTargetCount : countsKnown ? 0 : null,
+		linterName,
+		passedTargetCount:
+			passedTargetCount !== null
+				? passedTargetCount
+				: countsKnown && targetCount !== null
+					? targetCount
+					: null,
+		selectedFiles: normalizeStringArray(summary?.selected_files),
+		status,
+		summaryText:
+			summaryText.length > 0
+				? summaryText
+				: `❌ The \`${linterName}\` workflow failed before producing a detailed report. See the workflow logs.`,
+		targetCount,
+		targetKind:
+			summary?.target_kind === "cargo-project" ? "cargo-project" : "file",
+	};
+}
+
+function extractSummaryText(commentBody) {
+	if (typeof commentBody !== "string" || commentBody.trim().length === 0) {
+		return "";
+	}
+
+	for (const rawLine of commentBody.split(/\r?\n/u)) {
+		const line = rawLine.trim();
+		if (!line || line.startsWith("### ")) {
+			continue;
+		}
+		return line;
+	}
+
+	return "";
+}
+
+function isFailureLikeStatus(status) {
+	return ["failure", "infra_failure", "missing_summary"].includes(status);
 }
 
 function readLinterSummaries(summaryRoot) {
@@ -174,6 +398,81 @@ function readLinterSummaries(summaryRoot) {
 	return summaries;
 }
 
+function normalizeStringArray(value) {
+	return Array.isArray(value)
+		? value.filter(
+				(entry) => typeof entry === "string" && entry.trim().length > 0,
+			)
+		: [];
+}
+
+function normalizeOptionalCount(value) {
+	return Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function normalizeTargetCount(summary) {
+	const explicit = normalizeOptionalCount(summary?.target_count);
+
+	if (explicit !== null) {
+		return explicit;
+	}
+
+	const checkedProjects = normalizeStringArray(summary?.checked_projects);
+	const selectedFiles = normalizeStringArray(summary?.selected_files);
+	const targetKind =
+		summary?.target_kind === "cargo-project" ? "cargo-project" : "file";
+
+	if (targetKind === "cargo-project") {
+		return checkedProjects.length > 0
+			? checkedProjects.length
+			: selectedFiles.length;
+	}
+
+	return selectedFiles.length > 0
+		? selectedFiles.length
+		: checkedProjects.length;
+}
+
+function formatCheckedMetric(row) {
+	if (row.targetCount === null) {
+		return "n/a";
+	}
+
+	return `${row.targetCount} ${formatTargetLabel(row.targetKind, row.targetCount)}`;
+}
+
+function formatCountMetric(value) {
+	return value === null ? "n/a" : String(value);
+}
+
+function formatTargetLabel(targetKind, count) {
+	if (targetKind === "cargo-project") {
+		return count === 1 ? "Cargo project" : "Cargo projects";
+	}
+
+	return count === 1 ? "file" : "files";
+}
+
+function escapeTableCell(value) {
+	return String(value || "")
+		.replaceAll("|", "\\|")
+		.replaceAll("\r", " ")
+		.replaceAll("\n", " ");
+}
+
+function stripLeadingStatusMarker(text) {
+	return String(text || "")
+		.replace(/^[^A-Za-z0-9`]+/u, "")
+		.trim();
+}
+
+function escapeHtml(value) {
+	return String(value || "")
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;");
+}
+
 function parseSelectedLinters(rawValue) {
 	let selectedLinters;
 
@@ -208,7 +507,9 @@ if (require.main === module) {
 }
 
 module.exports = {
-	buildFallbackSection,
+	buildFallbackSummary,
+	buildResultLabel,
+	extractSummaryText,
 	parseSelectedLinters,
 	readLinterSummaries,
 	renderCombinedReport,

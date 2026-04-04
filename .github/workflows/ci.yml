@@ -17,13 +17,14 @@ on:
 permissions:
   contents: read
 jobs:
-  fixture-test-matrix:
+  validate-worker:
+    name: validate-worker + fixture-test-matrix
     permissions:
       contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
-      linters: ${{ steps.collect.outputs.linters }}
+      fixture-assignments-json: ${{ steps.collect.outputs.fixture-assignments-json || '[]' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -34,63 +35,26 @@ jobs:
         run: |
           node - <<'NODE' >> "$GITHUB_OUTPUT"
           const fs = require("node:fs");
+          const { buildLinterJobAssignments } = require("./.github/scripts/linter-targeting.js");
           const config = JSON.parse(fs.readFileSync("linters.json", "utf8"));
-          const linters = Array.isArray(config.linters)
+          const definitions = Array.isArray(config.linters)
             ? config.linters
-                .filter((entry) => entry && typeof entry.name === "string")
-                .map((entry) => entry.name)
+                .filter((definition) => definition && typeof definition.name === "string")
+                .map((definition) => ({
+                  isolated: definition.isolated,
+                  name: definition.name,
+                  patterns: ["."],
+                }))
             : [];
-          process.stdout.write(`linters=${JSON.stringify(linters)}\n`);
+          const selectedLinters = definitions.map((definition) => definition.name);
+          const assignments = buildLinterJobAssignments({
+            definitions,
+            selectedLinters,
+          });
+          process.stdout.write(
+            `fixture-assignments-json=${JSON.stringify(assignments)}\n`,
+          );
           NODE
-  validate-linter-fixtures:
-    needs: fixture-test-matrix
-    permissions:
-      contents: read
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        linter: ${{ fromJSON(needs.fixture-test-matrix.outputs.linters) }}
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          persist-credentials: false
-      - name: Set up Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
-        with:
-          node-version: 24
-      - name: Run fixture tests
-        env:
-          FIXTURE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.fixture-mode || 'verify' }}
-          LINTER_NAME: ${{ matrix.linter }}
-        run: |
-          if [ "$FIXTURE_MODE" = "write" ]; then
-            node .github/scripts/run-fixture-tests.js --write "$LINTER_NAME"
-          else
-            node .github/scripts/run-fixture-tests.js "$LINTER_NAME"
-          fi
-      - name: Upload recorded fixture outputs
-        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.fixture-mode == 'write' }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
-        with:
-          name: fixture-record-${{ matrix.linter }}
-          path: |
-            ${{ matrix.linter }}/tests/*/result.json
-            ${{ matrix.linter }}/tests/*/sarif.json
-          if-no-files-found: error
-          retention-days: 1
-  validate-worker:
-    permissions:
-      contents: read
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          persist-credentials: false
       - name: Set up Node.js
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
@@ -103,3 +67,100 @@ jobs:
       - name: Run worker validation
         working-directory: worker
         run: npm run check
+  validate-linter-fixtures:
+    name: validate-linter-fixtures (${{ matrix.assignment.name }})
+    needs: validate-worker
+    if: ${{ needs.validate-worker.result == 'success' && needs.validate-worker.outputs.fixture-assignments-json != '[]' }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        assignment: ${{ fromJSON(needs.validate-worker.outputs.fixture-assignments-json) }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: 24
+      - name: Run fixture tests
+        env:
+          FIXTURE_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.fixture-mode || 'verify' }}
+          LINTER_NAMES_JSON: ${{ toJSON(matrix.assignment.linter_names) }}
+        run: |
+          mapfile -t linter_names < <(
+            node -e '
+            const linterNames = JSON.parse(process.env.LINTER_NAMES_JSON || "[]");
+            if (
+              !Array.isArray(linterNames) ||
+              linterNames.some(
+                (linterName) => typeof linterName !== "string" || linterName.length === 0,
+              )
+            ) {
+              throw new Error("LINTER_NAMES_JSON must be a JSON array of non-empty strings");
+            }
+            for (const linterName of linterNames) {
+              console.log(linterName);
+            }
+            '
+          )
+          if [ "${#linter_names[@]}" -eq 0 ]; then
+            echo "No fixture linters were assigned." >&2
+            exit 1
+          fi
+          if [ "$FIXTURE_MODE" = "write" ]; then
+            node .github/scripts/run-fixture-tests.js --write "${linter_names[@]}"
+          else
+            node .github/scripts/run-fixture-tests.js "${linter_names[@]}"
+          fi
+      - name: Prepare recorded fixture outputs
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.fixture-mode == 'write' }}
+        env:
+          LINTER_NAMES_JSON: ${{ toJSON(matrix.assignment.linter_names) }}
+        run: |
+          upload_root="$RUNNER_TEMP/fixture-record-${{ matrix.assignment.artifact_name }}"
+          rm -rf "$upload_root"
+          mkdir -p "$upload_root"
+          mapfile -t linter_names < <(
+            node -e '
+            const linterNames = JSON.parse(process.env.LINTER_NAMES_JSON || "[]");
+            if (
+              !Array.isArray(linterNames) ||
+              linterNames.some(
+                (linterName) => typeof linterName !== "string" || linterName.length === 0,
+              )
+            ) {
+              throw new Error("LINTER_NAMES_JSON must be a JSON array of non-empty strings");
+            }
+            for (const linterName of linterNames) {
+              console.log(linterName);
+            }
+            '
+          )
+          if [ "${#linter_names[@]}" -eq 0 ]; then
+            echo "No fixture linters were assigned." >&2
+            exit 1
+          fi
+          shopt -s nullglob
+          for linter_name in "${linter_names[@]}"; do
+            for fixture_path in \
+              "$linter_name"/tests/*/result.json \
+              "$linter_name"/tests/*/sarif.json
+            do
+              mkdir -p "$upload_root/$(dirname "$fixture_path")"
+              cp "$fixture_path" "$upload_root/$fixture_path"
+            done
+          done
+      - name: Upload recorded fixture outputs
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.fixture-mode == 'write' }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: fixture-record-${{ matrix.assignment.artifact_name }}
+          path: ${{ runner.temp }}/fixture-record-${{ matrix.assignment.artifact_name }}
+          if-no-files-found: error
+          retention-days: 1

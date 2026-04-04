@@ -39,7 +39,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | `.github/workflows/lint-common.yml` | 共通 reusable workflow |
 | `.github/workflows/repository-dispatch.yml` | router workflow |
 | `<linter>/` | linter ごとの script / fixture test / helper |
-| `linters.json` | linter 定義と report/SARIF 文言 |
+| `linters.json` | linter 定義と SARIF / 実行メタデータ |
 | `worker/` | Webhook を受ける Cloudflare Worker |
 
 ## 共有 linter 一覧
@@ -52,6 +52,8 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
    `required_root_files` に列挙した repo root 必須 file がそろわない linter は
    自動選択しない。
 - 設定ファイルの変更時は、対応 linter の target file path 全体を再評価する。
+- 設定ファイル変更の再評価条件は、各 linter directory の
+  `config_trigger_patterns.sh` が正本である。
 
 | linter | 対象ファイル | 設定ファイル | 初期選択 |
 | --- | --- | --- | --- |
@@ -137,10 +139,11 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 ## 共有 linter の追加方法
 
 - 追加先は root の `linters.json` と root 直下の `<name>/` directory である。`.github/scripts/` は shared script 専用である。
-- 最低限の構成は `patterns.sh`, `install.sh`, `run.sh` である。shared helper が必要な場合のみ `common.sh` を追加する。
+- 最低限の構成は `patterns.sh`, `install.sh`, `run.sh` である。設定ファイル変更で全 target を再評価する linter だけ `config_trigger_patterns.sh` を追加する。shared helper が必要な場合のみ `common.sh` を追加する。
+- `linters.json` で `isolated: true` を付けた linter は shared batch から分離し、専用 job で実行する。
 - 参考実装は `actionlint/` が最小構成、`cargo-clippy/` と `textlint/` が隔離実行や config 解決を含む例である。
 - fixture は `tests/<case>/target/`, `result.json`, `sarif.json` の構成である。最低でも pass と fail の 2 系統を用意する。
-- `linters.json` が comment 見出し、成功 / 失敗文言、fallback message の正本である。通常は workflow 個別修正不要である。
+- report 文言は shared renderer が checked target 数から動的生成する。`linters.json` は static 文言ではなく、選択条件・実行条件・SARIF 設定だけを持つ。
 - untrusted PR でも安全に扱える実装を前提とし、任意コード実行につながる config は拒否または隔離実行で扱う。
 - 変更後は `node .github/scripts/run-fixture-tests.js <name>` で fixture test を実行する。
 - 変更面に応じて focused unit test と `shellcheck`、`markdownlint-cli2`、`git diff --check` など既存 validation を実行する。
@@ -148,6 +151,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 ```text
 <name>/
   common.sh                    # optional
+  config_trigger_patterns.sh   # optional
   patterns.sh
   install.sh
   run.sh

@@ -2,62 +2,24 @@
   "linters": [
     {
       "name": "actionlint",
-      "config_trigger_patterns": [
-        "^\\.github\\/actionlint\\.(?:yaml|yml)$"
-      ],
-      "execution_group": "github-actions",
-      "heading": "### actionlint",
-      "no_files": "No matching workflow files were selected for `actionlint`.",
-      "success": "✅ No issues were reported for the selected GitHub Actions workflow target(s).",
-      "failure": "❌ Issues were reported for the selected GitHub Actions workflow target(s).",
-      "infra_failure": "❌ The `actionlint` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "actionlint did not produce diagnostic output before the job failed.",
       "sarif": {
         "enabled": true
       }
     },
     {
       "name": "ghalint",
-      "config_trigger_patterns": [
-        "^(?:\\.ghalint\\.(?:yaml|yml)|ghalint\\.(?:yaml|yml)|\\.github\\/ghalint\\.(?:yaml|yml))$"
-      ],
-      "execution_group": "github-actions",
-      "heading": "### ghalint",
-      "no_files": "No matching GitHub Actions workflow files were selected for `ghalint`.",
-      "success": "✅ No issues were reported for the selected GitHub Actions workflow target(s).",
-      "failure": "❌ Issues were reported for the selected GitHub Actions workflow target(s).",
-      "infra_failure": "❌ The `ghalint` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "ghalint did not produce diagnostic output before the job failed.",
       "sarif": {
         "enabled": true
       }
     },
     {
       "name": "hadolint",
-      "config_trigger_patterns": [
-        "(?:^|\\/)\\.hadolint\\.(?:yaml|yml)$"
-      ],
-      "heading": "### hadolint",
-      "no_files": "No matching Dockerfile or Containerfile files were selected for `hadolint`.",
-      "success": "✅ No issues were reported for the selected Dockerfile or Containerfile target(s).",
-      "failure": "❌ Issues were reported for the selected Dockerfile or Containerfile target(s).",
-      "infra_failure": "❌ The `hadolint` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "hadolint did not produce diagnostic output before the job failed.",
       "sarif": {
         "enabled": true
       }
     },
     {
       "name": "trivy",
-      "config_trigger_patterns": [
-        "^(?:\\.trivyignore|trivy\\.(?:yaml|yml))$"
-      ],
-      "heading": "### trivy",
-      "no_files": "No matching Dockerfile or Containerfile files were selected for `trivy`.",
-      "success": "✅ No misconfigurations were reported for the selected Dockerfile or Containerfile target(s).",
-      "failure": "❌ Misconfigurations were reported for the selected Dockerfile or Containerfile target(s).",
-      "infra_failure": "❌ The `trivy` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "trivy did not produce diagnostic output before the job failed.",
       "sarif": {
         "enabled": true,
         "default_level": "warning"
@@ -65,74 +27,30 @@
     },
     {
       "name": "dotenv-linter",
-      "heading": "### dotenv-linter",
-      "no_files": "No matching .env files were selected for `dotenv-linter`.",
-      "success": "✅ No issues were reported for the selected .env file target(s).",
-      "failure": "❌ Issues were reported for the selected .env file target(s).",
-      "infra_failure": "❌ The `dotenv-linter` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "dotenv-linter did not produce diagnostic output before the job failed.",
       "sarif": {
         "enabled": true
       }
     },
     {
       "name": "spectral",
-      "config_trigger_patterns": [
-        "^\\.spectral\\.(?:yml|yaml|json|js)$"
-      ],
-      "heading": "### spectral",
-      "no_files": "No matching YAML or JSON files were selected for `spectral`.",
-      "success": "✅ No issues were reported for the selected YAML or JSON target(s).",
-      "failure": "❌ Issues were reported for the selected YAML or JSON target(s).",
-      "infra_failure": "❌ The `spectral` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "spectral did not produce diagnostic output before the job failed.",
       "sarif": {
         "enabled": true
       }
     },
     {
       "name": "yamllint",
-      "config_trigger_patterns": [
-        "^\\.yamllint(?:\\.(?:yaml|yml))?$"
-      ],
-      "execution_group": "yaml",
-      "heading": "### yamllint",
-      "no_files": "No matching YAML files were selected for `yamllint`.",
-      "success": "✅ No issues were reported for the selected YAML target(s).",
-      "failure": "❌ Issues were reported for the selected YAML target(s).",
-      "infra_failure": "❌ The `yamllint` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "yamllint did not produce diagnostic output before the job failed.",
       "sarif": {
         "enabled": true
       }
     },
     {
       "name": "yamlfmt",
-      "config_trigger_patterns": [
-        "^(?:\\.yamlfmt|yamlfmt\\.(?:yaml|yml)|\\.yamlfmt\\.(?:yaml|yml))$"
-      ],
-      "execution_group": "yaml",
-      "heading": "### yamlfmt",
-      "no_files": "No matching YAML files were selected for `yamlfmt`.",
-      "success": "✅ No issues were reported for the selected YAML target(s).",
-      "failure": "❌ Issues were reported for the selected YAML target(s).",
-      "infra_failure": "❌ The `yamlfmt` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "yamlfmt did not produce diagnostic output before the job failed.",
       "sarif": {
         "enabled": true
       }
     },
     {
       "name": "markdownlint-cli2",
-      "config_trigger_patterns": [
-        "(?:^|\\/)\\.(?:markdownlint-cli2\\.(?:jsonc|yaml|cjs|mjs)|markdownlint\\.(?:jsonc|json|yaml|yml|cjs|mjs))$"
-      ],
-      "heading": "### markdownlint-cli2",
-      "no_files": "No matching Markdown files were selected for `markdownlint-cli2`.",
-      "success": "✅ No issues were reported for the selected Markdown target(s).",
-      "failure": "❌ Issues were reported for the selected Markdown target(s).",
-      "infra_failure": "❌ The `markdownlint-cli2` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "markdownlint-cli2 did not produce diagnostic output before the job failed.",
       "sarif": {
         "enabled": true
       }
@@ -140,75 +58,35 @@
     {
       "name": "textlint",
       "default_disabled": true,
-      "config_trigger_patterns": [
-        "^\\.textlintrc$"
-      ],
+      "isolated": true,
       "required_root_files": [
         ".textlintrc"
       ],
-      "heading": "### textlint",
-      "no_files": "No matching text files were selected for `textlint`.",
-      "success": "✅ No issues were reported for the selected text target(s).",
-      "failure": "❌ Issues were reported for the selected text target(s).",
-      "infra_failure": "❌ The `textlint` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "textlint did not produce diagnostic output before the job failed.",
       "sarif": {
         "enabled": true
       }
     },
     {
       "name": "ruff",
-      "config_trigger_patterns": [
-        "(?:^|\\/)(?:pyproject\\.toml|ruff\\.toml|\\.ruff\\.toml)$"
-      ],
-      "heading": "### ruff",
-      "no_files": "No matching Python files were selected for `ruff`.",
-      "success": "✅ No issues were reported for the selected Python target(s).",
-      "failure": "❌ Issues were reported for the selected Python target(s).",
-      "infra_failure": "❌ The `ruff` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "ruff did not produce diagnostic output before the job failed.",
       "sarif": {
         "enabled": true
       }
     },
     {
       "name": "rustfmt",
-      "config_trigger_patterns": [
-        "(?:^|\\/)(?:rustfmt\\.toml|\\.rustfmt\\.toml|rust-toolchain(?:\\.toml)?)$"
-      ],
-      "heading": "### rustfmt",
-      "no_files": "No matching Rust files were selected for `rustfmt`.",
-      "success": "✅ No issues were reported for the selected Rust file target(s).",
-      "failure": "❌ Issues were reported for the selected Rust file target(s).",
-      "infra_failure": "❌ The `rustfmt` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "rustfmt did not produce diagnostic output before the job failed.",
       "sarif": {
         "enabled": true
       }
     },
     {
       "name": "cargo-clippy",
-      "config_trigger_patterns": [
-        "(?:^|\\/)(?:clippy\\.toml|\\.clippy\\.toml|rust-toolchain(?:\\.toml)?|\\.cargo\\/config(?:\\.toml)?)$"
-      ],
-      "heading": "### cargo-clippy",
-      "no_files": "No matching Rust files were selected for `cargo-clippy`.",
-      "success": "✅ No issues were reported for the selected Cargo project target(s).",
-      "failure": "❌ Issues were reported for the selected Cargo project target(s).",
-      "infra_failure": "❌ The `cargo-clippy` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "cargo-clippy did not produce diagnostic output before the job failed.",
+      "isolated": true,
       "sarif": {
         "enabled": true
       }
     },
     {
       "name": "cargo-deny",
-      "heading": "### cargo-deny",
-      "no_files": "No matching Cargo dependency or policy files were selected for `cargo-deny`.",
-      "success": "✅ No issues were reported for the selected Cargo project target(s).",
-      "failure": "❌ Issues were reported for the selected Cargo project target(s).",
-      "infra_failure": "❌ The `cargo-deny` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "cargo-deny did not produce diagnostic output before the job failed.",
       "sarif": {
         "enabled": true,
         "target_kind": "cargo-projects"
@@ -216,77 +94,30 @@
     },
     {
       "name": "taplo",
-      "config_trigger_patterns": [
-        "^(?:\\.taplo\\.toml|taplo\\.toml)$"
-      ],
-      "heading": "### taplo",
-      "no_files": "No matching TOML files were selected for `taplo`.",
-      "success": "✅ No issues were reported for the selected TOML target(s).",
-      "failure": "❌ Issues were reported for the selected TOML target(s).",
-      "infra_failure": "❌ The `taplo` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "taplo did not produce diagnostic output before the job failed.",
       "sarif": {
         "enabled": true
       }
     },
     {
       "name": "biome",
-      "config_trigger_patterns": [
-        "(?:^|\\/)(?:biome\\.jsonc?|\\.biome\\.jsonc?)$"
-      ],
-      "heading": "### biome",
-      "no_files": "No matching JavaScript, TypeScript, or JSON/JSONC files were selected for `biome`.",
-      "success": "✅ No issues were reported for the selected JavaScript, TypeScript, or JSON/JSONC target(s).",
-      "failure": "❌ Issues were reported for the selected JavaScript, TypeScript, or JSON/JSONC target(s).",
-      "infra_failure": "❌ The `biome` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "biome did not produce diagnostic output before the job failed.",
       "sarif": {
         "enabled": true
       }
     },
     {
       "name": "editorconfig-checker",
-      "config_trigger_patterns": [
-        "(?:^|\\/)\\.editorconfig$",
-        "^(?:\\.editorconfig-checker\\.json|\\.ecrc)$"
-      ],
-      "heading": "### editorconfig-checker",
-      "no_files": "No matching editorconfig-checker files were selected for `editorconfig-checker`.",
-      "success": "✅ No issues were reported for the selected editorconfig-checker target(s).",
-      "failure": "❌ Issues were reported for the selected editorconfig-checker target(s).",
-      "infra_failure": "❌ The `editorconfig-checker` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "editorconfig-checker did not produce diagnostic output before the job failed.",
       "sarif": {
         "enabled": true
       }
     },
     {
       "name": "shellcheck",
-      "config_trigger_patterns": [
-        "(?:^|\\/)(?:\\.shellcheckrc|shellcheckrc)$"
-      ],
-      "heading": "### shellcheck",
-      "no_files": "No matching shell script files were selected for `shellcheck`.",
-      "success": "✅ No issues were reported for the selected shell script target(s).",
-      "failure": "❌ Issues were reported for the selected shell script target(s).",
-      "infra_failure": "❌ The `shellcheck` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "shellcheck did not produce diagnostic output before the job failed.",
       "sarif": {
         "enabled": true
       }
     },
     {
       "name": "zizmor",
-      "config_trigger_patterns": [
-        "^(?:zizmor\\.(?:yaml|yml)|\\.github\\/zizmor\\.(?:yaml|yml))$"
-      ],
-      "execution_group": "github-actions",
-      "heading": "### zizmor",
-      "no_files": "No matching workflow files were selected for `zizmor`.",
-      "success": "✅ No issues were reported for the selected GitHub Actions workflow target(s).",
-      "failure": "❌ Issues were reported for the selected GitHub Actions workflow target(s).",
-      "infra_failure": "❌ The `zizmor` workflow failed before producing a detailed report. See the workflow logs.",
-      "details_fallback": "zizmor did not produce diagnostic output before the job failed.",
       "sarif": {
         "enabled": true
       }

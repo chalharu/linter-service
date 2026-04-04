@@ -41,12 +41,6 @@ function scaffoldFakeLinterRepo(repoDir) {
 				linters: [
 					{
 						name: "fake-linter",
-						heading: "### fake-linter",
-						no_files: "No files selected.",
-						success: "✅ No issues.",
-						failure: "❌ Issues found.",
-						infra_failure: "❌ Infra failure.",
-						details_fallback: "No output.",
 						sarif: {
 							enabled: true,
 						},

@@ -21,8 +21,10 @@ function cleanupTempRepo(tempDir) {
 	fs.rmSync(tempDir, { force: true, recursive: true });
 }
 
-function writeLinterConfig(configPath, linters) {
-	fs.writeFileSync(configPath, JSON.stringify({ linters }, null, 2), "utf8");
+function writeExecutable(filePath, content) {
+	fs.mkdirSync(path.dirname(filePath), { recursive: true });
+	fs.writeFileSync(filePath, content, "utf8");
+	fs.chmodSync(filePath, 0o755);
 }
 
 test("writes selected pull request files and the count output", () => {
@@ -148,7 +150,6 @@ test("expands to all matching repository files when a config trigger changes", (
 	const contextPath = path.join(context.runnerTemp, "context.json");
 	const outputPath = path.join(context.runnerTemp, "selected-files.txt");
 	const patternPath = path.join(context.runnerTemp, "patterns.txt");
-	const linterConfigPath = path.join(context.runnerTemp, "linters.json");
 
 	fs.mkdirSync(path.join(context.repoDir, "docs"), { recursive: true });
 	fs.writeFileSync(path.join(context.repoDir, ".textlintrc"), "{}\n", "utf8");
@@ -171,18 +172,16 @@ test("expands to all matching repository files when a config trigger changes", (
 		"utf8",
 	);
 	fs.writeFileSync(patternPath, "\\.(?:md|txt)$\n", "utf8");
-	writeLinterConfig(linterConfigPath, [
-		{
-			name: "textlint",
-			config_trigger_patterns: ["^\\.textlintrc$"],
-		},
-	]);
+	writeExecutable(
+		path.join(context.repoDir, "textlint", "config_trigger_patterns.sh"),
+		"#!/usr/bin/env bash\nprintf '%s\\n' '^\\.textlintrc$'\n",
+	);
 
 	try {
 		const result = runFromEnv({
 			CONTEXT_PATH: contextPath,
-			LINTER_CONFIG_PATH: linterConfigPath,
 			LINTER_NAME: "textlint",
+			LINTER_SERVICE_PATH: context.repoDir,
 			OUTPUT_PATH: outputPath,
 			PATTERN_PATH: patternPath,
 			SOURCE_REPOSITORY_PATH: context.repoDir,
@@ -207,7 +206,6 @@ test("expands repository selection when a config trigger also matches target pat
 	const contextPath = path.join(context.runnerTemp, "context.json");
 	const outputPath = path.join(context.runnerTemp, "selected-files.txt");
 	const patternPath = path.join(context.runnerTemp, "patterns.txt");
-	const linterConfigPath = path.join(context.runnerTemp, "linters.json");
 
 	fs.mkdirSync(path.join(context.repoDir, "docs"), { recursive: true });
 	fs.writeFileSync(path.join(context.repoDir, ".yamllint.yml"), "{}\n", "utf8");
@@ -229,18 +227,16 @@ test("expands repository selection when a config trigger also matches target pat
 		"utf8",
 	);
 	fs.writeFileSync(patternPath, "\\.(?:yaml|yml)$\n", "utf8");
-	writeLinterConfig(linterConfigPath, [
-		{
-			name: "yamllint",
-			config_trigger_patterns: ["^\\.yamllint(?:\\.(?:yaml|yml))?$"],
-		},
-	]);
+	writeExecutable(
+		path.join(context.repoDir, "yamllint", "config_trigger_patterns.sh"),
+		"#!/usr/bin/env bash\nprintf '%s\\n' '^\\.yamllint(?:\\.(?:yaml|yml))?$'\n",
+	);
 
 	try {
 		const result = runFromEnv({
 			CONTEXT_PATH: contextPath,
-			LINTER_CONFIG_PATH: linterConfigPath,
 			LINTER_NAME: "yamllint",
+			LINTER_SERVICE_PATH: context.repoDir,
 			OUTPUT_PATH: outputPath,
 			PATTERN_PATH: patternPath,
 			SOURCE_REPOSITORY_PATH: context.repoDir,
