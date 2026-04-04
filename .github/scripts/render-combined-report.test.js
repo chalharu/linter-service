@@ -22,8 +22,15 @@ test("writes comment and check-run reports from detailed linter summaries", () =
 			{
 				comment_body:
 					"### actionlint\n\n✅ No issues were reported for the selected GitHub Actions workflow target(s).\n",
+				checked_project_count: 0,
 				conclusion: "success",
+				details_text: "",
 				linter_name: "actionlint",
+				selected_file_count: 2,
+				status: "success",
+				summary_text:
+					"✅ No issues were reported for the selected GitHub Actions workflow target(s).",
+				target_summary: "2 file(s)",
 			},
 			null,
 			2,
@@ -35,9 +42,15 @@ test("writes comment and check-run reports from detailed linter summaries", () =
 		JSON.stringify(
 			{
 				comment_body:
-					"### rustfmt\n\n❌ Rust formatting issues were detected.\n",
+					"### rustfmt\n\n❌ Rust formatting issues were detected.\n\n<details><summary>Details</summary>\n\n```text\ndiff --check failed\n```\n</details>\n",
+				checked_project_count: 2,
 				conclusion: "failure",
+				details_text: "diff --check failed",
 				linter_name: "rustfmt",
+				selected_file_count: 4,
+				status: "failure",
+				summary_text: "❌ Rust formatting issues were detected.",
+				target_summary: "4 file(s), 2 Cargo project(s)",
 			},
 			null,
 			2,
@@ -76,13 +89,20 @@ test("writes comment and check-run reports from detailed linter summaries", () =
 				"",
 				"1 of 2 selected linter(s) reported issues or failed.",
 				"",
-				"### actionlint",
+				"| Linter | Result | Scope | Summary |",
+				"| --- | --- | --- | --- |",
+				"| `actionlint` | ✅ Pass | 2 file(s) | No issues were reported for the selected GitHub Actions workflow target(s). |",
+				"| `rustfmt` | ❌ Issues | 4 file(s), 2 Cargo project(s) | Rust formatting issues were detected. |",
 				"",
-				"✅ No issues were reported for the selected GitHub Actions workflow target(s).",
+				"<details><summary>Show details for 1 failing linter(s)</summary>",
 				"",
 				"### rustfmt",
 				"",
-				"❌ Rust formatting issues were detected.",
+				"```text",
+				"diff --check failed",
+				"```",
+				"",
+				"</details>",
 				"",
 			].join("\n"),
 		);
@@ -93,13 +113,20 @@ test("writes comment and check-run reports from detailed linter summaries", () =
 				"",
 				"1 of 2 selected linter(s) reported issues or failed.",
 				"",
-				"### actionlint",
+				"| Linter | Result | Scope | Summary |",
+				"| --- | --- | --- | --- |",
+				"| `actionlint` | ✅ Pass | 2 file(s) | No issues were reported for the selected GitHub Actions workflow target(s). |",
+				"| `rustfmt` | ❌ Issues | 4 file(s), 2 Cargo project(s) | Rust formatting issues were detected. |",
 				"",
-				"✅ No issues were reported for the selected GitHub Actions workflow target(s).",
+				"<details><summary>Show details for 1 failing linter(s)</summary>",
 				"",
 				"### rustfmt",
 				"",
-				"❌ Rust formatting issues were detected.",
+				"```text",
+				"diff --check failed",
+				"```",
+				"",
+				"</details>",
 				"",
 			].join("\n"),
 		);
@@ -146,12 +173,12 @@ test("falls back to decrypt failure messaging when detailed summaries are unavai
 		);
 		assert.match(
 			commentBody,
-			/❌ The encrypted `cargo-deny` summary could not be decrypted\. See the workflow logs\./,
+			/\| `cargo-deny` \| ❌ Missing summary \| n\/a \| The encrypted `cargo-deny` summary could not be decrypted\. See the workflow logs\. \|/,
 		);
 		assert.doesNotMatch(checkRunText, /<!-- linter-service:results -->/);
 		assert.match(
 			checkRunText,
-			/❌ The encrypted `cargo-deny` summary could not be decrypted\. See the workflow logs\./,
+			/### cargo-deny\n\nThe encrypted `cargo-deny` summary could not be decrypted\. See the workflow logs\./,
 		);
 	} finally {
 		fs.rmSync(tempDir, { force: true, recursive: true });

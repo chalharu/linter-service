@@ -2,7 +2,10 @@ const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const { renderReport } = require("./render-linter-report.js");
+const {
+	buildReportSummary,
+	renderReport,
+} = require("./render-linter-report.js");
 const { renderSarif } = require("./render-linter-sarif.js");
 const { runFromEnv: selectLintTargets } = require("./select-lint-targets.js");
 const { applyWorkflowEnvironment } = require("./workflow-command-env.js");
@@ -162,15 +165,7 @@ function runLinterBatch({
 
 			fs.writeFileSync(
 				summaryPath,
-				JSON.stringify(
-					{
-						comment_body: report.body,
-						conclusion: report.conclusion,
-						linter_name: linterName,
-					},
-					null,
-					2,
-				),
+				JSON.stringify(buildReportSummary({ ...report, linterName }), null, 2),
 				"utf8",
 			);
 

@@ -112,8 +112,8 @@ function hasRequiredRootFiles(definition, repositoryPath) {
 
 function buildLinterJobAssignments({ definitions, selectedLinters }) {
 	const selectedSet = new Set(selectedLinters);
-	const groupedAssignments = new Map();
 	const assignments = [];
+	let sharedAssignment = null;
 
 	for (const definition of definitions) {
 		validateDefinition(definition);
@@ -122,30 +122,26 @@ function buildLinterJobAssignments({ definitions, selectedLinters }) {
 			continue;
 		}
 
-		if (typeof definition.execution_group === "string") {
-			const artifactName = `group-${definition.execution_group}`;
-			let assignment = groupedAssignments.get(definition.execution_group);
-
-			if (!assignment) {
-				assignment = {
-					artifact_name: artifactName,
-					linter_names: [],
-					name: "",
-				};
-				groupedAssignments.set(definition.execution_group, assignment);
-				assignments.push(assignment);
-			}
-
-			assignment.linter_names.push(definition.name);
-			assignment.name = assignment.linter_names.join(" + ");
+		if (definition.isolated === true) {
+			assignments.push({
+				artifact_name: definition.name,
+				linter_names: [definition.name],
+				name: definition.name,
+			});
 			continue;
 		}
 
-		assignments.push({
-			artifact_name: definition.name,
-			linter_names: [definition.name],
-			name: definition.name,
-		});
+		if (!sharedAssignment) {
+			sharedAssignment = {
+				artifact_name: "shared",
+				linter_names: [],
+				name: "",
+			};
+			assignments.push(sharedAssignment);
+		}
+
+		sharedAssignment.linter_names.push(definition.name);
+		sharedAssignment.name = sharedAssignment.linter_names.join(" + ");
 	}
 
 	return assignments;
@@ -198,6 +194,13 @@ function validateDefinition(definition) {
 		typeof definition.default_disabled !== "boolean"
 	) {
 		throw new Error("default_disabled must be a boolean when present");
+	}
+
+	if (
+		typeof definition.isolated !== "undefined" &&
+		typeof definition.isolated !== "boolean"
+	) {
+		throw new Error("isolated must be a boolean when present");
 	}
 
 	if (

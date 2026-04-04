@@ -5,7 +5,6 @@
       "config_trigger_patterns": [
         "^\\.github\\/actionlint\\.(?:yaml|yml)$"
       ],
-      "execution_group": "github-actions",
       "heading": "### actionlint",
       "no_files": "No matching workflow files were selected for `actionlint`.",
       "success": "✅ No issues were reported for the selected GitHub Actions workflow target(s).",
@@ -21,7 +20,6 @@
       "config_trigger_patterns": [
         "^(?:\\.ghalint\\.(?:yaml|yml)|ghalint\\.(?:yaml|yml)|\\.github\\/ghalint\\.(?:yaml|yml))$"
       ],
-      "execution_group": "github-actions",
       "heading": "### ghalint",
       "no_files": "No matching GitHub Actions workflow files were selected for `ghalint`.",
       "success": "✅ No issues were reported for the selected GitHub Actions workflow target(s).",
@@ -95,7 +93,6 @@
       "config_trigger_patterns": [
         "^\\.yamllint(?:\\.(?:yaml|yml))?$"
       ],
-      "execution_group": "yaml",
       "heading": "### yamllint",
       "no_files": "No matching YAML files were selected for `yamllint`.",
       "success": "✅ No issues were reported for the selected YAML target(s).",
@@ -111,7 +108,6 @@
       "config_trigger_patterns": [
         "^(?:\\.yamlfmt|yamlfmt\\.(?:yaml|yml)|\\.yamlfmt\\.(?:yaml|yml))$"
       ],
-      "execution_group": "yaml",
       "heading": "### yamlfmt",
       "no_files": "No matching YAML files were selected for `yamlfmt`.",
       "success": "✅ No issues were reported for the selected YAML target(s).",
@@ -140,6 +136,7 @@
     {
       "name": "textlint",
       "default_disabled": true,
+      "isolated": true,
       "config_trigger_patterns": [
         "^\\.textlintrc$"
       ],
@@ -188,6 +185,7 @@
     },
     {
       "name": "cargo-clippy",
+      "isolated": true,
       "config_trigger_patterns": [
         "(?:^|\\/)(?:clippy\\.toml|\\.clippy\\.toml|rust-toolchain(?:\\.toml)?|\\.cargo\\/config(?:\\.toml)?)$"
       ],
@@ -280,7 +278,6 @@
       "config_trigger_patterns": [
         "^(?:zizmor\\.(?:yaml|yml)|\\.github\\/zizmor\\.(?:yaml|yml))$"
       ],
-      "execution_group": "github-actions",
       "heading": "### zizmor",
       "no_files": "No matching workflow files were selected for `zizmor`.",
       "success": "✅ No issues were reported for the selected GitHub Actions workflow target(s).",

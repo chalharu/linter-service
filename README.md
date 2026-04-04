@@ -138,6 +138,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 
 - 追加先は root の `linters.json` と root 直下の `<name>/` directory である。`.github/scripts/` は shared script 専用である。
 - 最低限の構成は `patterns.sh`, `install.sh`, `run.sh` である。shared helper が必要な場合のみ `common.sh` を追加する。
+- `linters.json` で `isolated: true` を付けた linter は shared batch から分離し、専用 job で実行する。
 - 参考実装は `actionlint/` が最小構成、`cargo-clippy/` と `textlint/` が隔離実行や config 解決を含む例である。
 - fixture は `tests/<case>/target/`, `result.json`, `sarif.json` の構成である。最低でも pass と fail の 2 系統を用意する。
 - `linters.json` が comment 見出し、成功 / 失敗文言、fallback message の正本である。通常は workflow 個別修正不要である。

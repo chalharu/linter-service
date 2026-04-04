@@ -50,6 +50,12 @@ test("lists checked file paths in a successful non-cargo linter report", () => {
 		assert.doesNotMatch(report.body, /2 changed GitHub Actions workflow/);
 		assert.equal(summary.comment_body, report.body);
 		assert.equal(summary.conclusion, "success");
+		assert.equal(summary.status, "success");
+		assert.equal(
+			summary.summary_text,
+			"✅ No issues were reported for the selected GitHub Actions workflow target(s).",
+		);
+		assert.equal(summary.target_summary, "2 file(s)");
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}
@@ -351,6 +357,8 @@ test("keeps no-files reports free from checked target sections", () => {
 		assert.equal(report.conclusion, "success");
 		assert.equal(report.selectedFiles.length, 0);
 		assert.equal(report.checkedProjects.length, 0);
+		assert.equal(report.status, "no_targets");
+		assert.equal(report.targetSummary, "n/a");
 		assert.match(
 			report.body,
 			/No matching Python files were selected for `ruff`\./,

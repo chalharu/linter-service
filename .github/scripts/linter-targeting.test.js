@@ -216,16 +216,14 @@ test("readPatterns trims blank lines", () => {
 	}
 });
 
-test("buildLinterJobAssignments groups selected linters in definition order", () => {
+test("buildLinterJobAssignments batches non-isolated linters and keeps isolated ones separate", () => {
 	const assignments = buildLinterJobAssignments({
 		definitions: [
 			{
-				execution_group: "github-actions",
 				name: "actionlint",
 				patterns: ["workflow"],
 			},
 			{
-				execution_group: "github-actions",
 				name: "ghalint",
 				patterns: ["workflow"],
 			},
@@ -234,12 +232,11 @@ test("buildLinterJobAssignments groups selected linters in definition order", ()
 				patterns: ["js"],
 			},
 			{
-				execution_group: "yaml",
 				name: "yamllint",
+				isolated: true,
 				patterns: ["yaml"],
 			},
 			{
-				execution_group: "yaml",
 				name: "yamlfmt",
 				patterns: ["yaml"],
 			},
@@ -249,19 +246,14 @@ test("buildLinterJobAssignments groups selected linters in definition order", ()
 
 	assert.deepEqual(assignments, [
 		{
-			artifact_name: "group-github-actions",
-			linter_names: ["actionlint", "ghalint"],
-			name: "actionlint + ghalint",
+			artifact_name: "shared",
+			linter_names: ["actionlint", "ghalint", "biome", "yamlfmt"],
+			name: "actionlint + ghalint + biome + yamlfmt",
 		},
 		{
-			artifact_name: "biome",
-			linter_names: ["biome"],
-			name: "biome",
-		},
-		{
-			artifact_name: "group-yaml",
-			linter_names: ["yamllint", "yamlfmt"],
-			name: "yamllint + yamlfmt",
+			artifact_name: "yamllint",
+			linter_names: ["yamllint"],
+			name: "yamllint",
 		},
 	]);
 });
@@ -280,5 +272,22 @@ test("buildLinterJobAssignments rejects invalid execution group names", () => {
 				selectedLinters: ["yamllint"],
 			}),
 		/execution_group must contain only/u,
+	);
+});
+
+test("buildLinterJobAssignments rejects non-boolean isolated values", () => {
+	assert.throws(
+		() =>
+			buildLinterJobAssignments({
+				definitions: [
+					{
+						isolated: "yes",
+						name: "textlint",
+						patterns: ["txt"],
+					},
+				],
+				selectedLinters: ["textlint"],
+			}),
+		/isolated must be a boolean when present/u,
 	);
 });

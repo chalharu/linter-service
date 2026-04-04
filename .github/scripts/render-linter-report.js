@@ -24,9 +24,8 @@ function runFromEnv(env = process.env) {
 	});
 
 	writeReportFiles({
-		body: report.body,
-		conclusion: report.conclusion,
 		linterName,
+		report,
 		runnerTemp,
 	});
 
@@ -60,24 +59,36 @@ function renderReport({
 		!hasStepFailure && (selectedFiles.length === 0 || exitCodeRaw === "0");
 	const conclusion = success ? "success" : "failure";
 	const lines = [linterConfig.heading, ""];
+	let detailsText = "";
+	let status = "failure";
+	let summaryText = "";
 
 	if (hasStepFailure && result === null) {
-		lines.push(linterConfig.infra_failure);
+		status = "infra_failure";
+		summaryText = linterConfig.infra_failure;
+		lines.push(summaryText);
 		appendTargetLines(lines, targetLines);
 	} else if (selectedFiles.length === 0 && exitCodeRaw === "") {
-		lines.push(linterConfig.no_files);
+		status = "no_targets";
+		summaryText = linterConfig.no_files;
+		lines.push(summaryText);
 	} else if (success) {
-		lines.push(linterConfig.success);
+		status = "success";
+		summaryText = linterConfig.success;
+		lines.push(summaryText);
 		appendTargetLines(lines, targetLines);
 	} else {
-		lines.push(linterConfig.failure);
+		status = "failure";
+		summaryText = linterConfig.failure;
+		detailsText = resolveDetails(result, linterConfig.details_fallback);
+		lines.push(summaryText);
 		appendTargetLines(lines, targetLines);
 		lines.push(
 			"",
 			"<details><summary>Details</summary>",
 			"",
 			"```text",
-			resolveDetails(result, linterConfig.details_fallback),
+			detailsText,
 			"```",
 			"</details>",
 		);
@@ -87,7 +98,11 @@ function renderReport({
 		body: `${lines.join("\n")}\n`,
 		checkedProjects,
 		conclusion,
+		detailsText,
 		selectedFiles,
+		status,
+		summaryText,
+		targetSummary: buildTargetSummary(selectedFiles, checkedProjects),
 	};
 }
 
@@ -178,6 +193,20 @@ function buildTargetLines(selectedFiles, checkedProjects) {
 	}
 
 	return lines;
+}
+
+function buildTargetSummary(selectedFiles, checkedProjects) {
+	const parts = [];
+
+	if (selectedFiles.length > 0) {
+		parts.push(`${selectedFiles.length} file(s)`);
+	}
+
+	if (checkedProjects.length > 0) {
+		parts.push(`${checkedProjects.length} Cargo project(s)`);
+	}
+
+	return parts.length > 0 ? parts.join(", ") : "n/a";
 }
 
 function formatPathSection(title, paths) {
@@ -406,25 +435,53 @@ function escapeHtml(value) {
 		.replaceAll(">", "&gt;");
 }
 
-function writeReportFiles({ body, conclusion, linterName, runnerTemp }) {
+function buildReportSummary({
+	body,
+	checkedProjects = [],
+	conclusion,
+	detailsText = "",
+	linterName,
+	selectedFiles = [],
+	status,
+	summaryText = "",
+	targetSummary,
+}) {
+	return {
+		checked_project_count: Array.isArray(checkedProjects)
+			? checkedProjects.length
+			: 0,
+		comment_body: body,
+		conclusion,
+		details_text: detailsText,
+		linter_name: linterName,
+		selected_file_count: Array.isArray(selectedFiles)
+			? selectedFiles.length
+			: 0,
+		status:
+			typeof status === "string" && status.length > 0
+				? status
+				: conclusion === "success"
+					? "success"
+					: "failure",
+		summary_text: summaryText,
+		target_summary:
+			typeof targetSummary === "string" && targetSummary.length > 0
+				? targetSummary
+				: "n/a",
+	};
+}
+
+function writeReportFiles({ linterName, report, runnerTemp }) {
 	const commentPath = path.join(runnerTemp, "linter-comment.md");
 	const summaryPath = path.join(
 		runnerTemp,
 		`linter-summary-${linterName}.json`,
 	);
 
-	fs.writeFileSync(commentPath, body, "utf8");
+	fs.writeFileSync(commentPath, report.body, "utf8");
 	fs.writeFileSync(
 		summaryPath,
-		JSON.stringify(
-			{
-				comment_body: body,
-				conclusion,
-				linter_name: linterName,
-			},
-			null,
-			2,
-		),
+		JSON.stringify(buildReportSummary({ ...report, linterName }), null, 2),
 		"utf8",
 	);
 }
@@ -434,6 +491,8 @@ if (require.main === module) {
 }
 
 module.exports = {
+	buildReportSummary,
+	buildTargetSummary,
 	collectProjectTargets,
 	findNearestCargoManifest,
 	renderReport,

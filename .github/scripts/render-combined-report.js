@@ -40,27 +40,29 @@ function renderCombinedReport({
 	summaryRoot,
 }) {
 	const summaries = readLinterSummaries(summaryRoot);
-	const sections = [];
+	const rows = [];
+	const detailSections = [];
 	let failed = 0;
 
 	for (const linterName of selectedLinters) {
-		const summary = summaries.get(linterName) ?? {};
-		const conclusion = String(summary.conclusion || "");
-		let section = String(summary.comment_body || "").trim();
+		const summary = normalizeSummary(
+			summaries.get(linterName) ??
+				buildFallbackSummary({
+					decryptOutcome,
+					linterName,
+				}),
+			linterName,
+		);
 
-		if (!section) {
-			section = buildFallbackSection({
-				decryptOutcome,
-				linterName,
-			});
-		}
-
-		if (conclusion !== "success") {
+		if (summary.conclusion !== "success") {
 			failed += 1;
 		}
 
-		if (section) {
-			sections.push(section);
+		rows.push(summary);
+
+		const detailSection = buildDetailSection(summary);
+		if (detailSection) {
+			detailSections.push(detailSection);
 		}
 	}
 
@@ -87,8 +89,10 @@ function renderCombinedReport({
 	];
 	const checkRunLines = ["## linter-service", "", overallSummary, ""];
 
-	appendSections(commentLines, sections);
-	appendSections(checkRunLines, sections);
+	appendSummaryTable(commentLines, rows);
+	appendSummaryTable(checkRunLines, rows);
+	appendFailureDetails(commentLines, detailSections);
+	appendFailureDetails(checkRunLines, detailSections);
 
 	return {
 		checkRunText: `${checkRunLines.join("\n")}\n`,
@@ -111,29 +115,155 @@ function writeCombinedReportFiles({ checkRunText, commentBody, runnerTemp }) {
 	);
 }
 
-function appendSections(lines, sections) {
-	for (const [index, section] of sections.entries()) {
-		lines.push(section);
-		if (index !== sections.length - 1) {
-			lines.push("");
-		}
+function appendSummaryTable(lines, rows) {
+	if (rows.length === 0) {
+		return;
+	}
+
+	lines.push(
+		"| Linter | Result | Scope | Summary |",
+		"| --- | --- | --- | --- |",
+	);
+
+	for (const row of rows) {
+		lines.push(
+			[
+				"|",
+				` \`${row.linterName}\` `,
+				"|",
+				` ${escapeTableCell(buildResultLabel(row.status))} `,
+				"|",
+				` ${escapeTableCell(row.targetSummary)} `,
+				"|",
+				` ${escapeTableCell(stripLeadingStatusMarker(row.summaryText))} `,
+				"|",
+			].join(""),
+		);
 	}
 }
 
-function buildFallbackSection({ decryptOutcome, linterName }) {
-	if (decryptOutcome === "failure") {
-		return [
-			`### ${linterName}`,
-			"",
-			`❌ The encrypted \`${linterName}\` summary could not be decrypted. See the workflow logs.`,
-		].join("\n");
+function appendFailureDetails(lines, detailSections) {
+	if (detailSections.length === 0) {
+		return;
 	}
 
-	return [
-		`### ${linterName}`,
+	lines.push(
 		"",
-		`❌ The \`${linterName}\` workflow failed before producing a detailed report. See the workflow logs.`,
-	].join("\n");
+		`<details><summary>Show details for ${detailSections.length} failing linter(s)</summary>`,
+		"",
+	);
+
+	for (const [index, detailSection] of detailSections.entries()) {
+		lines.push(detailSection);
+		if (index !== detailSections.length - 1) {
+			lines.push("");
+		}
+	}
+
+	lines.push("", "</details>");
+}
+
+function buildDetailSection(summary) {
+	if (!isFailureLikeStatus(summary.status)) {
+		return "";
+	}
+
+	const lines = [`### ${summary.linterName}`, ""];
+
+	if (summary.status === "failure" && summary.detailsText.length > 0) {
+		lines.push("```text", summary.detailsText, "```");
+		return lines.join("\n");
+	}
+
+	lines.push(stripLeadingStatusMarker(summary.summaryText));
+	return lines.join("\n");
+}
+
+function buildFallbackSummary({ decryptOutcome, linterName }) {
+	const summaryText =
+		decryptOutcome === "failure"
+			? `❌ The encrypted \`${linterName}\` summary could not be decrypted. See the workflow logs.`
+			: `❌ The \`${linterName}\` workflow failed before producing a detailed report. See the workflow logs.`;
+
+	return {
+		conclusion: "failure",
+		details_text: summaryText,
+		linter_name: linterName,
+		status: "missing_summary",
+		summary_text: summaryText,
+		target_summary: "n/a",
+	};
+}
+
+function buildResultLabel(status) {
+	switch (status) {
+		case "success":
+			return "✅ Pass";
+		case "no_targets":
+			return "⚪ No targets";
+		case "infra_failure":
+			return "❌ Failed";
+		case "missing_summary":
+			return "❌ Missing summary";
+		default:
+			return "❌ Issues";
+	}
+}
+
+function normalizeSummary(summary, linterName) {
+	const normalizedConclusion =
+		typeof summary?.conclusion === "string" && summary.conclusion.length > 0
+			? summary.conclusion
+			: "failure";
+	const summaryText =
+		typeof summary?.summary_text === "string" &&
+		summary.summary_text.trim().length > 0
+			? summary.summary_text.trim()
+			: extractSummaryText(summary?.comment_body);
+
+	return {
+		conclusion: normalizedConclusion,
+		detailsText:
+			typeof summary?.details_text === "string"
+				? summary.details_text.trim()
+				: "",
+		linterName,
+		status:
+			typeof summary?.status === "string" && summary.status.length > 0
+				? summary.status
+				: normalizedConclusion === "success"
+					? "success"
+					: "failure",
+		summaryText:
+			summaryText.length > 0
+				? summaryText
+				: `❌ The \`${linterName}\` workflow failed before producing a detailed report. See the workflow logs.`,
+		targetSummary:
+			typeof summary?.target_summary === "string" &&
+			summary.target_summary.trim().length > 0
+				? summary.target_summary.trim()
+				: "n/a",
+	};
+}
+
+function extractSummaryText(commentBody) {
+	if (typeof commentBody !== "string" || commentBody.trim().length === 0) {
+		return "";
+	}
+
+	for (const rawLine of commentBody.split(/\r?\n/u)) {
+		const line = rawLine.trim();
+		if (!line || line.startsWith("### ")) {
+			continue;
+		}
+		return line;
+	}
+
+	return "";
+}
+
+function isFailureLikeStatus(status) {
+	return ["failure", "infra_failure", "missing_summary"].includes(status);
 }
 
 function readLinterSummaries(summaryRoot) {
@@ -174,6 +304,19 @@ function readLinterSummaries(summaryRoot) {
 	return summaries;
 }
 
+function escapeTableCell(value) {
+	return String(value || "")
+		.replaceAll("|", "\\|")
+		.replaceAll("\r", " ")
+		.replaceAll("\n", " ");
+}
+
+function stripLeadingStatusMarker(text) {
+	return String(text || "")
+		.replace(/^[^A-Za-z0-9`]+/u, "")
+		.trim();
+}
+
 function parseSelectedLinters(rawValue) {
 	let selectedLinters;
 
@@ -208,7 +351,9 @@ if (require.main === module) {
 }
 
 module.exports = {
-	buildFallbackSection,
+	buildFallbackSummary,
+	buildResultLabel,
+	extractSummaryText,
 	parseSelectedLinters,
 	readLinterSummaries,
 	renderCombinedReport,

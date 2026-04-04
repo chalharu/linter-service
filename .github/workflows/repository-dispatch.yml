@@ -130,6 +130,11 @@ jobs:
               execution_group = item.get("execution_group")
               if isinstance(execution_group, str) and execution_group:
                   definition["execution_group"] = execution_group
+              isolated = item.get("isolated")
+              if isolated is not None:
+                  if not isinstance(isolated, bool):
+                      raise SystemExit(f"{linter_name}.isolated must be a boolean")
+                  definition["isolated"] = isolated
               default_disabled = item.get("default_disabled")
               if default_disabled is not None:
                   if not isinstance(default_disabled, bool):
@@ -500,73 +505,20 @@ jobs:
           echo "Routed event: ${ROUTED_EVENT_NAME}"
           echo "Selected linters: ${SELECTED_LINTERS_JSON}"
           echo "Selected linter jobs: ${SELECTED_LINTER_JOBS_JSON}"
-      - name: Derive artifact passphrase
+      - name: Report skipped lint execution
+        if: ${{ steps.collect.outputs.selected-linters-json == '[]' }}
         env:
-          CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
-          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
+          SKIP_REASON: ${{ steps.collect.outputs.skip-reason }}
         run: |
-          passphrase="$(bash "$LINTER_SERVICE_PATH/.github/scripts/artifact-passphrase.sh")"
-          echo "::add-mask::$passphrase"
-          echo "ARTIFACT_PASSPHRASE=$passphrase" >> "$GITHUB_ENV"
-      - name: Encrypt dispatch context artifact
+          if [ -n "$SKIP_REASON" ]; then
+            echo "$SKIP_REASON"
+          else
+            echo "No configured linters matched the selected target files."
+          fi
+      - name: Mask source repository context
+        if: ${{ steps.collect.outputs.skip-reason == '' && steps.collect.outputs.selected-linters-json != '[]' }}
         env:
           CONTEXT_PATH: ${{ steps.collect.outputs.context-path }}
-          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
-        run: |
-          encrypted_path="$RUNNER_TEMP/detect-targets-context.json.enc"
-          bash "$LINTER_SERVICE_PATH/.github/scripts/secure-artifact.sh" \
-            encrypt \
-            "$CONTEXT_PATH" \
-            "$encrypted_path"
-          rm -f "$CONTEXT_PATH"
-      - name: Upload dispatch context artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
-        with:
-          name: detect-targets-context
-          path: ${{ runner.temp }}/detect-targets-context.json.enc
-          if-no-files-found: error
-          retention-days: 1
-  notify-processing-started:
-    needs: detect-targets
-    if: ${{ needs.detect-targets.outputs.selected-linters-json != '[]' }}
-    permissions:
-      contents: read
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Download dispatch context artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: detect-targets-context
-          path: ${{ runner.temp }}/detect-targets-context
-      - name: Check out linter-service repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          path: linter-service
-          persist-credentials: false
-          ref: ${{ github.sha }}
-      - name: Derive artifact passphrase
-        env:
-          CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
-          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
-        run: |
-          passphrase="$(bash "$LINTER_SERVICE_PATH/.github/scripts/artifact-passphrase.sh")"
-          echo "::add-mask::$passphrase"
-          echo "ARTIFACT_PASSPHRASE=$passphrase" >> "$GITHUB_ENV"
-      - name: Decrypt dispatch context artifact
-        env:
-          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
-        run: |
-          encrypted_path="$RUNNER_TEMP/detect-targets-context/detect-targets-context.json.enc"
-          decrypted_path="$RUNNER_TEMP/detect-targets-context/detect-targets-context.json"
-          bash "$LINTER_SERVICE_PATH/.github/scripts/secure-artifact.sh" \
-            decrypt \
-            "$encrypted_path" \
-            "$decrypted_path"
-          rm -f "$encrypted_path"
-      - name: Mask repository metadata
-        env:
-          CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
           LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
         run: |
           python3 "$LINTER_SERVICE_PATH/.github/scripts/context-artifact.py" \
@@ -576,9 +528,10 @@ jobs:
             source_repo \
             source_head_sha
       - name: Decode source repository context
+        if: ${{ steps.collect.outputs.skip-reason == '' && steps.collect.outputs.selected-linters-json != '[]' }}
         id: decode_source_context
         env:
-          CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
+          CONTEXT_PATH: ${{ steps.collect.outputs.context-path }}
           LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
         run: |
           python3 "$LINTER_SERVICE_PATH/.github/scripts/context-artifact.py" \
@@ -590,7 +543,37 @@ jobs:
             source_head_sha=source-head-sha \
             source_owner=source-owner \
             source_repo=source-repo
+      - name: Derive artifact passphrase
+        if: ${{ steps.collect.outputs.skip-reason == '' }}
+        env:
+          CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
+        run: |
+          passphrase="$(bash "$LINTER_SERVICE_PATH/.github/scripts/artifact-passphrase.sh")"
+          echo "::add-mask::$passphrase"
+          echo "ARTIFACT_PASSPHRASE=$passphrase" >> "$GITHUB_ENV"
+      - name: Encrypt dispatch context artifact
+        if: ${{ steps.collect.outputs.skip-reason == '' }}
+        env:
+          CONTEXT_PATH: ${{ steps.collect.outputs.context-path }}
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
+        run: |
+          encrypted_path="$RUNNER_TEMP/detect-targets-context.json.enc"
+          bash "$LINTER_SERVICE_PATH/.github/scripts/secure-artifact.sh" \
+            encrypt \
+            "$CONTEXT_PATH" \
+            "$encrypted_path"
+          rm -f "$CONTEXT_PATH"
+      - name: Upload dispatch context artifact
+        if: ${{ steps.collect.outputs.skip-reason == '' }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: detect-targets-context
+          path: ${{ runner.temp }}/detect-targets-context.json.enc
+          if-no-files-found: error
+          retention-days: 1
       - name: Get source repository checker token
+        if: ${{ steps.collect.outputs.skip-reason == '' && steps.collect.outputs.selected-linters-json != '[]' }}
         id: get_source_token
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
         with:
@@ -600,6 +583,7 @@ jobs:
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ steps.decode_source_context.outputs.source-repo }}
       - name: Notify processing start
+        if: ${{ steps.collect.outputs.skip-reason == '' && steps.collect.outputs.selected-linters-json != '[]' }}
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         env:
           CHECK_RUN_EXTERNAL_ID: ${{ steps.decode_source_context.outputs.processing-check-external-id }}
@@ -613,7 +597,7 @@ jobs:
           LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
           PROCESSING_CHECK_EXTERNAL_ID: ${{ steps.decode_source_context.outputs.processing-check-external-id }}
           PROCESSING_CHECK_NAME: ${{ steps.decode_source_context.outputs.processing-check-name }}
-          SELECTED_LINTERS_JSON: ${{ needs.detect-targets.outputs.selected-linters-json }}
+          SELECTED_LINTERS_JSON: ${{ steps.collect.outputs.selected-linters-json }}
           SOURCE_HEAD_SHA: ${{ steps.decode_source_context.outputs.source-head-sha }}
           SOURCE_OWNER: ${{ steps.decode_source_context.outputs.source-owner }}
           SOURCE_REPO: ${{ steps.decode_source_context.outputs.source-repo }}
@@ -635,7 +619,6 @@ jobs:
     name: ${{ matrix.assignment.name }}
     needs:
       - detect-targets
-      - notify-processing-started
     if: ${{ needs.detect-targets.outputs.selected-linter-jobs-json != '[]' }}
     permissions:
       contents: read
@@ -653,7 +636,6 @@ jobs:
   publish-results:
     needs:
       - detect-targets
-      - notify-processing-started
       - run-linters
     if: ${{ always() && needs.detect-targets.outputs.skip-reason == '' }}
     permissions:
@@ -820,6 +802,14 @@ jobs:
           SELECTED_LINTERS_JSON: ${{ needs.detect-targets.outputs.selected-linters-json }}
         run: |
           node "$LINTER_SERVICE_PATH/.github/scripts/prepare-deselected-sarif.js"
+      - name: Aggregate SARIF artifacts
+        if: ${{ always() }}
+        env:
+          LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
+          SARIF_INPUT_ROOT: ${{ runner.temp }}/linter-sarifs-decrypted
+          SARIF_OUTPUT_PATH: ${{ runner.temp }}/linter-sarif-upload/linter-service.sarif
+        run: |
+          node "$LINTER_SERVICE_PATH/.github/scripts/aggregate-sarif.js"
       - name: Prepare combined report
         id: prepare_report
         if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
@@ -860,7 +850,7 @@ jobs:
           SARIF_PR_NUMBER: ${{ steps.decode_repository_context.outputs.comment-enabled == 'true' && needs.detect-targets.outputs.pull-request-number || '' }}
           SARIF_REF: ${{ steps.decode_repository_context.outputs.source-head-ref }}
           SARIF_REPO: ${{ steps.decode_repository_context.outputs.pr-repo }}
-          SARIF_ROOT: ${{ runner.temp }}/linter-sarifs-decrypted
+          SARIF_ROOT: ${{ runner.temp }}/linter-sarif-upload
         with:
           github-token: ${{ steps.get_pr_token.outputs.token }}
           script: |
@@ -944,18 +934,3 @@ jobs:
         run: |
           echo "SARIF upload failed while clearing deselected linter results. See the workflow logs." >&2
           exit 1
-  no-linters-needed:
-    needs: detect-targets
-    if: ${{ needs.detect-targets.outputs.selected-linters-json == '[]' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Report skipped lint execution
-        env:
-          SKIP_REASON: ${{ needs.detect-targets.outputs.skip-reason }}
-        run: |
-          if [ -n "$SKIP_REASON" ]; then
-            echo "$SKIP_REASON"
-          else
-            echo "No configured linters matched the selected target files."
-          fi
