@@ -11,14 +11,5 @@ rules:
       - lint-common.yml:42
       - lint-common.yml:81
       - lint-common.yml:84
-      - repository-dispatch.yml:98
-      - repository-dispatch.yml:188
-      - repository-dispatch.yml:199
-      - repository-dispatch.yml:202
-      - repository-dispatch.yml:561
-      - repository-dispatch.yml:592
-      - repository-dispatch.yml:595
-      - repository-dispatch.yml:671
-      - repository-dispatch.yml:740
-      - repository-dispatch.yml:751
-      - repository-dispatch.yml:754
+      - repository-dispatch.yml:192
+      - repository-dispatch.yml:744
