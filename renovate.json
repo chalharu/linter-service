@@ -14,6 +14,15 @@
       "matchStrings": [
         "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)(?: versioning=(?<versioning>[^\\s]+))?\\s+[A-Za-z0-9_]+_version=\"(?<currentValue>[^\"]+)\""
       ]
+    },
+    {
+      "customType": "regex",
+      "description": "Update textlint preset package pins in YAML config",
+      "managerFilePatterns": ["/(^|/)\\.github/linter-service\\.ya?ml$/"],
+      "datasourceTemplate": "npm",
+      "matchStrings": [
+        "(^|\\n)\\s*-\\s*\"?(?<depName>(?:@[^/\\s\"#]+/)?textlint-rule-preset-[^@\\s\"#]+)@(?<currentValue>[^\"\\s#]+)\"?\\s*(?=\\n|$)"
+      ]
     }
   ],
   "labels": ["dependencies", "renovate", "renovate-gate-wait-3d"],

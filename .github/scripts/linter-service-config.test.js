@@ -26,7 +26,70 @@ function cleanupTempRepo(tempDir) {
 	fs.rmSync(tempDir, { force: true, recursive: true });
 }
 
-test("returns the default config when .github/linter-service.json is missing", () => {
+function writeLinterServiceConfig(
+	repoDir,
+	value,
+	fileName = "linter-service.yaml",
+) {
+	const configPath = path.join(repoDir, ".github", fileName);
+	const source = fileName.endsWith(".json")
+		? `${JSON.stringify(value, null, 2)}\n`
+		: `${serializeSimpleYaml(value)}\n`;
+	fs.writeFileSync(configPath, source, "utf8");
+	return configPath;
+}
+
+function serializeSimpleYaml(value, indent = 0) {
+	const indentation = " ".repeat(indent);
+
+	if (Array.isArray(value)) {
+		return value
+			.map((entry) => {
+				if (isYamlCollection(entry)) {
+					return `${indentation}-\n${serializeSimpleYaml(entry, indent + 2)}`;
+				}
+
+				return `${indentation}- ${serializeSimpleYamlScalar(entry)}`;
+			})
+			.join("\n");
+	}
+
+	if (isYamlCollection(value)) {
+		return Object.entries(value)
+			.map(([key, entry]) => {
+				if (isYamlCollection(entry)) {
+					return `${indentation}${key}:\n${serializeSimpleYaml(entry, indent + 2)}`;
+				}
+
+				return `${indentation}${key}: ${serializeSimpleYamlScalar(entry)}`;
+			})
+			.join("\n");
+	}
+
+	return serializeSimpleYamlScalar(value);
+}
+
+function isYamlCollection(value) {
+	return Boolean(value) && typeof value === "object";
+}
+
+function serializeSimpleYamlScalar(value) {
+	if (typeof value === "string") {
+		return JSON.stringify(value);
+	}
+
+	if (typeof value === "boolean") {
+		return value ? "true" : "false";
+	}
+
+	if (value === null) {
+		return "null";
+	}
+
+	throw new TypeError(`unsupported YAML scalar: ${value}`);
+}
+
+test("returns the default config when .github/linter-service.yaml is missing", () => {
 	const context = makeTempRepo();
 
 	try {
@@ -35,6 +98,10 @@ test("returns the default config when .github/linter-service.json is missing", (
 		});
 
 		assert.equal(config.exists, false);
+		assert.equal(
+			config.configPath,
+			path.join(context.repoDir, ".github", "linter-service.yaml"),
+		);
 		assert.deepEqual(config.global.exclude_paths, []);
 		assert.deepEqual(config.linters, {});
 	} finally {
@@ -42,36 +109,90 @@ test("returns the default config when .github/linter-service.json is missing", (
 	}
 });
 
-test("loads global and per-linter exclude globs with directory normalization", () => {
+test("falls back to .github/linter-service.json when YAML is absent", () => {
 	const context = makeTempRepo();
-	const configPath = path.join(
+
+	writeLinterServiceConfig(
 		context.repoDir,
-		".github",
+		{
+			linters: {
+				actionlint: {
+					disabled: true,
+				},
+			},
+		},
 		"linter-service.json",
 	);
 
-	fs.writeFileSync(
-		configPath,
-		JSON.stringify(
-			{
-				global: {
-					exclude_paths: [
-						"**/tests/*/target/**",
-						"**/tests/*/sarif.json",
-						"./vendor/",
-					],
-				},
-				linters: {
-					yamllint: {
-						exclude_paths: ["docs/generated/"],
-					},
+	try {
+		const config = loadLinterServiceConfig({
+			repositoryPath: context.repoDir,
+		});
+
+		assert.equal(config.exists, true);
+		assert.equal(
+			config.configPath,
+			path.join(context.repoDir, ".github", "linter-service.json"),
+		);
+		assert.equal(isLinterEnabled(config, "actionlint"), false);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("prefers YAML over JSON when both config files exist", () => {
+	const context = makeTempRepo();
+
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			actionlint: {
+				disabled: false,
+			},
+		},
+	});
+	writeLinterServiceConfig(
+		context.repoDir,
+		{
+			linters: {
+				actionlint: {
+					disabled: true,
 				},
 			},
-			null,
-			2,
-		),
-		"utf8",
+		},
+		"linter-service.json",
 	);
+
+	try {
+		const config = loadLinterServiceConfig({
+			repositoryPath: context.repoDir,
+		});
+
+		assert.equal(
+			config.configPath,
+			path.join(context.repoDir, ".github", "linter-service.yaml"),
+		);
+		assert.equal(isLinterEnabled(config, "actionlint"), true);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("loads global and per-linter exclude globs with directory normalization", () => {
+	const context = makeTempRepo();
+	writeLinterServiceConfig(context.repoDir, {
+		global: {
+			exclude_paths: [
+				"**/tests/*/target/**",
+				"**/tests/*/sarif.json",
+				"./vendor/",
+			],
+		},
+		linters: {
+			yamllint: {
+				exclude_paths: ["docs/generated/"],
+			},
+		},
+	});
 
 	try {
 		const config = loadLinterServiceConfig({
@@ -132,24 +253,16 @@ test("loads global and per-linter exclude globs with directory normalization", (
 test("supports per-linter disable flags", () => {
 	const context = makeTempRepo();
 
-	fs.writeFileSync(
-		path.join(context.repoDir, ".github", "linter-service.json"),
-		JSON.stringify(
-			{
-				linters: {
-					actionlint: {
-						disabled: true,
-					},
-					ghalint: {
-						disabled: false,
-					},
-				},
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			actionlint: {
+				disabled: true,
 			},
-			null,
-			2,
-		),
-		"utf8",
-	);
+			ghalint: {
+				disabled: false,
+			},
+		},
+	});
 
 	try {
 		const config = loadLinterServiceConfig({
@@ -167,24 +280,14 @@ test("supports per-linter disable flags", () => {
 test("supports textlint preset_packages when textlint is enabled", () => {
 	const context = makeTempRepo();
 
-	fs.writeFileSync(
-		path.join(context.repoDir, ".github", "linter-service.json"),
-		JSON.stringify(
-			{
-				linters: {
-					textlint: {
-						disabled: false,
-						preset_packages: [
-							"textlint-rule-preset-ja-technical-writing@12.0.2",
-						],
-					},
-				},
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			textlint: {
+				disabled: false,
+				preset_packages: ["textlint-rule-preset-ja-technical-writing@12.0.2"],
 			},
-			null,
-			2,
-		),
-		"utf8",
-	);
+		},
+	});
 
 	try {
 		const config = loadLinterServiceConfig({
@@ -203,21 +306,13 @@ test("supports textlint preset_packages when textlint is enabled", () => {
 test("requires textlint preset_packages when textlint is enabled", () => {
 	const context = makeTempRepo();
 
-	fs.writeFileSync(
-		path.join(context.repoDir, ".github", "linter-service.json"),
-		JSON.stringify(
-			{
-				linters: {
-					textlint: {
-						disabled: false,
-					},
-				},
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			textlint: {
+				disabled: false,
 			},
-			null,
-			2,
-		),
-		"utf8",
-	);
+		},
+	});
 
 	try {
 		assert.throws(
@@ -235,25 +330,17 @@ test("requires textlint preset_packages when textlint is enabled", () => {
 test("supports multiple textlint preset_packages", () => {
 	const context = makeTempRepo();
 
-	fs.writeFileSync(
-		path.join(context.repoDir, ".github", "linter-service.json"),
-		JSON.stringify(
-			{
-				linters: {
-					textlint: {
-						disabled: false,
-						preset_packages: [
-							"textlint-rule-preset-ja-technical-writing@12.0.2",
-							"textlint-rule-preset-ja-spacing@4.0.0",
-						],
-					},
-				},
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			textlint: {
+				disabled: false,
+				preset_packages: [
+					"textlint-rule-preset-ja-technical-writing@12.0.2",
+					"textlint-rule-preset-ja-spacing@4.0.0",
+				],
 			},
-			null,
-			2,
-		),
-		"utf8",
-	);
+		},
+	});
 
 	try {
 		const config = loadLinterServiceConfig({
@@ -291,22 +378,14 @@ test("textlint remains disabled when configured disabled", () => {
 test("rejects invalid textlint preset package configuration", () => {
 	const context = makeTempRepo();
 
-	fs.writeFileSync(
-		path.join(context.repoDir, ".github", "linter-service.json"),
-		JSON.stringify(
-			{
-				linters: {
-					textlint: {
-						disabled: false,
-						preset_packages: ["textlint-rule-preset-ja-technical-writing"],
-					},
-				},
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			textlint: {
+				disabled: false,
+				preset_packages: ["textlint-rule-preset-ja-technical-writing"],
 			},
-			null,
-			2,
-		),
-		"utf8",
-	);
+		},
+	});
 
 	try {
 		assert.throws(
@@ -324,25 +403,17 @@ test("rejects invalid textlint preset package configuration", () => {
 test("rejects duplicate textlint preset package names", () => {
 	const context = makeTempRepo();
 
-	fs.writeFileSync(
-		path.join(context.repoDir, ".github", "linter-service.json"),
-		JSON.stringify(
-			{
-				linters: {
-					textlint: {
-						disabled: false,
-						preset_packages: [
-							"textlint-rule-preset-ja-technical-writing@12.0.2",
-							"textlint-rule-preset-ja-technical-writing@12.0.3",
-						],
-					},
-				},
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			textlint: {
+				disabled: false,
+				preset_packages: [
+					"textlint-rule-preset-ja-technical-writing@12.0.2",
+					"textlint-rule-preset-ja-technical-writing@12.0.3",
+				],
 			},
-			null,
-			2,
-		),
-		"utf8",
-	);
+		},
+	});
 
 	try {
 		assert.throws(
@@ -360,22 +431,14 @@ test("rejects duplicate textlint preset package names", () => {
 test("rejects legacy textlint preset_package", () => {
 	const context = makeTempRepo();
 
-	fs.writeFileSync(
-		path.join(context.repoDir, ".github", "linter-service.json"),
-		JSON.stringify(
-			{
-				linters: {
-					textlint: {
-						disabled: false,
-						preset_package: "textlint-rule-preset-ja-technical-writing@12.0.2",
-					},
-				},
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			textlint: {
+				disabled: false,
+				preset_package: "textlint-rule-preset-ja-technical-writing@12.0.2",
 			},
-			null,
-			2,
-		),
-		"utf8",
-	);
+		},
+	});
 
 	try {
 		assert.throws(

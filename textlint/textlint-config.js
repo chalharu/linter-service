@@ -15,15 +15,19 @@ function resolveTextlintRuntime({ repositoryPath, outputPath }) {
 	const serviceConfig = loadLinterServiceConfig({
 		repositoryPath: resolvedRepositoryPath,
 	});
+	const serviceConfigPath = formatRepositoryRelativePath(
+		resolvedRepositoryPath,
+		serviceConfig.configPath,
+	);
 
 	if (!isLinterEnabled(serviceConfig, "textlint")) {
-		throw new Error("textlint is disabled in .github/linter-service.json");
+		throw new Error(`textlint is disabled in ${serviceConfigPath}`);
 	}
 
 	const presetPackages = getTextlintPresetPackages(serviceConfig);
 	if (!Array.isArray(presetPackages) || presetPackages.length === 0) {
 		throw new Error(
-			"textlint requires linters.textlint.preset_packages in .github/linter-service.json",
+			`textlint requires linters.textlint.preset_packages in ${serviceConfigPath}`,
 		);
 	}
 
@@ -135,6 +139,10 @@ function requireRepositoryPath(repositoryPath) {
 	}
 
 	return path.resolve(repositoryPath);
+}
+
+function formatRepositoryRelativePath(repositoryPath, filePath) {
+	return path.relative(repositoryPath, filePath).split(path.sep).join("/");
 }
 
 module.exports = {

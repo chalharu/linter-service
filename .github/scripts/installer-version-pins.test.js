@@ -186,3 +186,45 @@ test("renovate manages installer pins with a three day hold", () => {
 		),
 	);
 });
+
+test("renovate manages textlint preset package pins from YAML config", () => {
+	const config = JSON.parse(
+		fs.readFileSync(path.join(repoRoot, "renovate.json"), "utf8"),
+	);
+	const yamlConfig = fs.readFileSync(
+		path.join(repoRoot, ".github", "linter-service.yaml"),
+		"utf8",
+	);
+
+	assert.ok(
+		config.customManagers.some(
+			(manager) =>
+				manager.customType === "regex" &&
+				Array.isArray(manager.managerFilePatterns) &&
+				manager.managerFilePatterns.includes(
+					"/(^|/)\\.github/linter-service\\.ya?ml$/",
+				) &&
+				Array.isArray(manager.matchStrings) &&
+				manager.matchStrings.some((pattern) =>
+					pattern.includes("textlint-rule-preset-"),
+				) &&
+				manager.datasourceTemplate === "npm",
+		),
+	);
+	assert.match(
+		yamlConfig,
+		/^\s+- "textlint-rule-preset-ja-technical-writing@12\.0\.2"$/mu,
+	);
+	assert.match(
+		yamlConfig,
+		/^\s+- "@textlint-ja\/textlint-rule-preset-ai-writing@1\.6\.1"$/mu,
+	);
+});
+
+test("root shared Node dependencies use exact version pins", () => {
+	const manifest = JSON.parse(
+		fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"),
+	);
+
+	assert.match(manifest.dependencies["js-yaml"], /^\d+\.\d+\.\d+$/u);
+});

@@ -33,7 +33,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | パス | 役割 |
 |------|------|
 | `.github/codeql/` | CodeQL の分析設定 |
-| `.github/linter-service.json` | source repo 側の exclude / disable 設定 |
+| `.github/linter-service.yaml` | source repo 側の exclude / disable 設定 |
 | `.github/scripts/` | shared helper / renderer / artifact utility |
 | `.github/workflows/ci.yml` | `worker/` 検証と fixture test CI |
 | `.github/workflows/codeql.yml` | fixture 除外付き CodeQL workflow |
@@ -47,8 +47,10 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 
 - PR では changed file path から選択する。
 - default branch push では tracked file path 全体から選択する。
-- `.github/linter-service.json` がない場合は、`初期選択` 列で有効な linter を
-   この file による除外パス設定なしで選択する。
+- `.github/linter-service.yaml` を優先して読み込み、互換のため
+  `.github/linter-service.json` も fallback で読み込む。
+- どちらの file もない場合は、`初期選択` 列で有効な linter を
+  この file による除外パス設定なしで選択する。
 - `linters.json` の `required_root_files` に列挙した repo root 必須 file が
   そろわない linter と、追加 runtime config が足りない linter は自動選択しない。
 - `textlint` は repo root の `.textlintrc` と
@@ -97,37 +99,29 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | `yamlfmt` | repo root config の明示指定、未配置時は temp default config 利用。 |
 | `zizmor` | `--offline` 実行。 |
 
-## `.github/linter-service.json`
+## `.github/linter-service.yaml`
 
 - 利用 repository 側の target selection 制御用である。
-- この file がない場合は、`初期選択` 列で有効な linter を、この file による
-   除外パス設定なしで処理対象にする。
+- `.github/linter-service.yaml` を推奨し、互換のため
+  `.github/linter-service.json` も読み込む。
+- どちらの file もない場合は、`初期選択` 列で有効な linter を、
+  この file による除外パス設定なしで処理対象にする。
 - `linters.json` の `required_root_files` に列挙した repo root 必須 file と、
   linter ごとの追加 runtime config がそろわない場合は自動選択しない。
 
-```json
-{
-  "global": {
-    "exclude_paths": [
-      "**/generated/**"
-    ]
-  },
-  "linters": {
-    "yamllint": {
-      "exclude_paths": [
-        "docs/openapi/**"
-      ]
-    },
-    "textlint": {
-      "preset_packages": [
-        "textlint-rule-preset-ja-technical-writing@12.0.2"
-      ]
-    },
-    "zizmor": {
-      "disabled": true
-    }
-  }
-}
+```yaml
+global:
+  exclude_paths:
+    - "**/generated/**"
+linters:
+  yamllint:
+    exclude_paths:
+      - "docs/openapi/**"
+  textlint:
+    preset_packages:
+      - "textlint-rule-preset-ja-technical-writing@12.0.2"
+  zizmor:
+    disabled: true
 ```
 
 | 項目 | スコープ | 内容 |
@@ -147,6 +141,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 - report 文言は shared renderer が checked target 数から動的生成する。`linters.json` は static 文言ではなく、選択条件・実行条件・SARIF 設定だけを持つ。
 - untrusted PR でも安全に扱える実装を前提とし、任意コード実行につながる config は拒否または隔離実行で扱う。
 - 変更後は `node .github/scripts/run-fixture-tests.js <name>` で fixture test を実行する。
+- shared Node script の dependency を追加・更新した場合は、repo root で `npm ci` を実行する。
 - 変更面に応じて focused unit test と `shellcheck`、`markdownlint-cli2`、`git diff --check` など既存 validation を実行する。
 
 ```text
