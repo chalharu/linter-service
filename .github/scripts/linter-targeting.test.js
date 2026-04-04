@@ -64,6 +64,36 @@ test("selectLinters skips disabled linters and returns matching names", () => {
 	assert.deepEqual(selected, ["actionlint", "biome"]);
 });
 
+test("selectLinters includes linters whose config trigger paths changed", () => {
+	const context = fs.mkdtempSync(path.join(os.tmpdir(), "linter-targeting-"));
+	fs.writeFileSync(path.join(context, ".textlintrc"), "{}\n", "utf8");
+
+	try {
+		const selected = selectLinters({
+			candidatePaths: [".textlintrc"],
+			definitions: [
+				{
+					name: "textlint",
+					config_trigger_patterns: ["^\\.textlintrc$"],
+					patterns: ["\\.(?:md|markdown|txt)$"],
+					required_root_files: [".textlintrc"],
+				},
+			],
+			repositoryPath: context,
+			serviceConfig: {
+				global: {
+					exclude_paths: [],
+				},
+				linters: {},
+			},
+		});
+
+		assert.deepEqual(selected, ["textlint"]);
+	} finally {
+		fs.rmSync(context, { force: true, recursive: true });
+	}
+});
+
 test("selectLinters requires explicit enablement for default-disabled linters", () => {
 	const context = fs.mkdtempSync(path.join(os.tmpdir(), "linter-targeting-"));
 	fs.writeFileSync(path.join(context, ".textlintrc"), "{}\n", "utf8");
@@ -146,6 +176,29 @@ test("selectLinters skips linters whose required root files are missing", () => 
 	} finally {
 		fs.rmSync(context, { force: true, recursive: true });
 	}
+});
+
+test("selectLinters rejects invalid config trigger patterns", () => {
+	assert.throws(
+		() =>
+			selectLinters({
+				candidatePaths: [".textlintrc"],
+				definitions: [
+					{
+						name: "textlint",
+						config_trigger_patterns: [""],
+						patterns: ["\\.(?:md|markdown|txt)$"],
+					},
+				],
+				serviceConfig: {
+					global: {
+						exclude_paths: [],
+					},
+					linters: {},
+				},
+			}),
+		/config_trigger_patterns must be an array of non-empty strings/u,
+	);
 });
 
 test("readPatterns trims blank lines", () => {
