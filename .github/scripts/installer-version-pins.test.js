@@ -5,6 +5,18 @@ const test = require("node:test");
 
 const repoRoot = path.join(__dirname, "..", "..");
 
+function createJavaScriptRegExpFromRenovatePattern(pattern) {
+	let flags = "g";
+	let source = pattern;
+
+	if (source.startsWith("(?m)")) {
+		flags += "m";
+		source = source.slice(4);
+	}
+
+	return new RegExp(source, flags);
+}
+
 const installerExpectations = [
 	{
 		path: "actionlint/install.sh",
@@ -219,6 +231,62 @@ test("renovate manages textlint preset package pins from YAML config", () => {
 		yamlConfig,
 		/^\s+- "@textlint-ja\/textlint-rule-preset-ai-writing@1\.6\.1"$/mu,
 	);
+});
+
+test("renovate custom regex managers avoid RE2 lookaround syntax", () => {
+	const config = JSON.parse(
+		fs.readFileSync(path.join(repoRoot, "renovate.json"), "utf8"),
+	);
+
+	for (const manager of config.customManagers ?? []) {
+		if (
+			manager.customType !== "regex" ||
+			!Array.isArray(manager.matchStrings)
+		) {
+			continue;
+		}
+
+		for (const pattern of manager.matchStrings) {
+			assert.equal(typeof pattern, "string");
+			assert.doesNotMatch(
+				pattern,
+				/\(\?(?:!?=|<[=!])/u,
+				`custom regex manager must avoid RE2-unsupported lookaround: ${pattern}`,
+			);
+		}
+	}
+});
+
+test("renovate textlint preset regex matches all YAML preset packages", () => {
+	const config = JSON.parse(
+		fs.readFileSync(path.join(repoRoot, "renovate.json"), "utf8"),
+	);
+	const manager = config.customManagers.find(
+		(candidate) =>
+			candidate.customType === "regex" &&
+			Array.isArray(candidate.managerFilePatterns) &&
+			candidate.managerFilePatterns.includes(
+				"/(^|/)\\.github/linter-service\\.ya?ml$/",
+			),
+	);
+
+	assert.ok(manager, "expected YAML regex custom manager");
+	assert.ok(Array.isArray(manager.matchStrings), "expected regex matchStrings");
+
+	const yamlConfig = fs.readFileSync(
+		path.join(repoRoot, ".github", "linter-service.yaml"),
+		"utf8",
+	);
+	const matches = [
+		...yamlConfig.matchAll(
+			createJavaScriptRegExpFromRenovatePattern(manager.matchStrings[0]),
+		),
+	].map(({ groups }) => `${groups.depName}@${groups.currentValue}`);
+
+	assert.deepEqual(matches, [
+		"textlint-rule-preset-ja-technical-writing@12.0.2",
+		"@textlint-ja/textlint-rule-preset-ai-writing@1.6.1",
+	]);
 });
 
 test("root shared Node dependencies use exact version pins", () => {
