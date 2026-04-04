@@ -1,0 +1,5 @@
+name: linter-service CodeQL config
+paths-ignore:
+  - "**/tests/*/target/**"
+  - "**/tests/*/result.json"
+  - "**/tests/*/sarif.json"

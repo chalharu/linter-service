@@ -27,7 +27,7 @@ run_rustfmt() {
 
   for current_file in "${unique_files[@]}"; do
     printf '==> rustfmt --check %s\n' "$current_file"
-    if ! rustfmt --check "$current_file"; then
+    if ! rustfmt --check --color never "$current_file"; then
       failure=1
     fi
     echo
