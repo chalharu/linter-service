@@ -1,21 +1,23 @@
 rules:
   secrets-outside-env:
-    # Current stable zizmor does not yet support secret allowlists for this
-    # audit, so keep the ignore list scoped to the specific known findings.
+    # Latest stable zizmor does not yet support per-secret allowlists for this
+    # audit, so keep ignores aligned to the specific secret-brokering sites.
     ignore:
-      - lint-common.yml:42
-      - lint-common.yml:81
-      - lint-common.yml:84
-      - repository-dispatch.yml:98
-      - repository-dispatch.yml:188
-      - repository-dispatch.yml:192
-      - repository-dispatch.yml:199
-      - repository-dispatch.yml:202
-      - repository-dispatch.yml:561
-      - repository-dispatch.yml:592
-      - repository-dispatch.yml:595
-      - repository-dispatch.yml:671
-      - repository-dispatch.yml:740
-      - repository-dispatch.yml:744
-      - repository-dispatch.yml:751
-      - repository-dispatch.yml:754
+      - lint-common.yml:51
+      - lint-common.yml:90
+      - lint-common.yml:93
+      - repository-dispatch.yml:107
+      - repository-dispatch.yml:197
+      - repository-dispatch.yml:201
+      - repository-dispatch.yml:208
+      - repository-dispatch.yml:211
+      - repository-dispatch.yml:570
+      - repository-dispatch.yml:601
+      - repository-dispatch.yml:604
+      - repository-dispatch.yml:655
+      - repository-dispatch.yml:656
+      - repository-dispatch.yml:680
+      - repository-dispatch.yml:749
+      - repository-dispatch.yml:753
+      - repository-dispatch.yml:760
+      - repository-dispatch.yml:763
