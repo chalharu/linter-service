@@ -7,8 +7,7 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$script_dir/common.sh"
 
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
-release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/suzuki-shunsuke/ghalint/releases/latest)"
-version="$(basename "$release_url")"
+version="$(linter_lib::resolve_latest_github_release_tag suzuki-shunsuke ghalint)"
 version_number="${version#v}"
 asset="ghalint_${version_number}_linux_amd64.tar.gz"
 bin_dir="$RUNNER_TEMP/ghalint/bin"

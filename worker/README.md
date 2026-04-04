@@ -132,6 +132,8 @@ workflow は `repository_dispatch`、`pull_request`、`push` を処理する。
 `repository_dispatch` では payload から source repository を特定する。
 direct trigger では、この repo に install 済みの checker App を使う。
 Worker は dispatch 先 repo からの self-webhook を無視し、二重実行と再帰起動を防ぐ。
+Worker は `repository_dispatch.client_payload` に checker App private key ベースの
+HMAC 署名を付け、workflow は token 発行前にその署名を検証する。
 
 ### router workflow の流れ
 
@@ -221,6 +223,7 @@ forward すると同じ PR/head SHA に対して重複 run が増えるためで
 - `check_run` は loop prevention と明示的な skip/error 応答のために受信するが、forward しない。
 - `linter-service:` で始まる check run は Worker が無視する。
 - dispatch 先 repo 自身の webhook も Worker が無視する。
+- `client_payload.signature` は workflow 側で検証される HMAC 署名である。
 
 ## 関連ファイル
 

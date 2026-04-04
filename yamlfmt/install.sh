@@ -12,8 +12,7 @@ if command -v yamlfmt >/dev/null 2>&1 && yamlfmt -version >/dev/null 2>&1; then
   exit 0
 fi
 
-release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/google/yamlfmt/releases/latest)"
-version="$(basename "$release_url")"
+version="$(linter_lib::resolve_latest_github_release_tag google yamlfmt)"
 asset_version="${version#v}"
 asset="yamlfmt_${asset_version}_Linux_x86_64.tar.gz"
 archive_path="$RUNNER_TEMP/$asset"

@@ -12,8 +12,7 @@ if command -v editorconfig-checker >/dev/null 2>&1 && editorconfig-checker -vers
   exit 0
 fi
 
-release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/editorconfig-checker/editorconfig-checker/releases/latest)"
-version="$(basename "$release_url")"
+version="$(linter_lib::resolve_latest_github_release_tag editorconfig-checker editorconfig-checker)"
 asset="ec-linux-amd64.tar.gz"
 archive_path="$RUNNER_TEMP/$asset"
 extract_dir="$RUNNER_TEMP/editorconfig-checker-extract"

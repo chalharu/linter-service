@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { SignJWT } from "jose";
 
 export interface Env {
@@ -130,6 +131,7 @@ const QUEUED_PROCESSING_CHECK_SUMMARY =
 const QUEUED_PROCESSING_CHECK_TITLE = `${PROCESSING_CHECK_NAME} is queued`;
 const SELF_WEBHOOK_SKIP_REASON =
 	"webhook events from the dispatch target repository are handled directly";
+const DISPATCH_SIGNATURE_PREFIX = "sha256=";
 const USER_AGENT = "linter-service-webhook-proxy";
 
 class HttpError extends Error {
@@ -533,6 +535,13 @@ async function sendRepositoryDispatch(
 	token: string,
 	clientPayload: JsonRecord,
 ): Promise<void> {
+	const signedPayload = signDispatchPayload(
+		requireEnv(
+			env.GITHUB_CHECKER_APP_PRIVATE_KEY,
+			"GITHUB_CHECKER_APP_PRIVATE_KEY",
+		),
+		clientPayload,
+	);
 	const owner = requireEnv(env.GITHUB_DISPATCH_OWNER, "GITHUB_DISPATCH_OWNER");
 	const repo = requireEnv(env.GITHUB_DISPATCH_REPO, "GITHUB_DISPATCH_REPO");
 
@@ -540,7 +549,7 @@ async function sendRepositoryDispatch(
 		`${getGitHubApiBaseUrl(env)}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/dispatches`,
 		{
 			body: JSON.stringify({
-				client_payload: clientPayload,
+				client_payload: signedPayload,
 				event_type: DISPATCH_EVENT_TYPE,
 			}),
 			headers: {
@@ -551,6 +560,33 @@ async function sendRepositoryDispatch(
 		},
 		"failed to send repository_dispatch",
 	);
+}
+
+function signDispatchPayload(secret: string, payload: JsonRecord): JsonRecord {
+	return {
+		...payload,
+		signature: `${DISPATCH_SIGNATURE_PREFIX}${createHmac("sha256", secret)
+			.update(stableStringify(payload))
+			.digest("hex")}`,
+	};
+}
+
+function stableStringify(value: unknown): string {
+	if (Array.isArray(value)) {
+		return `[${value.map((entry) => stableStringify(entry)).join(",")}]`;
+	}
+
+	if (value && typeof value === "object") {
+		return `{${Object.keys(value)
+			.sort()
+			.map(
+				(key) =>
+					`${JSON.stringify(key)}:${stableStringify((value as JsonRecord)[key])}`,
+			)
+			.join(",")}}`;
+	}
+
+	return JSON.stringify(value);
 }
 
 async function tryNotifyQueuedProcessingCheck(

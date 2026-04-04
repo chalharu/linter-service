@@ -1,6 +1,7 @@
 const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
+const requireEnv = require("./lib/require-env.js");
 
 const {
 	buildReportSummary,
@@ -54,187 +55,309 @@ function runLinterBatch({
 	const linters = [];
 
 	for (const linterName of linterNames) {
-		console.log(`::group::${linterName}`);
-		const workDir = path.join(runnerTemp, "linter-batch", linterName);
-		const patternPath = path.join(workDir, "patterns.txt");
-		const selectedFilesPath = path.join(workDir, "selected-files.txt");
-		const resultPath = path.join(workDir, "linter-result.json");
-		const summaryPath = path.join(
+		const linterResult = runSingleLinter({
+			applyWorkflowEnvironmentImpl,
+			contextPath,
+			execFileSyncImpl,
+			executionEnv,
+			linterConfigPath,
+			linterName,
+			linterServicePath,
+			renderReportImpl,
+			renderSarifImpl,
 			runnerTemp,
-			`linter-summary-${linterName}.json`,
-		);
-		const sarifPath = path.join(runnerTemp, `linter-sarif-${linterName}.sarif`);
-		let selectOutcome = "success";
-		let installOutcome = "skipped";
-		let runOutcome = "skipped";
-		let exitCodeRaw = "";
-
-		fs.rmSync(workDir, { force: true, recursive: true });
-		fs.mkdirSync(workDir, { recursive: true });
-		fs.rmSync(summaryPath, { force: true });
-		fs.rmSync(sarifPath, { force: true });
-
-		try {
-			const patterns = execFileSyncImpl(
-				"bash",
-				[path.join(linterServicePath, linterName, "patterns.sh")],
-				{
-					cwd: linterServicePath,
-					encoding: "utf8",
-					env: executionEnv,
-				},
-			);
-			fs.writeFileSync(patternPath, patterns, "utf8");
-			selectLintTargetsImpl({
-				...executionEnv,
-				CONTEXT_PATH: contextPath,
-				LINTER_NAME: linterName,
-				OUTPUT_PATH: selectedFilesPath,
-				PATTERN_PATH: patternPath,
-				SOURCE_REPOSITORY_PATH: sourceRepositoryPath,
-			});
-		} catch (error) {
-			selectOutcome = "failure";
-			infrastructureFailures += 1;
-			logStepFailure("select", linterName, error);
-		}
-
-		const selectedFiles = readLines(selectedFilesPath);
-		if (selectOutcome === "success" && selectedFiles.length > 0) {
-			try {
-				executionEnv = installLinterTools({
-					applyWorkflowEnvironmentImpl,
-					execFileSyncImpl,
-					executionEnv,
-					linterName,
-					linterServicePath,
-					runnerTemp,
-				});
-				installOutcome = "success";
-			} catch (error) {
-				installOutcome = "failure";
-				infrastructureFailures += 1;
-				logStepFailure("install", linterName, error);
-			}
-		}
-
-		if (installOutcome === "success" && selectedFiles.length > 0) {
-			try {
-				const output = execFileSyncImpl(
-					"bash",
-					[
-						path.join(linterServicePath, linterName, "run.sh"),
-						...selectedFiles,
-					],
-					{
-						cwd: sourceRepositoryPath,
-						encoding: "utf8",
-						env: executionEnv,
-					},
-				);
-				fs.writeFileSync(resultPath, output, "utf8");
-				const parsed = JSON.parse(output);
-
-				if (!Number.isInteger(parsed.exit_code)) {
-					throw new Error(
-						`${linterName} run.sh output must include integer exit_code`,
-					);
-				}
-
-				exitCodeRaw = String(parsed.exit_code);
-				runOutcome = "success";
-			} catch (error) {
-				runOutcome = "failure";
-				infrastructureFailures += 1;
-				logStepFailure("run", linterName, error);
-			}
-		}
-
-		try {
-			const sarifReport = renderSarifImpl({
-				configPath: linterConfigPath,
-				installOutcome,
-				linterName,
-				outputPath: sarifPath,
-				resultPath,
-				runnerTemp,
-				runOutcome,
-				selectedFilesPath,
-				selectOutcome,
-				sourceRepositoryPath,
-			});
-			const report = renderReportImpl({
-				configPath: linterConfigPath,
-				exitCodeRaw,
-				installOutcome,
-				linterName,
-				resultPath,
-				runOutcome,
-				selectedFilesPath,
-				selectOutcome,
-				sourceRepositoryPath,
-				targetStats: sarifReport.targetStats,
-			});
-
-			fs.writeFileSync(
-				summaryPath,
-				JSON.stringify(
-					buildReportSummary({
-						...report,
-						linterName,
-						targetStats: sarifReport.targetStats,
-					}),
-					null,
-					2,
-				),
-				"utf8",
-			);
-
-			if (sarifReport.produced) {
-				fs.writeFileSync(
-					sarifReport.outputPath,
-					JSON.stringify(sarifReport.sarif, null, 2),
-					"utf8",
-				);
-			}
-
-			linters.push({
-				conclusion: report.conclusion,
-				exitCodeRaw,
-				installOutcome,
-				linterName,
-				resultPath,
-				runOutcome,
-				sarifProduced: sarifReport.produced,
-				selectOutcome,
-				selectedFiles,
-			});
-		} catch (error) {
-			infrastructureFailures += 1;
-			logStepFailure("render", linterName, error);
-			linters.push({
-				conclusion: "failure",
-				exitCodeRaw,
-				installOutcome,
-				linterName,
-				resultPath,
-				runOutcome,
-				sarifProduced: false,
-				selectOutcome,
-				selectedFiles,
-			});
-		}
-
-		console.log(
-			`${linterName}: selected ${selectedFiles.length} file(s), ` +
-				`select=${selectOutcome}, install=${installOutcome}, run=${runOutcome}`,
-		);
-		console.log("::endgroup::");
+			selectLintTargetsImpl,
+			sourceRepositoryPath,
+		});
+		executionEnv = linterResult.executionEnv;
+		infrastructureFailures += linterResult.infrastructureFailures;
+		linters.push(linterResult.linter);
 	}
 
 	return {
 		infrastructureFailures,
 		linters,
+	};
+}
+
+function runSingleLinter({
+	applyWorkflowEnvironmentImpl,
+	contextPath,
+	execFileSyncImpl,
+	executionEnv,
+	linterConfigPath,
+	linterName,
+	linterServicePath,
+	renderReportImpl,
+	renderSarifImpl,
+	runnerTemp,
+	selectLintTargetsImpl,
+	sourceRepositoryPath,
+}) {
+	console.log(`::group::${linterName}`);
+	const paths = createLinterPaths({ linterName, runnerTemp });
+	let infrastructureFailures = 0;
+	let selectOutcome = "success";
+	let installOutcome = "skipped";
+	let runOutcome = "skipped";
+	let exitCodeRaw = "";
+
+	resetLinterWorkspace(paths);
+
+	try {
+		selectLinterTargets({
+			contextPath,
+			execFileSyncImpl,
+			executionEnv,
+			linterName,
+			linterServicePath,
+			paths,
+			selectLintTargetsImpl,
+			sourceRepositoryPath,
+		});
+	} catch (error) {
+		selectOutcome = "failure";
+		infrastructureFailures += 1;
+		logStepFailure("select", linterName, error);
+	}
+
+	const selectedFiles = readLines(paths.selectedFilesPath);
+	if (selectOutcome === "success" && selectedFiles.length > 0) {
+		try {
+			executionEnv = installLinterTools({
+				applyWorkflowEnvironmentImpl,
+				execFileSyncImpl,
+				executionEnv,
+				linterName,
+				linterServicePath,
+				runnerTemp,
+			});
+			installOutcome = "success";
+		} catch (error) {
+			installOutcome = "failure";
+			infrastructureFailures += 1;
+			logStepFailure("install", linterName, error);
+		}
+	}
+
+	if (installOutcome === "success" && selectedFiles.length > 0) {
+		try {
+			exitCodeRaw = runLinter({
+				execFileSyncImpl,
+				executionEnv,
+				linterName,
+				linterServicePath,
+				resultPath: paths.resultPath,
+				selectedFiles,
+				sourceRepositoryPath,
+			});
+			runOutcome = "success";
+		} catch (error) {
+			runOutcome = "failure";
+			infrastructureFailures += 1;
+			logStepFailure("run", linterName, error);
+		}
+	}
+
+	let linter;
+
+	try {
+		linter = renderLinterArtifacts({
+			configPath: linterConfigPath,
+			exitCodeRaw,
+			installOutcome,
+			linterName,
+			paths,
+			renderReportImpl,
+			renderSarifImpl,
+			runOutcome,
+			runnerTemp,
+			selectOutcome,
+			selectedFiles,
+			sourceRepositoryPath,
+		});
+	} catch (error) {
+		infrastructureFailures += 1;
+		logStepFailure("render", linterName, error);
+		linter = {
+			conclusion: "failure",
+			exitCodeRaw,
+			installOutcome,
+			linterName,
+			resultPath: paths.resultPath,
+			runOutcome,
+			sarifProduced: false,
+			selectOutcome,
+			selectedFiles,
+		};
+	}
+
+	console.log(
+		`${linterName}: selected ${selectedFiles.length} file(s), ` +
+			`select=${selectOutcome}, install=${installOutcome}, run=${runOutcome}`,
+	);
+	console.log("::endgroup::");
+
+	return {
+		executionEnv,
+		infrastructureFailures,
+		linter,
+	};
+}
+
+function createLinterPaths({ linterName, runnerTemp }) {
+	const workDir = path.join(runnerTemp, "linter-batch", linterName);
+
+	return {
+		patternPath: path.join(workDir, "patterns.txt"),
+		resultPath: path.join(workDir, "linter-result.json"),
+		sarifPath: path.join(runnerTemp, `linter-sarif-${linterName}.sarif`),
+		selectedFilesPath: path.join(workDir, "selected-files.txt"),
+		summaryPath: path.join(runnerTemp, `linter-summary-${linterName}.json`),
+		workDir,
+	};
+}
+
+function resetLinterWorkspace(paths) {
+	fs.rmSync(paths.workDir, { force: true, recursive: true });
+	fs.mkdirSync(paths.workDir, { recursive: true });
+	fs.rmSync(paths.summaryPath, { force: true });
+	fs.rmSync(paths.sarifPath, { force: true });
+}
+
+function selectLinterTargets({
+	contextPath,
+	execFileSyncImpl,
+	executionEnv,
+	linterName,
+	linterServicePath,
+	paths,
+	selectLintTargetsImpl,
+	sourceRepositoryPath,
+}) {
+	const patterns = execFileSyncImpl(
+		"bash",
+		[path.join(linterServicePath, linterName, "patterns.sh")],
+		{
+			cwd: linterServicePath,
+			encoding: "utf8",
+			env: executionEnv,
+			stdio: ["ignore", "pipe", "pipe"],
+		},
+	);
+	fs.writeFileSync(paths.patternPath, patterns, "utf8");
+	selectLintTargetsImpl({
+		...executionEnv,
+		CONTEXT_PATH: contextPath,
+		LINTER_NAME: linterName,
+		OUTPUT_PATH: paths.selectedFilesPath,
+		PATTERN_PATH: paths.patternPath,
+		SOURCE_REPOSITORY_PATH: sourceRepositoryPath,
+	});
+}
+
+function runLinter({
+	execFileSyncImpl,
+	executionEnv,
+	linterName,
+	linterServicePath,
+	resultPath,
+	selectedFiles,
+	sourceRepositoryPath,
+}) {
+	const output = execFileSyncImpl(
+		"bash",
+		[path.join(linterServicePath, linterName, "run.sh"), ...selectedFiles],
+		{
+			cwd: sourceRepositoryPath,
+			encoding: "utf8",
+			env: executionEnv,
+			stdio: ["ignore", "pipe", "pipe"],
+		},
+	);
+	fs.writeFileSync(resultPath, output, "utf8");
+	const parsed = JSON.parse(output);
+
+	if (!Number.isInteger(parsed.exit_code)) {
+		throw new Error(
+			`${linterName} run.sh output must include integer exit_code`,
+		);
+	}
+
+	return String(parsed.exit_code);
+}
+
+function renderLinterArtifacts({
+	configPath,
+	exitCodeRaw,
+	installOutcome,
+	linterName,
+	paths,
+	renderReportImpl,
+	renderSarifImpl,
+	runOutcome,
+	runnerTemp,
+	selectOutcome,
+	selectedFiles,
+	sourceRepositoryPath,
+}) {
+	const sarifReport = renderSarifImpl({
+		configPath,
+		installOutcome,
+		linterName,
+		outputPath: paths.sarifPath,
+		resultPath: paths.resultPath,
+		runnerTemp,
+		runOutcome,
+		selectedFilesPath: paths.selectedFilesPath,
+		selectOutcome,
+		sourceRepositoryPath,
+	});
+	const report = renderReportImpl({
+		configPath,
+		exitCodeRaw,
+		installOutcome,
+		linterName,
+		resultPath: paths.resultPath,
+		runOutcome,
+		selectedFilesPath: paths.selectedFilesPath,
+		selectOutcome,
+		sourceRepositoryPath,
+		targetStats: sarifReport.targetStats,
+	});
+
+	fs.writeFileSync(
+		paths.summaryPath,
+		JSON.stringify(
+			buildReportSummary({
+				...report,
+				linterName,
+				targetStats: sarifReport.targetStats,
+			}),
+			null,
+			2,
+		),
+		"utf8",
+	);
+
+	if (sarifReport.produced) {
+		fs.writeFileSync(
+			sarifReport.outputPath,
+			JSON.stringify(sarifReport.sarif, null, 2),
+			"utf8",
+		);
+	}
+
+	return {
+		conclusion: report.conclusion,
+		exitCodeRaw,
+		installOutcome,
+		linterName,
+		resultPath: paths.resultPath,
+		runOutcome,
+		sarifProduced: sarifReport.produced,
+		selectOutcome,
+		selectedFiles,
 	};
 }
 
@@ -269,6 +392,7 @@ function installLinterTools({
 		cwd: linterServicePath,
 		encoding: "utf8",
 		env: installEnv,
+		stdio: ["ignore", "pipe", "pipe"],
 	});
 
 	return applyWorkflowEnvironmentImpl(installEnv, {
@@ -312,22 +436,32 @@ function formatExecError(error) {
 		return "";
 	}
 
-	const stdout = typeof error.stdout === "string" ? error.stdout.trim() : "";
-	const stderr = typeof error.stderr === "string" ? error.stderr.trim() : "";
-	const message = typeof error.message === "string" ? error.message.trim() : "";
-	const details = [message, stdout, stderr].filter(Boolean).join("\n");
+	const stdoutLength = summarizeCapturedOutput(error.stdout);
+	const stderrLength = summarizeCapturedOutput(error.stderr);
+	const message = sanitizeErrorMessage(error.message);
+	const details = [message].filter(Boolean);
 
-	return details.length > 0 ? `\n${details}` : "";
-}
-
-function requireEnv(env, key) {
-	const value = env[key];
-
-	if (typeof value !== "string" || value.length === 0) {
-		throw new Error(`${key} is required`);
+	if (stdoutLength > 0) {
+		details.push(`stdout omitted (${stdoutLength} chars)`);
 	}
 
-	return value;
+	if (stderrLength > 0) {
+		details.push(`stderr omitted (${stderrLength} chars)`);
+	}
+
+	return details.length > 0 ? `\n${details.join("\n")}` : "";
+}
+
+function sanitizeErrorMessage(value) {
+	if (typeof value !== "string") {
+		return "";
+	}
+
+	return value.split(/\r?\n/u, 1)[0].trim();
+}
+
+function summarizeCapturedOutput(value) {
+	return typeof value === "string" ? value.trim().length : 0;
 }
 
 if (require.main === module) {

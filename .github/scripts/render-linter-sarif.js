@@ -1,6 +1,14 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const requireEnv = require("./lib/require-env.js");
+const { buildSarifEnvelope } = require("./lib/sarif.js");
+const {
+	readLinterConfig,
+	readResult,
+	readSelectedFiles,
+	readTargetKind,
+} = require("./lib/linter-shared.js");
 
 const {
 	buildSarifResults: buildCargoDenySarifResults,
@@ -131,51 +139,9 @@ function renderSarif({
 	return {
 		outputPath,
 		produced: true,
-		sarif: {
-			$schema: "https://json.schemastore.org/sarif-2.1.0.json",
-			version: "2.1.0",
-			runs: [
-				{
-					automationDetails: {
-						id: category,
-					},
-					results,
-					tool: {
-						driver: {
-							informationUri: "https://github.com/chalharu/linter-service",
-							name: toolName,
-							rules,
-						},
-					},
-				},
-			],
-		},
+		sarif: buildSarifEnvelope({ category, results, rules, toolName }),
 		targetStats,
 	};
-}
-
-function requireEnv(env, key) {
-	const value = env[key];
-
-	if (typeof value !== "string" || value.length === 0) {
-		throw new Error(`${key} is required`);
-	}
-
-	return value;
-}
-
-function readLinterConfig(configPath, linterName) {
-	const configData = JSON.parse(fs.readFileSync(configPath, "utf8"));
-	const linters = Array.isArray(configData.linters) ? configData.linters : [];
-	const config = linters.find(
-		(item) => item && typeof item.name === "string" && item.name === linterName,
-	);
-
-	if (!config) {
-		throw new Error(`unsupported linter: ${linterName}`);
-	}
-
-	return config;
 }
 
 function readSarifConfig(linterConfig) {
@@ -188,36 +154,6 @@ function readSarifConfig(linterConfig) {
 	}
 
 	return linterConfig.sarif.enabled === true ? linterConfig.sarif : null;
-}
-
-function readTargetKind(linterConfig) {
-	return linterConfig?.sarif?.target_kind === "cargo-projects"
-		? "cargo-project"
-		: "file";
-}
-
-function readSelectedFiles(selectedFilesPath) {
-	if (!fs.existsSync(selectedFilesPath)) {
-		return [];
-	}
-
-	return fs
-		.readFileSync(selectedFilesPath, "utf8")
-		.split(/\r?\n/u)
-		.map((line) => line.trim())
-		.filter(Boolean);
-}
-
-function readResult(resultPath) {
-	if (!fs.existsSync(resultPath)) {
-		return null;
-	}
-
-	try {
-		return JSON.parse(fs.readFileSync(resultPath, "utf8"));
-	} catch {
-		return null;
-	}
 }
 
 function resolveDiagnosticDetails(result, fallback) {

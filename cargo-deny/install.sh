@@ -33,8 +33,7 @@ if ! command -v cargo >/dev/null 2>&1 || ! cargo --version >/dev/null 2>&1; then
     >/dev/null
 fi
 
-release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/EmbarkStudios/cargo-deny/releases/latest)"
-version="$(basename "$release_url")"
+version="$(linter_lib::resolve_latest_github_release_tag EmbarkStudios cargo-deny)"
 asset="cargo-deny-${version}-x86_64-unknown-linux-musl.tar.gz"
 archive_path="$RUNNER_TEMP/$asset"
 extract_dir="$RUNNER_TEMP/cargo-deny-extract"

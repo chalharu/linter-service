@@ -129,6 +129,7 @@ describe("github webhook proxy worker", () => {
 		) as {
 			client_payload: {
 				event_name: string;
+				signature: string;
 				pull_request: {
 					head: {
 						ref: string;
@@ -151,6 +152,9 @@ describe("github webhook proxy worker", () => {
 			"feature/example",
 		);
 		expect(dispatchBody.client_payload.repository.owner.login).toBe("acme");
+		expect(dispatchBody.client_payload.signature).toMatch(
+			/^sha256=[a-f0-9]{64}$/u,
+		);
 
 		const queuedCheckBody = JSON.parse(
 			(fetchMock.mock.calls[5]?.[1] as RequestInit).body as string,
@@ -752,6 +756,7 @@ describe("github webhook proxy worker", () => {
 		) as {
 			client_payload: {
 				event_name: string;
+				signature: string;
 				push: {
 					after: string;
 					ref: string;
@@ -770,6 +775,9 @@ describe("github webhook proxy worker", () => {
 		expect(dispatchBody.client_payload.push.ref).toBe("refs/heads/main");
 		expect(dispatchBody.client_payload.push.ref_name).toBe("main");
 		expect(dispatchBody.client_payload.repository.default_branch).toBe("main");
+		expect(dispatchBody.client_payload.signature).toMatch(
+			/^sha256=[a-f0-9]{64}$/u,
+		);
 	});
 
 	it("skips push events outside the default branch", async () => {

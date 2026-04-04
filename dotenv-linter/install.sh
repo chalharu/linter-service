@@ -12,8 +12,7 @@ if command -v dotenv-linter >/dev/null 2>&1 && dotenv-linter --version >/dev/nul
   exit 0
 fi
 
-release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/dotenv-linter/dotenv-linter/releases/latest)"
-version="$(basename "$release_url")"
+version="$(linter_lib::resolve_latest_github_release_tag dotenv-linter dotenv-linter)"
 asset="dotenv-linter-linux-x86_64.tar.gz"
 archive_path="$RUNNER_TEMP/$asset"
 extract_dir="$RUNNER_TEMP/dotenv-linter-extract"

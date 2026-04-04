@@ -26,6 +26,22 @@ linter_lib::python_cmd() {
   return 1
 }
 
+linter_lib::resolve_latest_github_release_tag() {
+  local owner=$1
+  local repo=$2
+  local release_url version
+
+  release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/$owner/$repo/releases/latest")"
+  version="${release_url##*/}"
+
+  if [[ ! "$version" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$ ]]; then
+    printf 'Refusing unexpected release tag for %s/%s: %s\n' "$owner" "$repo" "$version" >&2
+    return 1
+  fi
+
+  printf '%s\n' "$version"
+}
+
 linter_lib::copy_first_existing_path() {
   local target_root=$1
   shift

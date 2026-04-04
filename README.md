@@ -26,6 +26,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 - 外部リポジトリの PR と default branch push は Worker 経由で処理する。
 - このリポジトリ自身の PR は `pull_request`、default branch 更新は `push` で処理する。
 - Worker は dispatch 先 repo からの self-webhook を無視し、二重実行と再帰起動を防ぐ。
+- Worker は `repository_dispatch.client_payload` に HMAC 署名を付け、workflow 側は GitHub App token を発行する前に署名を検証する。
 
 ## 主な場所
 

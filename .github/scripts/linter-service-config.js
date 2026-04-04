@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { parseExactPackageSpec } = require("./npm-package-spec.js");
+const requireEnv = require("./lib/require-env.js");
 
 function runFromEnv(env = process.env) {
 	const repositoryPath = requireEnv(env, "SOURCE_REPOSITORY_PATH");
@@ -304,16 +305,6 @@ function matchesExcludedPattern(candidatePath, pattern) {
 function requireString(value, label) {
 	if (typeof value !== "string" || value.length === 0) {
 		throw new Error(`${label} is required`);
-	}
-
-	return value;
-}
-
-function requireEnv(env, key) {
-	const value = env[key];
-
-	if (typeof value !== "string" || value.length === 0) {
-		throw new Error(`${key} is required`);
 	}
 
 	return value;

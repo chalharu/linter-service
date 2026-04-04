@@ -8,12 +8,18 @@ source "$script_dir/common.sh"
 
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
 bin_dir="$RUNNER_TEMP/actionlint/bin"
-mkdir -p "$bin_dir"
-curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash \
-  -o "$RUNNER_TEMP/download-actionlint.bash"
-(
-  cd "$bin_dir" || exit 1
-  bash "$RUNNER_TEMP/download-actionlint.bash" latest
-)
+version="$(linter_lib::resolve_latest_github_release_tag rhysd actionlint)"
+version_number="${version#v}"
+asset="actionlint_${version_number}_linux_amd64.tar.gz"
+archive_path="$RUNNER_TEMP/$asset"
+extract_dir="$RUNNER_TEMP/actionlint-extract"
+
+rm -rf "$extract_dir" "$bin_dir"
+mkdir -p "$extract_dir" "$bin_dir"
+
+curl -fsSL "https://github.com/rhysd/actionlint/releases/download/$version/$asset" -o "$archive_path"
+tar -xzf "$archive_path" -C "$extract_dir"
+cp "$extract_dir/actionlint" "$bin_dir/actionlint"
+chmod +x "$bin_dir/actionlint"
 linter_lib::add_path "$bin_dir"
 bash "$script_dir/../shellcheck/install.sh"

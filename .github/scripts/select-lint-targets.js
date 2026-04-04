@@ -7,6 +7,7 @@ const {
 	normalizeRelativePath,
 } = require("./linter-service-config.js");
 const { readPatterns, selectFiles } = require("./linter-targeting.js");
+const requireEnv = require("./lib/require-env.js");
 
 function runFromEnv(env = process.env) {
 	const contextPath = requireEnv(env, "CONTEXT_PATH");
@@ -169,16 +170,6 @@ function listRepositoryFiles(repositoryPath) {
 			}
 		}
 	}
-}
-
-function requireEnv(env, key) {
-	const value = env[key];
-
-	if (typeof value !== "string" || value.length === 0) {
-		throw new Error(`${key} is required`);
-	}
-
-	return value;
 }
 
 if (require.main === module) {

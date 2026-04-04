@@ -7,8 +7,7 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$script_dir/common.sh"
 
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
-release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/tamasfe/taplo/releases/latest)"
-version="$(basename "$release_url")"
+version="$(linter_lib::resolve_latest_github_release_tag tamasfe taplo)"
 asset="taplo-linux-x86_64.gz"
 bin_dir="$RUNNER_TEMP/taplo/bin"
 download_path="$bin_dir/taplo.gz"

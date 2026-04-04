@@ -12,8 +12,7 @@ if command -v hadolint >/dev/null 2>&1 && hadolint --version >/dev/null 2>&1; th
   exit 0
 fi
 
-release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/hadolint/hadolint/releases/latest)"
-version="$(basename "$release_url")"
+version="$(linter_lib::resolve_latest_github_release_tag hadolint hadolint)"
 asset="hadolint-linux-x86_64"
 bin_dir="$RUNNER_TEMP/hadolint/bin"
 

@@ -1,5 +1,13 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const requireEnv = require("./lib/require-env.js");
+const {
+	deriveTargetCount,
+	escapeHtml,
+	formatTargetLabel,
+	normalizeOptionalCount,
+	normalizeStringArray,
+} = require("./lib/linter-shared.js");
 
 const COMMENT_MARKER = "<!-- linter-service:results -->";
 const MAX_TARGET_PATHS = 50;
@@ -398,18 +406,6 @@ function readLinterSummaries(summaryRoot) {
 	return summaries;
 }
 
-function normalizeStringArray(value) {
-	return Array.isArray(value)
-		? value.filter(
-				(entry) => typeof entry === "string" && entry.trim().length > 0,
-			)
-		: [];
-}
-
-function normalizeOptionalCount(value) {
-	return Number.isInteger(value) && value >= 0 ? value : null;
-}
-
 function normalizeTargetCount(summary) {
 	const explicit = normalizeOptionalCount(summary?.target_count);
 
@@ -417,20 +413,12 @@ function normalizeTargetCount(summary) {
 		return explicit;
 	}
 
-	const checkedProjects = normalizeStringArray(summary?.checked_projects);
-	const selectedFiles = normalizeStringArray(summary?.selected_files);
-	const targetKind =
-		summary?.target_kind === "cargo-project" ? "cargo-project" : "file";
-
-	if (targetKind === "cargo-project") {
-		return checkedProjects.length > 0
-			? checkedProjects.length
-			: selectedFiles.length;
-	}
-
-	return selectedFiles.length > 0
-		? selectedFiles.length
-		: checkedProjects.length;
+	return deriveTargetCount({
+		checkedProjects: normalizeStringArray(summary?.checked_projects),
+		selectedFiles: normalizeStringArray(summary?.selected_files),
+		targetKind:
+			summary?.target_kind === "cargo-project" ? "cargo-project" : "file",
+	});
 }
 
 function formatCheckedMetric(row) {
@@ -445,14 +433,6 @@ function formatCountMetric(value) {
 	return value === null ? "n/a" : String(value);
 }
 
-function formatTargetLabel(targetKind, count) {
-	if (targetKind === "cargo-project") {
-		return count === 1 ? "Cargo project" : "Cargo projects";
-	}
-
-	return count === 1 ? "file" : "files";
-}
-
 function escapeTableCell(value) {
 	return String(value || "")
 		.replaceAll("|", "\\|")
@@ -464,13 +444,6 @@ function stripLeadingStatusMarker(text) {
 	return String(text || "")
 		.replace(/^[^A-Za-z0-9`]+/u, "")
 		.trim();
-}
-
-function escapeHtml(value) {
-	return String(value || "")
-		.replaceAll("&", "&amp;")
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;");
 }
 
 function parseSelectedLinters(rawValue) {
@@ -490,16 +463,6 @@ function parseSelectedLinters(rawValue) {
 	}
 
 	return selectedLinters;
-}
-
-function requireEnv(env, key) {
-	const value = env[key];
-
-	if (typeof value !== "string" || value.length === 0) {
-		throw new Error(`${key} is required`);
-	}
-
-	return value;
 }
 
 if (require.main === module) {

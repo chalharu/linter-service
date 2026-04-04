@@ -14,7 +14,7 @@ on:
     types:
       - github_app_webhook
 concurrency:
-  group: ${{ format('repository-dispatch-{0}-{1}', github.event_name == 'repository_dispatch' && github.event.client_payload.repository.full_name || github.repository, github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.event_name == 'push' && format('push-{0}', github.ref) || github.event.client_payload.event_name == 'pull_request' && format('pr-{0}', github.event.client_payload.pull_request.number) || github.event.client_payload.event_name == 'push' && format('push-{0}', github.event.client_payload.push.ref) || github.run_id) }}
+  group: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.event_name == 'pull_request' && format('repository-dispatch-pr-{0}-{1}', github.event.client_payload.repository.id || 0, github.event.client_payload.pull_request.number || 0) || github.event_name == 'repository_dispatch' && github.event.client_payload.event_name == 'push' && format('repository-dispatch-push-{0}', github.event.client_payload.repository.id || 0) || format('repository-dispatch-{0}-{1}', github.repository, github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.event_name == 'push' && format('push-{0}', github.ref) || github.run_id) }}
   cancel-in-progress: false
 permissions: {}
 jobs:
@@ -92,6 +92,13 @@ jobs:
           path: linter-service
           persist-credentials: false
           ref: ${{ github.sha }}
+      - name: Verify repository_dispatch signature
+        if: ${{ github.event_name == 'repository_dispatch' }}
+        env:
+          CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
+          CLIENT_PAYLOAD_JSON: ${{ toJson(github.event.client_payload) }}
+        run: |
+          node "$GITHUB_WORKSPACE/linter-service/.github/scripts/verify-dispatch-signature.js"
       - name: Build linter definitions
         id: build_linter_definitions
         env:
