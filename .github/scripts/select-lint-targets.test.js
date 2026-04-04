@@ -27,6 +27,14 @@ function writeExecutable(filePath, content) {
 	fs.chmodSync(filePath, 0o755);
 }
 
+function writeLinterServiceConfig(repoDir, source) {
+	fs.writeFileSync(
+		path.join(repoDir, ".github", "linter-service.yaml"),
+		source,
+		"utf8",
+	);
+}
+
 test("writes selected pull request files and the count output", () => {
 	const context = makeTempRepo();
 	const contextPath = path.join(context.runnerTemp, "context.json");
@@ -34,18 +42,9 @@ test("writes selected pull request files and the count output", () => {
 	const patternPath = path.join(context.runnerTemp, "patterns.txt");
 	const githubOutputPath = path.join(context.runnerTemp, "github-output.txt");
 
-	fs.writeFileSync(
-		path.join(context.repoDir, ".github", "linter-service.json"),
-		JSON.stringify(
-			{
-				global: {
-					exclude_paths: ["**/tests/*/target/**", "**/tests/*/sarif.json"],
-				},
-			},
-			null,
-			2,
-		),
-		"utf8",
+	writeLinterServiceConfig(
+		context.repoDir,
+		'global:\n  exclude_paths:\n    - "**/tests/*/target/**"\n    - "**/tests/*/sarif.json"\n',
 	);
 	fs.writeFileSync(
 		contextPath,
@@ -93,18 +92,9 @@ test("writes selected push files from the full tracked file list", () => {
 	const patternPath = path.join(context.runnerTemp, "patterns.txt");
 	const githubOutputPath = path.join(context.runnerTemp, "github-output.txt");
 
-	fs.writeFileSync(
-		path.join(context.repoDir, ".github", "linter-service.json"),
-		JSON.stringify(
-			{
-				global: {
-					exclude_paths: ["**/tests/*/target/**", "**/tests/*/sarif.json"],
-				},
-			},
-			null,
-			2,
-		),
-		"utf8",
+	writeLinterServiceConfig(
+		context.repoDir,
+		'global:\n  exclude_paths:\n    - "**/tests/*/target/**"\n    - "**/tests/*/sarif.json"\n',
 	);
 	fs.writeFileSync(
 		contextPath,

@@ -4,7 +4,7 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 
-const { runLinterBatch } = require("./run-linter-batch.js");
+const { formatExecError, runLinterBatch } = require("./run-linter-batch.js");
 
 function createTempWorkspace() {
 	const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "run-linter-batch-"));
@@ -282,4 +282,17 @@ printf '{"details":"beta ok","exit_code":0}\\n'
 	} finally {
 		cleanupTempWorkspace(workspace.tempDir);
 	}
+});
+
+test("formatExecError suppresses raw stdout and stderr contents", () => {
+	const formatted = formatExecError({
+		message: "Command failed: bash run.sh\nsecret stderr",
+		stderr: "top secret stderr",
+		stdout: "top secret stdout",
+	});
+
+	assert.match(formatted, /^\nCommand failed: bash run\.sh/u);
+	assert.match(formatted, /stdout omitted \(17 chars\)/u);
+	assert.match(formatted, /stderr omitted \(17 chars\)/u);
+	assert.doesNotMatch(formatted, /top secret/u);
 });

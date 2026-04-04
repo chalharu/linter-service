@@ -1,0 +1,4 @@
+global:
+  exclude_paths:
+    - ".github/linter-service.yaml"
+    - ".spectral.yaml"

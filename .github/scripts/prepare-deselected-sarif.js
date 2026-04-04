@@ -1,5 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const requireEnv = require("./lib/require-env.js");
+const { buildSarifEnvelope } = require("./lib/sarif.js");
 
 function runFromEnv(env = process.env) {
 	const report = prepareDeselectedSarif({
@@ -75,35 +77,12 @@ function buildEmptySarif(linter) {
 	const category = linter.sarif.category || `linter-service/${linter.name}`;
 	const toolName = linter.sarif.tool_name || `linter-service/${linter.name}`;
 
-	return {
-		$schema: "https://json.schemastore.org/sarif-2.1.0.json",
-		version: "2.1.0",
-		runs: [
-			{
-				automationDetails: {
-					id: category,
-				},
-				results: [],
-				tool: {
-					driver: {
-						informationUri: "https://github.com/chalharu/linter-service",
-						name: toolName,
-						rules: [],
-					},
-				},
-			},
-		],
-	};
-}
-
-function requireEnv(env, key) {
-	const value = env[key];
-
-	if (typeof value !== "string" || value.length === 0) {
-		throw new Error(`${key} is required`);
-	}
-
-	return value;
+	return buildSarifEnvelope({
+		category,
+		results: [],
+		rules: [],
+		toolName,
+	});
 }
 
 if (require.main === module) {

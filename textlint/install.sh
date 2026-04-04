@@ -14,6 +14,8 @@ image_ref=$(textlint_image_ref)
 base_image=$(textlint_base_image)
 min_release_age_days=$(textlint_npm_min_release_age_days)
 build_context="$RUNNER_TEMP/textlint-image"
+# renovate: datasource=npm depName=textlint
+textlint_version="15.5.2"
 
 if "$container_bin" image inspect "$image_ref" >/dev/null 2>&1; then
   exit 0
@@ -31,7 +33,7 @@ RUN npm install --global \\
   --no-fund \\
   --update-notifier=false \\
   --min-release-age=${min_release_age_days} \\
-  textlint@15.5.2
+  textlint@${textlint_version}
 EOF
 
 "$container_bin" build \

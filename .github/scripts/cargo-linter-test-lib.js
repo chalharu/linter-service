@@ -50,6 +50,14 @@ function writeFile(filePath, content) {
 	fs.writeFileSync(filePath, content, "utf8");
 }
 
+function readPinnedVersion(scriptPath, variableName) {
+	const source = fs.readFileSync(scriptPath, "utf8");
+	const match = source.match(new RegExp(`${variableName}="([^"\\n]+)"`, "u"));
+
+	assert.ok(match, `Expected ${variableName} in ${scriptPath}`);
+	return match[1];
+}
+
 function cleanupTempRepo(tempDir) {
 	fs.rmSync(tempDir, { recursive: true, force: true });
 }
@@ -217,6 +225,7 @@ module.exports = {
 	fs,
 	makeTempRepo,
 	path,
+	readPinnedVersion,
 	writeExecutable,
 	writeFile,
 };

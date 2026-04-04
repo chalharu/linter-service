@@ -12,14 +12,14 @@ if command -v hadolint >/dev/null 2>&1 && hadolint --version >/dev/null 2>&1; th
   exit 0
 fi
 
-release_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/hadolint/hadolint/releases/latest)"
-version="$(basename "$release_url")"
+# renovate: datasource=github-releases depName=hadolint/hadolint
+hadolint_version="v2.14.0"
 asset="hadolint-linux-x86_64"
 bin_dir="$RUNNER_TEMP/hadolint/bin"
 
 rm -rf "$bin_dir"
 mkdir -p "$bin_dir"
 
-curl -fsSL "https://github.com/hadolint/hadolint/releases/download/$version/$asset" -o "$bin_dir/hadolint"
+curl -fsSL "https://github.com/hadolint/hadolint/releases/download/$hadolint_version/$asset" -o "$bin_dir/hadolint"
 chmod +x "$bin_dir/hadolint"
 linter_lib::add_path "$bin_dir"

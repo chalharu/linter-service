@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const requireEnv = require("./lib/require-env.js");
 
 module.exports = async function upsertPullRequestComment({ github, env }) {
 	const marker = requireEnv(env, "COMMENT_MARKER");
@@ -50,16 +51,6 @@ module.exports = async function upsertPullRequestComment({ github, env }) {
 		});
 	}
 };
-
-function requireEnv(env, key) {
-	const value = env[key];
-
-	if (typeof value !== "string" || value.length === 0) {
-		throw new Error(`${key} is required`);
-	}
-
-	return value;
-}
 
 function parseIssueNumber(rawValue) {
 	const issueNumber = Number(rawValue);

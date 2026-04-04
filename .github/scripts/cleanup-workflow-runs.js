@@ -1,3 +1,5 @@
+const requireEnv = require("./lib/require-env.js");
+
 module.exports = async function cleanupWorkflowRuns({
 	env = process.env,
 	github,
@@ -47,16 +49,6 @@ module.exports = async function cleanupWorkflowRuns({
 		scannedRunCount: Array.isArray(runs) ? runs.length : 0,
 	};
 };
-
-function requireEnv(env, key) {
-	const value = env[key];
-
-	if (typeof value !== "string" || value.length === 0) {
-		throw new Error(`${key} is required`);
-	}
-
-	return value;
-}
 
 function parsePositiveInteger(rawValue, key) {
 	const value = Number(rawValue);

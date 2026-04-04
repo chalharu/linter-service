@@ -3,6 +3,7 @@ const path = require("node:path");
 
 const {
 	filterExcludedPaths,
+	getTextlintPresetPackages,
 	isLinterEnabled,
 	normalizeRelativePath,
 } = require("./linter-service-config.js");
@@ -64,6 +65,10 @@ function selectLinters({
 			continue;
 		}
 
+		if (!hasRequiredRuntimeConfig(definition, serviceConfig)) {
+			continue;
+		}
+
 		if (
 			hasPatternMatch({
 				candidatePaths,
@@ -83,6 +88,14 @@ function selectLinters({
 	}
 
 	return selectedLinters;
+}
+
+function hasRequiredRuntimeConfig(definition, serviceConfig) {
+	if (definition.name !== "textlint") {
+		return true;
+	}
+
+	return getTextlintPresetPackages(serviceConfig).length > 0;
 }
 
 function hasRequiredRootFiles(definition, repositoryPath) {

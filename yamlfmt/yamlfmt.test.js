@@ -6,6 +6,7 @@ const {
 	fs,
 	makeTempRepo,
 	path,
+	readPinnedVersion,
 	writeExecutable,
 	writeFile,
 } = require("../.github/scripts/cargo-linter-test-lib.js");
@@ -45,23 +46,18 @@ function createCurlStub(binDir) {
 	writeExecutable(
 		path.join(binDir, "curl"),
 		`#!/usr/bin/env bash
-set -euo pipefail
-out_file=""
-write_format=""
-url=""
-while [ "$#" -gt 0 ]; do
+	set -euo pipefail
+	out_file=""
+	url=""
+	while [ "$#" -gt 0 ]; do
   case "$1" in
     -o)
       out_file="$2"
       shift 2
       ;;
-    -w)
-      write_format="$2"
-      shift 2
-      ;;
-    -f|-s|-S|-L|-fsSL)
-      shift
-      ;;
+	    -f|-s|-S|-L|-fsSL)
+	      shift
+	      ;;
     http://*|https://*)
       url="$1"
       shift
@@ -70,18 +66,9 @@ while [ "$#" -gt 0 ]; do
       shift
       ;;
   esac
-done
-printf '%s\\n' "$url" >> "$CURL_URL_LOG"
-if [ "$url" = "https://github.com/google/yamlfmt/releases/latest" ]; then
-  if [ -n "$out_file" ] && [ "$out_file" != "/dev/null" ]; then
-    : > "$out_file"
-  fi
-  if [ "$write_format" = "%{url_effective}" ]; then
-    printf '%s' "\${YAMLFMT_RELEASE_URL:-https://github.com/google/yamlfmt/releases/tag/v9.9.9}"
-  fi
-  exit 0
-fi
-cp "$YAMLFMT_ASSET_SOURCE" "$out_file"
+	done
+	printf '%s\\n' "$url" >> "$CURL_URL_LOG"
+	cp "$YAMLFMT_ASSET_SOURCE" "$out_file"
 `,
 	);
 }
@@ -146,12 +133,14 @@ test("yamlfmt.sh patterns match YAML files", () => {
 	assert.equal(matches("config.json"), false);
 });
 
-test("yamlfmt.sh install downloads the latest Linux x86_64 release archive", () => {
+test("yamlfmt.sh install downloads the pinned Linux x86_64 release archive", () => {
 	const context = makeTempRepo("yamlfmt-install-");
 	const curlUrlLog = path.join(context.tempDir, "curl-urls.log");
+	const version = readPinnedVersion(installPath, "yamlfmt_version");
+	const archiveVersion = version.replace(/^v/u, "");
 	const assetPath = path.join(
 		context.tempDir,
-		"yamlfmt_0.21.0_Linux_x86_64.tar.gz",
+		`yamlfmt_${archiveVersion}_Linux_x86_64.tar.gz`,
 	);
 
 	createReleaseAsset(assetPath);
@@ -164,14 +153,11 @@ test("yamlfmt.sh install downloads the latest Linux x86_64 release archive", () 
 			env: createEnv(context, {
 				CURL_URL_LOG: curlUrlLog,
 				YAMLFMT_ASSET_SOURCE: assetPath,
-				YAMLFMT_RELEASE_URL:
-					"https://github.com/google/yamlfmt/releases/tag/v0.21.0",
 			}),
 		});
 
 		assert.deepEqual(fs.readFileSync(curlUrlLog, "utf8").trim().split("\n"), [
-			"https://github.com/google/yamlfmt/releases/latest",
-			"https://github.com/google/yamlfmt/releases/download/v0.21.0/yamlfmt_0.21.0_Linux_x86_64.tar.gz",
+			`https://github.com/google/yamlfmt/releases/download/${version}/yamlfmt_${archiveVersion}_Linux_x86_64.tar.gz`,
 		]);
 		assert.equal(
 			fs.existsSync(path.join(context.runnerTemp, "yamlfmt/bin/yamlfmt")),

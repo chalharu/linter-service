@@ -1,6 +1,7 @@
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const requireEnv = require("./lib/require-env.js");
 
 const TOOL_NAME = "linter-service";
 const TOOL_URI = "https://github.com/chalharu/linter-service";
@@ -244,16 +245,6 @@ function prefixMessage(messageText, linterName) {
 
 function hashValue(value) {
 	return crypto.createHash("sha256").update(value).digest("hex");
-}
-
-function requireEnv(env, key) {
-	const value = env[key];
-
-	if (typeof value !== "string" || value.length === 0) {
-		throw new Error(`${key} is required`);
-	}
-
-	return value;
 }
 
 if (require.main === module) {

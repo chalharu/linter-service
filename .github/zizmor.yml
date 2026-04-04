@@ -1,25 +1,23 @@
 rules:
   secrets-outside-env:
-    # `config.allow` is configurable in zizmor v1.24.0 and later.
-    # Keep the temporary line-level ignores below until this repository
-    # upgrades, then remove them as tracked in issue #23.
-    config:
-      allow:
-        - CHECKER_APP_ID
-        - CHECKER_PRIVATE_KEY
+    # Latest stable zizmor does not yet support per-secret allowlists for this
+    # audit, so keep ignores aligned to the specific secret-brokering sites.
     ignore:
-      - lint-common.yml:42
-      - lint-common.yml:81
-      - lint-common.yml:84
-      - repository-dispatch.yml:181
-      - repository-dispatch.yml:185
-      - repository-dispatch.yml:192
-      - repository-dispatch.yml:195
-      - repository-dispatch.yml:554
-      - repository-dispatch.yml:585
-      - repository-dispatch.yml:588
-      - repository-dispatch.yml:664
-      - repository-dispatch.yml:733
-      - repository-dispatch.yml:737
-      - repository-dispatch.yml:744
-      - repository-dispatch.yml:747
+      - lint-common.yml:51
+      - lint-common.yml:90
+      - lint-common.yml:93
+      - repository-dispatch.yml:107
+      - repository-dispatch.yml:197
+      - repository-dispatch.yml:201
+      - repository-dispatch.yml:208
+      - repository-dispatch.yml:211
+      - repository-dispatch.yml:570
+      - repository-dispatch.yml:601
+      - repository-dispatch.yml:604
+      - repository-dispatch.yml:655
+      - repository-dispatch.yml:656
+      - repository-dispatch.yml:680
+      - repository-dispatch.yml:749
+      - repository-dispatch.yml:753
+      - repository-dispatch.yml:760
+      - repository-dispatch.yml:763

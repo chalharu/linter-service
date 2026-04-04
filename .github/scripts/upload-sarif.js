@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const zlib = require("node:zlib");
+const requireEnv = require("./lib/require-env.js");
 
 const DEFAULT_POLL_ATTEMPTS = 15;
 const DEFAULT_POLL_INTERVAL_MS = 2000;
@@ -92,16 +93,6 @@ module.exports = async function uploadSarif({ github, env }) {
 
 	return { skipped, uploaded };
 };
-
-function requireEnv(env, key) {
-	const value = env[key];
-
-	if (typeof value !== "string" || value.length === 0) {
-		throw new Error(`${key} is required`);
-	}
-
-	return value;
-}
 
 function readPositiveIntegerEnv(env, key, fallbackValue) {
 	const raw = env[key];

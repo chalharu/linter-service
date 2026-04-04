@@ -7,6 +7,7 @@ const {
 	fs,
 	makeTempRepo,
 	path,
+	readPinnedVersion,
 	writeExecutable,
 	writeFile,
 } = require("../.github/scripts/cargo-linter-test-lib.js");
@@ -106,6 +107,10 @@ esac
 	);
 }
 
+function writeLinterServiceConfig(repoDir, source) {
+	writeFile(path.join(repoDir, ".github", "linter-service.yaml"), source);
+}
+
 test("getTextlintPresetRuleKey converts package names to textlint preset rule keys", () => {
 	assert.equal(
 		getTextlintPresetRuleKey("textlint-rule-preset-ja-technical-writing"),
@@ -121,23 +126,17 @@ test("resolveTextlintRuntime injects configured preset packages into a safe conf
 	const context = makeTempRepo("textlint-config-");
 	const outputPath = path.join(context.tempDir, "safe", ".textlintrc");
 
-	writeFile(
-		path.join(context.repoDir, ".github", "linter-service.json"),
-		JSON.stringify(
-			{
-				linters: {
-					textlint: {
-						disabled: false,
-						preset_packages: [
-							"textlint-rule-preset-ja-technical-writing@12.0.2",
-							"@textlint-ja/textlint-rule-preset-ai-writing@1.6.1",
-						],
-					},
-				},
-			},
-			null,
-			2,
-		),
+	writeLinterServiceConfig(
+		context.repoDir,
+		[
+			"linters:",
+			"  textlint:",
+			"    disabled: false",
+			"    preset_packages:",
+			'      - "textlint-rule-preset-ja-technical-writing@12.0.2"',
+			'      - "@textlint-ja/textlint-rule-preset-ai-writing@1.6.1"',
+			"",
+		].join("\n"),
 	);
 	writeFile(
 		path.join(context.repoDir, ".textlintrc"),
@@ -207,6 +206,7 @@ test("loadStaticTextlintConfig rejects non-JSON .textlintrc content", () => {
 
 test("textlint install builds a dedicated container image when missing", () => {
 	const context = makeTempRepo("textlint-install-");
+	const version = readPinnedVersion(installPath, "textlint_version");
 	const dockerBuildArgsLog = path.join(
 		context.tempDir,
 		"docker-build-args.log",
@@ -260,7 +260,10 @@ test("textlint install builds a dedicated container image when missing", () => {
 			fs.readFileSync(dockerfileCopy, "utf8"),
 			/--min-release-age=3/u,
 		);
-		assert.match(fs.readFileSync(dockerfileCopy, "utf8"), /textlint@15\.5\.2/u);
+		assert.match(
+			fs.readFileSync(dockerfileCopy, "utf8"),
+			new RegExp(`textlint@${version.replaceAll(".", "\\.")}`, "u"),
+		);
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}
@@ -288,23 +291,17 @@ test("textlint run installs hardened preset packages and uses the merged safe co
 	const dockerfileCopy = path.join(context.tempDir, "Dockerfile.copy");
 
 	createDockerStub(context.binDir);
-	writeFile(
-		path.join(context.repoDir, ".github", "linter-service.json"),
-		JSON.stringify(
-			{
-				linters: {
-					textlint: {
-						disabled: false,
-						preset_packages: [
-							"textlint-rule-preset-ja-technical-writing@12.0.2",
-							"@textlint-ja/textlint-rule-preset-ai-writing@1.6.1",
-						],
-					},
-				},
-			},
-			null,
-			2,
-		),
+	writeLinterServiceConfig(
+		context.repoDir,
+		[
+			"linters:",
+			"  textlint:",
+			"    disabled: false",
+			"    preset_packages:",
+			'      - "textlint-rule-preset-ja-technical-writing@12.0.2"',
+			'      - "@textlint-ja/textlint-rule-preset-ai-writing@1.6.1"',
+			"",
+		].join("\n"),
 	);
 	writeFile(
 		path.join(context.repoDir, ".textlintrc"),

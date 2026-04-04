@@ -1,7 +1,14 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const yaml = require("js-yaml");
 
 const { parseExactPackageSpec } = require("./npm-package-spec.js");
+const requireEnv = require("./lib/require-env.js");
+const LINTER_SERVICE_CONFIG_CANDIDATES = [
+	".github/linter-service.yaml",
+	".github/linter-service.yml",
+	".github/linter-service.json",
+];
 
 function runFromEnv(env = process.env) {
 	const repositoryPath = requireEnv(env, "SOURCE_REPOSITORY_PATH");
@@ -9,14 +16,10 @@ function runFromEnv(env = process.env) {
 }
 
 function loadLinterServiceConfig({ configPath, repositoryPath } = {}) {
-	const resolvedPath =
-		typeof configPath === "string" && configPath.length > 0
-			? configPath
-			: path.join(
-					requireString(repositoryPath, "repositoryPath"),
-					".github",
-					"linter-service.json",
-				);
+	const resolvedPath = resolveLinterServiceConfigPath({
+		configPath,
+		repositoryPath,
+	});
 
 	if (!fs.existsSync(resolvedPath)) {
 		return {
@@ -29,13 +32,65 @@ function loadLinterServiceConfig({ configPath, repositoryPath } = {}) {
 		};
 	}
 
-	const parsed = JSON.parse(fs.readFileSync(resolvedPath, "utf8"));
+	const parsed = parseLinterServiceConfigSource({
+		configPath: resolvedPath,
+		source: fs.readFileSync(resolvedPath, "utf8"),
+	});
 	const normalized = normalizeLinterServiceConfig(parsed);
 	return {
 		configPath: resolvedPath,
 		exists: true,
 		...normalized,
 	};
+}
+
+function resolveLinterServiceConfigPath({ configPath, repositoryPath } = {}) {
+	if (typeof configPath === "string" && configPath.length > 0) {
+		return configPath;
+	}
+
+	const resolvedRepositoryPath = requireString(
+		repositoryPath,
+		"repositoryPath",
+	);
+
+	for (const relativePath of LINTER_SERVICE_CONFIG_CANDIDATES) {
+		const candidatePath = path.join(resolvedRepositoryPath, relativePath);
+		if (fs.existsSync(candidatePath)) {
+			return candidatePath;
+		}
+	}
+
+	return path.join(resolvedRepositoryPath, LINTER_SERVICE_CONFIG_CANDIDATES[0]);
+}
+
+function parseLinterServiceConfigSource({ configPath, source }) {
+	let normalizedSource = String(source);
+	if (normalizedSource.charCodeAt(0) === 0xfeff) {
+		normalizedSource = normalizedSource.slice(1);
+	}
+
+	const extension = path.extname(configPath).toLowerCase();
+	if (extension === ".json") {
+		return JSON.parse(normalizedSource);
+	}
+
+	if (extension === ".yaml" || extension === ".yml") {
+		return parseYamlDocument(normalizedSource);
+	}
+
+	throw new Error(`unsupported linter-service config format: ${configPath}`);
+}
+
+function parseYamlDocument(source) {
+	try {
+		const parsed = yaml.load(source, {
+			schema: yaml.JSON_SCHEMA,
+		});
+		return parsed === undefined ? {} : parsed;
+	} catch (error) {
+		throw new Error(`failed to parse linter-service YAML: ${error.message}`);
+	}
 }
 
 function normalizeLinterServiceConfig(value) {
@@ -304,16 +359,6 @@ function matchesExcludedPattern(candidatePath, pattern) {
 function requireString(value, label) {
 	if (typeof value !== "string" || value.length === 0) {
 		throw new Error(`${label} is required`);
-	}
-
-	return value;
-}
-
-function requireEnv(env, key) {
-	const value = env[key];
-
-	if (typeof value !== "string" || value.length === 0) {
-		throw new Error(`${key} is required`);
 	}
 
 	return value;

@@ -1,5 +1,17 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const requireEnv = require("./lib/require-env.js");
+const {
+	deriveTargetCount,
+	escapeHtml,
+	formatTargetLabel,
+	normalizeOptionalCount,
+	normalizeStringArray,
+	readLinterConfig,
+	readResult,
+	readSelectedFiles,
+	readTargetKind,
+} = require("./lib/linter-shared.js");
 
 const CARGO_LINTERS = new Set(["cargo-clippy", "cargo-deny"]);
 const CARGO_DENY_CONFIG_FILE = /(?:^|\/)\.cargo\/config(?:\.toml)?$/u;
@@ -59,71 +71,39 @@ function renderReport({
 	const success =
 		!hasStepFailure && (selectedFiles.length === 0 || exitCodeRaw === "0");
 	const conclusion = success ? "success" : "failure";
-	const lines = [`### ${linterName}`, ""];
 	let detailsText = "";
-	let status = "failure";
-	let summaryText = "";
+	const status =
+		hasStepFailure && result === null
+			? "infra_failure"
+			: selectedFiles.length === 0 && exitCodeRaw === ""
+				? "no_targets"
+				: success
+					? "success"
+					: "failure";
 
-	if (hasStepFailure && result === null) {
-		status = "infra_failure";
-		summaryText = buildSummaryText({
-			linterName,
-			status,
-			targetStats: normalizeTargetStats({
-				checkedProjects,
-				linterConfig,
-				selectedFiles,
-				status,
-				targetStats,
-			}),
-		});
-		lines.push(summaryText);
-		appendTargetLines(lines, targetLines);
-	} else if (selectedFiles.length === 0 && exitCodeRaw === "") {
-		status = "no_targets";
-		summaryText = buildSummaryText({
-			linterName,
-			status,
-			targetStats: normalizeTargetStats({
-				checkedProjects,
-				linterConfig,
-				selectedFiles,
-				status,
-				targetStats,
-			}),
-		});
-		lines.push(summaryText);
-	} else if (success) {
-		status = "success";
-		summaryText = buildSummaryText({
-			linterName,
-			status,
-			targetStats: normalizeTargetStats({
-				checkedProjects,
-				linterConfig,
-				selectedFiles,
-				status,
-				targetStats,
-			}),
-		});
-		lines.push(summaryText);
-		appendTargetLines(lines, targetLines);
-	} else {
-		status = "failure";
+	if (status === "failure") {
 		detailsText = resolveDetails(result, buildDetailsFallback(linterName));
-		summaryText = buildSummaryText({
-			linterName,
-			status,
-			targetStats: normalizeTargetStats({
-				checkedProjects,
-				linterConfig,
-				selectedFiles,
-				status,
-				targetStats,
-			}),
-		});
-		lines.push(summaryText);
+	}
+
+	const normalizedTargetStats = normalizeTargetStats({
+		checkedProjects,
+		linterConfig,
+		selectedFiles,
+		status,
+		targetStats,
+	});
+	const summaryText = buildSummaryText({
+		linterName,
+		status,
+		targetStats: normalizedTargetStats,
+	});
+	const lines = [`### ${linterName}`, "", summaryText];
+
+	if (status !== "no_targets") {
 		appendTargetLines(lines, targetLines);
+	}
+
+	if (status === "failure") {
 		lines.push(
 			"",
 			"<details><summary>Details</summary>",
@@ -143,63 +123,9 @@ function renderReport({
 		selectedFiles,
 		status,
 		summaryText,
-		targetStats: normalizeTargetStats({
-			checkedProjects,
-			linterConfig,
-			selectedFiles,
-			status,
-			targetStats,
-		}),
+		targetStats: normalizedTargetStats,
 		targetSummary: buildTargetSummary(selectedFiles, checkedProjects),
 	};
-}
-
-function requireEnv(env, key) {
-	const value = env[key];
-
-	if (typeof value !== "string" || value.length === 0) {
-		throw new Error(`${key} is required`);
-	}
-
-	return value;
-}
-
-function readLinterConfig(configPath, linterName) {
-	const configData = JSON.parse(fs.readFileSync(configPath, "utf8"));
-	const linters = Array.isArray(configData.linters) ? configData.linters : [];
-	const config = linters.find(
-		(item) => item && typeof item.name === "string" && item.name === linterName,
-	);
-
-	if (!config) {
-		throw new Error(`unsupported linter: ${linterName}`);
-	}
-
-	return config;
-}
-
-function readSelectedFiles(selectedFilesPath) {
-	if (!fs.existsSync(selectedFilesPath)) {
-		return [];
-	}
-
-	return fs
-		.readFileSync(selectedFilesPath, "utf8")
-		.split(/\r?\n/u)
-		.map((line) => line.trim())
-		.filter(Boolean);
-}
-
-function readResult(resultPath) {
-	if (!fs.existsSync(resultPath)) {
-		return null;
-	}
-
-	try {
-		return JSON.parse(fs.readFileSync(resultPath, "utf8"));
-	} catch {
-		return null;
-	}
 }
 
 function resolveDetails(result, fallback) {
@@ -324,42 +250,12 @@ function normalizeTargetStats({
 	};
 }
 
-function readTargetKind(linterConfig) {
-	return linterConfig?.sarif?.target_kind === "cargo-projects"
-		? "cargo-project"
-		: "file";
-}
-
-function deriveTargetCount({ checkedProjects, selectedFiles, targetKind }) {
-	if (targetKind === "cargo-project") {
-		return checkedProjects.length > 0
-			? checkedProjects.length
-			: selectedFiles.length;
-	}
-
-	return selectedFiles.length > 0
-		? selectedFiles.length
-		: checkedProjects.length;
-}
-
-function normalizeOptionalCount(value) {
-	return Number.isInteger(value) && value >= 0 ? value : null;
-}
-
 function formatRatio(passed, total) {
 	return `${passed} / ${total}`;
 }
 
 function formatTargetQuantity(count, targetKind) {
 	return `${count} ${formatTargetLabel(targetKind, count)}`;
-}
-
-function formatTargetLabel(targetKind, count) {
-	if (targetKind === "cargo-project") {
-		return count === 1 ? "Cargo project" : "Cargo projects";
-	}
-
-	return count === 1 ? "file" : "files";
 }
 
 function appendTargetLines(lines, targetLines) {
@@ -621,13 +517,6 @@ function normalizePath(filePath) {
 	return filePath.replace(/\\/gu, "/");
 }
 
-function escapeHtml(value) {
-	return value
-		.replaceAll("&", "&amp;")
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;");
-}
-
 function buildReportSummary({
 	body,
 	checkedProjects = [],
@@ -674,14 +563,6 @@ function buildReportSummary({
 		target_count: normalizedTargetStats.targetCount,
 		target_kind: normalizedTargetStats.targetKind,
 	};
-}
-
-function normalizeStringArray(values) {
-	return Array.isArray(values)
-		? values.filter(
-				(value) => typeof value === "string" && value.trim().length > 0,
-			)
-		: [];
 }
 
 function writeReportFiles({ linterName, report, runnerTemp }) {

@@ -1,8 +1,0 @@
-{
-  "global": {
-    "exclude_paths": [
-      ".github/linter-service.json",
-      ".spectral.yaml"
-    ]
-  }
-}

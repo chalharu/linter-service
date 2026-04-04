@@ -1,0 +1,10 @@
+global:
+  exclude_paths:
+    - "**/tests/*/target/**"
+    - "**/tests/*/sarif.json"
+linters:
+  textlint:
+    disabled: false
+    preset_packages:
+      - "textlint-rule-preset-ja-technical-writing@12.0.2"
+      - "@textlint-ja/textlint-rule-preset-ai-writing@1.6.1"

@@ -1,0 +1,230 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const test = require("node:test");
+
+const repoRoot = path.join(__dirname, "..", "..");
+
+const installerExpectations = [
+	{
+		path: "actionlint/install.sh",
+		required: [
+			/# renovate: datasource=github-releases depName=rhysd\/actionlint/u,
+			/actionlint_version="[^"\n]+"/u,
+			/releases\/download\/\$actionlint_version\//u,
+		],
+	},
+	{
+		path: "ghalint/install.sh",
+		required: [
+			/# renovate: datasource=github-releases depName=suzuki-shunsuke\/ghalint/u,
+			/ghalint_version="[^"\n]+"/u,
+			/releases\/download\/\$ghalint_version\//u,
+		],
+	},
+	{
+		path: "hadolint/install.sh",
+		required: [
+			/# renovate: datasource=github-releases depName=hadolint\/hadolint/u,
+			/hadolint_version="[^"\n]+"/u,
+			/releases\/download\/\$hadolint_version\//u,
+		],
+	},
+	{
+		path: "dotenv-linter/install.sh",
+		required: [
+			/# renovate: datasource=github-releases depName=dotenv-linter\/dotenv-linter/u,
+			/dotenv_linter_version="[^"\n]+"/u,
+			/releases\/download\/\$dotenv_linter_version\//u,
+		],
+	},
+	{
+		path: "editorconfig-checker/install.sh",
+		required: [
+			/# renovate: datasource=github-releases depName=editorconfig-checker\/editorconfig-checker/u,
+			/editorconfig_checker_version="[^"\n]+"/u,
+			/releases\/download\/\$editorconfig_checker_version\//u,
+		],
+	},
+	{
+		path: "shellcheck/install.sh",
+		required: [
+			/# renovate: datasource=github-releases depName=koalaman\/shellcheck/u,
+			/shellcheck_version="[^"\n]+"/u,
+			/releases\/download\/\$shellcheck_version\//u,
+		],
+	},
+	{
+		path: "taplo/install.sh",
+		required: [
+			/# renovate: datasource=github-releases depName=tamasfe\/taplo/u,
+			/taplo_version="[^"\n]+"/u,
+			/releases\/download\/\$taplo_version\//u,
+		],
+	},
+	{
+		path: "cargo-deny/install.sh",
+		required: [
+			/# renovate: datasource=rust depName=rust versioning=semver/u,
+			/rust_toolchain_version="[^"\n]+"/u,
+			/--default-toolchain "\$rust_toolchain_version"/u,
+			/# renovate: datasource=github-releases depName=EmbarkStudios\/cargo-deny/u,
+			/cargo_deny_version="[^"\n]+"/u,
+			/releases\/download\/\$cargo_deny_version\//u,
+		],
+	},
+	{
+		path: "yamlfmt/install.sh",
+		required: [
+			/# renovate: datasource=github-releases depName=google\/yamlfmt/u,
+			/yamlfmt_version="[^"\n]+"/u,
+			/releases\/download\/\$yamlfmt_version\//u,
+		],
+	},
+	{
+		path: "biome/install.sh",
+		required: [
+			/# renovate: datasource=npm depName=@biomejs\/biome/u,
+			/biome_version="[^"\n]+"/u,
+			/@biomejs\/biome@\$biome_version/u,
+		],
+	},
+	{
+		path: "markdownlint-cli2/install.sh",
+		required: [
+			/# renovate: datasource=npm depName=markdownlint-cli2/u,
+			/markdownlint_cli2_version="[^"\n]+"/u,
+			/markdownlint-cli2@\$markdownlint_cli2_version/u,
+		],
+	},
+	{
+		path: "spectral/install.sh",
+		required: [
+			/# renovate: datasource=npm depName=@stoplight\/spectral-cli/u,
+			/spectral_version="[^"\n]+"/u,
+			/@stoplight\/spectral-cli@\$spectral_version/u,
+		],
+	},
+	{
+		path: "yamllint/install.sh",
+		required: [
+			/# renovate: datasource=pypi depName=yamllint/u,
+			/yamllint_version="[^"\n]+"/u,
+			/yamllint==\$yamllint_version/u,
+		],
+	},
+	{
+		path: "zizmor/install.sh",
+		required: [
+			/# renovate: datasource=pypi depName=zizmor/u,
+			/zizmor_version="[^"\n]+"/u,
+			/zizmor==\$zizmor_version/u,
+		],
+	},
+	{
+		path: "ruff/install.sh",
+		required: [
+			/# renovate: datasource=pypi depName=ruff/u,
+			/ruff_version="[^"\n]+"/u,
+			/ruff==\$ruff_version/u,
+		],
+	},
+	{
+		path: "rustfmt/install.sh",
+		required: [
+			/# renovate: datasource=rust depName=rust versioning=semver/u,
+			/rust_toolchain_version="[^"\n]+"/u,
+			/--default-toolchain "\$rust_toolchain_version"/u,
+		],
+	},
+	{
+		path: "textlint/install.sh",
+		required: [
+			/# renovate: datasource=npm depName=textlint/u,
+			/textlint_version="[^"\n]+"/u,
+			/textlint@\$\{textlint_version\}/u,
+		],
+	},
+];
+
+test("installer scripts use renovate-managed pinned versions", () => {
+	for (const expectation of installerExpectations) {
+		const source = fs.readFileSync(
+			path.join(repoRoot, expectation.path),
+			"utf8",
+		);
+
+		for (const pattern of expectation.required) {
+			assert.match(source, pattern, expectation.path);
+		}
+
+		assert.doesNotMatch(source, /resolve_latest_github_release_tag/u);
+	}
+});
+
+test("renovate manages installer pins with a three day hold", () => {
+	const config = JSON.parse(
+		fs.readFileSync(path.join(repoRoot, "renovate.json"), "utf8"),
+	);
+
+	assert.ok(config.enabledManagers.includes("custom.regex"));
+	assert.ok(Array.isArray(config.customManagers));
+	assert.ok(
+		config.customManagers.some(
+			(manager) =>
+				manager.customType === "regex" &&
+				Array.isArray(manager.managerFilePatterns) &&
+				manager.managerFilePatterns.includes("/(^|/)[^/]+/install\\.sh$/"),
+		),
+	);
+	assert.ok(
+		config.packageRules.some(
+			(rule) =>
+				Array.isArray(rule.matchManagers) &&
+				rule.matchManagers.includes("custom.regex") &&
+				rule.minimumReleaseAge === "3 days",
+		),
+	);
+});
+
+test("renovate manages textlint preset package pins from YAML config", () => {
+	const config = JSON.parse(
+		fs.readFileSync(path.join(repoRoot, "renovate.json"), "utf8"),
+	);
+	const yamlConfig = fs.readFileSync(
+		path.join(repoRoot, ".github", "linter-service.yaml"),
+		"utf8",
+	);
+
+	assert.ok(
+		config.customManagers.some(
+			(manager) =>
+				manager.customType === "regex" &&
+				Array.isArray(manager.managerFilePatterns) &&
+				manager.managerFilePatterns.includes(
+					"/(^|/)\\.github/linter-service\\.ya?ml$/",
+				) &&
+				Array.isArray(manager.matchStrings) &&
+				manager.matchStrings.some((pattern) =>
+					pattern.includes("textlint-rule-preset-"),
+				) &&
+				manager.datasourceTemplate === "npm",
+		),
+	);
+	assert.match(
+		yamlConfig,
+		/^\s+- "textlint-rule-preset-ja-technical-writing@12\.0\.2"$/mu,
+	);
+	assert.match(
+		yamlConfig,
+		/^\s+- "@textlint-ja\/textlint-rule-preset-ai-writing@1\.6\.1"$/mu,
+	);
+});
+
+test("root shared Node dependencies use exact version pins", () => {
+	const manifest = JSON.parse(
+		fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"),
+	);
+
+	assert.match(manifest.dependencies["js-yaml"], /^\d+\.\d+\.\d+$/u);
+});
