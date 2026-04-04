@@ -35,17 +35,18 @@ jobs:
         run: |
           node - <<'NODE' >> "$GITHUB_OUTPUT"
           const fs = require("node:fs");
-          const {
-            buildLinterJobAssignments,
-            validateDefinition,
-          } = require("./.github/scripts/linter-targeting.js");
+          const { buildLinterJobAssignments } = require("./.github/scripts/linter-targeting.js");
           const config = JSON.parse(fs.readFileSync("linters.json", "utf8"));
-          const definitions = Array.isArray(config.linters) ? config.linters : [];
-          const selectedLinters = [];
-          for (const definition of definitions) {
-            validateDefinition(definition);
-            selectedLinters.push(definition.name);
-          }
+          const definitions = Array.isArray(config.linters)
+            ? config.linters
+                .filter((definition) => definition && typeof definition.name === "string")
+                .map((definition) => ({
+                  isolated: definition.isolated,
+                  name: definition.name,
+                  patterns: ["."],
+                }))
+            : [];
+          const selectedLinters = definitions.map((definition) => definition.name);
           const assignments = buildLinterJobAssignments({
             definitions,
             selectedLinters,
