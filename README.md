@@ -1,7 +1,7 @@
 # linter-service
 
 このリポジトリは、複数 repository の PR と default branch push に対して、
-共通の GitHub Actions で lint を実行するための基盤である。
+共通の GitHub Actions で lint を実行するための基盤です。
 GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 `repository_dispatch` を送る。
 

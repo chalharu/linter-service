@@ -1,6 +1,6 @@
 # Cloudflare Worker Webhook Proxy
 
-この Worker は webhook の受け口である。
+この Worker は webhook の受け口です。
 GitHub App の通知を安全に検証する。
 必要な PR 情報を payload に整える。
 このリポジトリへ dispatch を送り lint を起動する。
@@ -102,7 +102,7 @@ npm run deploy
 ローカルでは `.dev.vars` に値を入れて使う。
 Cloudflare では同じ値を Secret として入れる。
 dispatcher App の installation は owner/repo から引く。
-追加の installation ID 設定は不要である。
+追加の installation ID 設定は不要です。
 
 ## Worker の環境変数
 
@@ -209,7 +209,7 @@ workflow 側は不足する詳細だけを取り直す。
 
 `check_run` webhook も受信するが、`repository_dispatch` には転送しない。
 lint 対象の決定は PR 状態で十分に行えるため、各 upstream check completion をそのまま
-forward すると同じ PR/head SHA に対して重複 run が増えるためである。
+forward すると同じ PR/head SHA に対して重複 run が増えるためです。
 
 ### payload の補足
 
