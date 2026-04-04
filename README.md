@@ -1,9 +1,9 @@
 # linter-service
 
-このリポジトリは共通 lint 実行基盤です。
-複数リポジトリの PR をまとめて受けます。
-Cloudflare Worker が dispatch を中継します。
-GitHub Actions が共通ルールで lint します。
+このリポジトリは、複数 repository の PR と default branch push に対して、
+共通の GitHub Actions で lint を実行するための基盤です。
+GitHub App Webhook を Cloudflare Worker が受け、この repository へ
+`repository_dispatch` を送ります。
 
 ## 全体像
 
@@ -44,9 +44,9 @@ GitHub Actions が共通ルールで lint します。
 
 - PR では changed file path から選択します。
 - default branch push では tracked file path 全体から選択します。
-- `.github/linter-service.json` がない場合は、`初期選択` が ✅ の linter を
+- `.github/linter-service.json` がない場合は、`初期選択` 列で有効な linter を
    exclude なしで選択します。
-- `textlint` のような default-disabled linter と、`required_root_files` を
+- `textlint` のような default-disabled linter と、`required_root_files` 条件を
    満たさない linter は自動選択しません。
 - 設定ファイルの変更時は、対応 linter の target file path 全体を再評価します。
 
@@ -93,8 +93,8 @@ GitHub Actions が共通ルールで lint します。
 ## `.github/linter-service.json`
 
 - 利用 repository 側の target selection 制御用である。
-- file がない場合は、`初期選択` が ✅ の linter を exclude なしで routing する。
-- default-disabled な linter と、`required_root_files` を満たさない linter は
+- file がない場合は、`初期選択` 列で有効な linter を exclude なしで routing する。
+- default-disabled な linter と、`required_root_files` 条件を満たさない linter は
    自動選択しない。
 
 ```json
@@ -137,11 +137,12 @@ GitHub Actions が共通ルールで lint します。
 ## 共有 linter の追加方法
 
 - 追加先は root の `linters.json` と root 直下の `<name>/` directory である。`.github/scripts/` は shared script 専用である。
-- 最低限の構成は `patterns.sh`, `install.sh`, `run.sh`、必要に応じて `common.sh` である。
-- fixture は `tests/<case>/target/`, `result.json`, `sarif.json` の構成、最低でも pass, fail の 2 系統である。
+- 最低限の構成は `patterns.sh`, `install.sh`, `run.sh` である。`run.sh` から shared helper を分離する場合に `common.sh` を追加する。
+- fixture は `tests/<case>/target/`, `result.json`, `sarif.json` の構成である。最低でも pass と fail の 2 系統を用意する。
 - `linters.json` が comment 見出し、成功 / 失敗文言、fallback message の正本である。通常は workflow 個別修正不要である。
 - untrusted PR でも安全に扱える実装を前提とし、任意コード実行につながる config は拒否または隔離実行で扱う。
-- 変更後は fixture test, focused unit test, `shellcheck`, `markdownlint-cli2`, `git diff --check` など、触った面の既存 validation を実行する。
+- 変更後は fixture test を実行する。
+- 加えて、変更面に応じて focused unit test と `shellcheck`、`markdownlint-cli2`、`git diff --check` など既存 validation を実行する。
 
 ```text
 <name>/
