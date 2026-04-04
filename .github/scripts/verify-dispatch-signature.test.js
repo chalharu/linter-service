@@ -81,3 +81,26 @@ test("verifyDispatchSignature trims the shared secret like the worker", () => {
 		});
 	});
 });
+
+test("verifyDispatchSignature accepts multiline secrets in quoted env format", () => {
+	const payload = {
+		delivery_id: "delivery-123",
+		event_name: "push",
+		repository: {
+			full_name: "acme/service-repo",
+		},
+	};
+	const secret =
+		"-----BEGIN RSA PRIVATE KEY-----\r\nline-one\r\nline-two\r\n-----END RSA PRIVATE KEY-----";
+	const signedPayload = {
+		...payload,
+		signature: signDispatchPayload({ payload, secret }),
+	};
+
+	assert.doesNotThrow(() => {
+		verifyDispatchSignature({
+			payloadJson: JSON.stringify(signedPayload),
+			secret: JSON.stringify(secret),
+		});
+	});
+});
