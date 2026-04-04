@@ -39,8 +39,8 @@ Worker は dispatch 先 repo からの self-webhook を無視する。
 
 | App | Install 先 | 主な用途 |
 |-----|------------|----------|
-| `linter-service-dispatcher` | このリポジトリ | Worker から `repository_dispatch` を送る |
 | `linter-service-checker` | 各利用リポジトリ + このリポジトリ | PR 情報取得、checkout、comment、check run 更新 |
+| `linter-service-dispatcher` | このリポジトリ | Worker から `repository_dispatch` を送る |
 
 - `dispatcher` の権限: `Contents: write`, `Metadata: read`
 - `checker` の権限: `Checks: write`, `Contents: read`, `Pull requests: write`, `Metadata: read`
@@ -108,14 +108,14 @@ dispatcher App の installation は owner/repo から引く。
 
 | 変数名 | 必須 | 用途 |
 |--------|------|------|
+| `GITHUB_API_BASE_URL` | 任意 | 既定値は `https://api.github.com`。指定時は HTTPS のみ許可する。 |
 | `GITHUB_CHECKER_APP_ID` | ✅ | checker App の ID |
 | `GITHUB_CHECKER_APP_PRIVATE_KEY` | ✅ | checker App の PEM 秘密鍵 |
-| `GITHUB_DISPATCHER_APP_ID` | ✅ | dispatcher App の ID |
-| `GITHUB_DISPATCHER_APP_PRIVATE_KEY` | ✅ | dispatcher App の PEM 秘密鍵 |
 | `GITHUB_CHECKER_WEBHOOK_SECRET` | ✅ | checker App の webhook secret |
 | `GITHUB_DISPATCH_OWNER` | ✅ | dispatch 先 owner |
 | `GITHUB_DISPATCH_REPO` | ✅ | dispatch 先 repository 名 |
-| `GITHUB_API_BASE_URL` | 任意 | 既定値は `https://api.github.com`。指定時は HTTPS のみ許可する。 |
+| `GITHUB_DISPATCHER_APP_ID` | ✅ | dispatcher App の ID |
+| `GITHUB_DISPATCHER_APP_PRIVATE_KEY` | ✅ | dispatcher App の PEM 秘密鍵 |
 
 - `event_type` は `github_app_webhook` 固定である。
 - PEM は RSA 形式と PKCS#8 形式の両方に対応する。
@@ -226,7 +226,7 @@ forward すると同じ PR/head SHA に対して重複 run が増えるためで
 
 | ファイル | 役割 |
 |----------|------|
+| `.dev.vars.example` | ローカル開発用の環境変数サンプル |
 | `src/index.ts` | Worker 本体 |
 | `test/index.test.ts` | Webhook 検証と dispatch 処理のテスト |
 | `wrangler.toml` | Cloudflare Workers 設定 |
-| `.dev.vars.example` | ローカル開発用の環境変数サンプル |

@@ -31,13 +31,15 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 
 | パス | 役割 |
 |------|------|
-| `.github/workflows/repository-dispatch.yml` | router workflow |
-| `.github/workflows/lint-common.yml` | 共通 reusable workflow |
+| `.github/codeql/` | CodeQL の分析設定 |
 | `.github/linter-service.json` | source repo 側の exclude / disable 設定 |
-| `linters.json` | linter 定義と report/SARIF 文言 |
-| `<linter>/` | linter ごとの script / fixture test / helper |
 | `.github/scripts/` | shared helper / renderer / artifact utility |
 | `.github/workflows/ci.yml` | `worker/` 検証と fixture test CI |
+| `.github/workflows/codeql.yml` | fixture 除外付き CodeQL workflow |
+| `.github/workflows/lint-common.yml` | 共通 reusable workflow |
+| `.github/workflows/repository-dispatch.yml` | router workflow |
+| `<linter>/` | linter ごとの script / fixture test / helper |
+| `linters.json` | linter 定義と report/SARIF 文言 |
 | `worker/` | Webhook を受ける Cloudflare Worker |
 
 ## 共有 linter 一覧
@@ -54,41 +56,41 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | linter | 対象ファイル | 設定ファイル | 初期選択 |
 | --- | --- | --- | --- |
 | `actionlint` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | `.github/actionlint.yaml`, `.github/actionlint.yml` | ✅ |
-| `ghalint` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | 左から順に `.ghalint.yaml`, `.ghalint.yml`, `ghalint.yaml`, `ghalint.yml`, `.github/ghalint.yaml`, `.github/ghalint.yml` | ✅ |
-| `hadolint` | `Dockerfile`, `Dockerfile.*`, `Containerfile`, `Containerfile.*`, `*.dockerfile`, `*.containerfile` | 対象 file の親方向の `.hadolint.yaml`, `.hadolint.yml` | ✅ |
-| `trivy` | `Dockerfile`, `Dockerfile.*`, `Containerfile`, `Containerfile.*`, `*.dockerfile`, `*.containerfile` | repo root の `trivy.yaml`, `trivy.yml`, `.trivyignore` | ✅ |
-| `dotenv-linter` | `.env`, `.env.*` | なし | ✅ |
-| `spectral` | `*.json`, `*.yaml`, `*.yml` | `.spectral.yml`, `.spectral.yaml`, `.spectral.json` | ✅ |
-| `yamllint` | `*.yaml`, `*.yml` | 左から順に `.yamllint`, `.yamllint.yaml`, `.yamllint.yml` | ✅ |
-| `yamlfmt` | `*.yaml`, `*.yml` | 左から順に `.yamlfmt`, `yamlfmt.yml`, `yamlfmt.yaml`, `.yamlfmt.yaml`, `.yamlfmt.yml` | ✅ |
-| `markdownlint-cli2` | `*.md`, `*.markdown` | 左から順に `.markdownlint-cli2.jsonc`, `.markdownlint-cli2.yaml`, `.markdownlint.jsonc`, `.markdownlint.json`, `.markdownlint.yaml`, `.markdownlint.yml` | ✅ |
-| `textlint` | `*.md`, `*.markdown`, `*.txt` | repo root の `.textlintrc` | ❌ |
-| `ruff` | `*.py`, `*.pyi` | 同一 directory では左から順に `.ruff.toml`, `ruff.toml`, `pyproject.toml` の `[tool.ruff]` | ✅ |
-| `rustfmt` | `*.rs` | `rustfmt.toml`, `.rustfmt.toml`, `rust-toolchain.toml`, `rust-toolchain` | ✅ |
+| `biome` | `*.js`, `*.jsx`, `*.ts`, `*.tsx`, `*.json`, `*.jsonc`, `*.cjs`, `*.cts`, `*.mjs`, `*.mts` | `biome.json`, `biome.jsonc`, `.biome.json`, `.biome.jsonc` | ✅ |
 | `cargo-clippy` | `*.rs` | `clippy.toml`, `.clippy.toml`, `rust-toolchain.toml`, `rust-toolchain` | ✅ |
 | `cargo-deny` | `Cargo.toml`, `Cargo.lock`, `deny.toml`, `.cargo/config`, `.cargo/config.toml` | 対象 `Cargo.toml` の親方向の `deny.toml` | ✅ |
-| `taplo` | `*.toml` | 左から順に `.taplo.toml`, `taplo.toml` | ✅ |
-| `biome` | `*.js`, `*.jsx`, `*.ts`, `*.tsx`, `*.json`, `*.jsonc`, `*.cjs`, `*.cts`, `*.mjs`, `*.mts` | `biome.json`, `biome.jsonc`, `.biome.json`, `.biome.jsonc` | ✅ |
+| `dotenv-linter` | `.env`, `.env.*` | なし | ✅ |
 | `editorconfig-checker` | upstream default exclude に含まれない file | 対象 file の親 directory ごとの `.editorconfig`, repo root の `.editorconfig-checker.json`, `.ecrc` | ✅ |
+| `ghalint` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | 左から順に `.ghalint.yaml`, `.ghalint.yml`, `ghalint.yaml`, `ghalint.yml`, `.github/ghalint.yaml`, `.github/ghalint.yml` | ✅ |
+| `hadolint` | `Dockerfile`, `Dockerfile.*`, `Containerfile`, `Containerfile.*`, `*.dockerfile`, `*.containerfile` | 対象 file の親方向の `.hadolint.yaml`, `.hadolint.yml` | ✅ |
+| `markdownlint-cli2` | `*.md`, `*.markdown` | 左から順に `.markdownlint-cli2.jsonc`, `.markdownlint-cli2.yaml`, `.markdownlint.jsonc`, `.markdownlint.json`, `.markdownlint.yaml`, `.markdownlint.yml` | ✅ |
+| `ruff` | `*.py`, `*.pyi` | 同一 directory では左から順に `.ruff.toml`, `ruff.toml`, `pyproject.toml` の `[tool.ruff]` | ✅ |
+| `rustfmt` | `*.rs` | `rustfmt.toml`, `.rustfmt.toml`, `rust-toolchain.toml`, `rust-toolchain` | ✅ |
 | `shellcheck` | `*.bash`, `*.ksh`, `*.sh` | 対象 script の親方向の `.shellcheckrc`, `shellcheckrc` | ✅ |
+| `spectral` | `*.json`, `*.yaml`, `*.yml` | `.spectral.yml`, `.spectral.yaml`, `.spectral.json` | ✅ |
+| `taplo` | `*.toml` | 左から順に `.taplo.toml`, `taplo.toml` | ✅ |
+| `textlint` | `*.md`, `*.markdown`, `*.txt` | repo root の `.textlintrc` | ❌ |
+| `trivy` | `Dockerfile`, `Dockerfile.*`, `Containerfile`, `Containerfile.*`, `*.dockerfile`, `*.containerfile` | repo root の `trivy.yaml`, `trivy.yml`, `.trivyignore` | ✅ |
+| `yamlfmt` | `*.yaml`, `*.yml` | 左から順に `.yamlfmt`, `yamlfmt.yml`, `yamlfmt.yaml`, `.yamlfmt.yaml`, `.yamlfmt.yml` | ✅ |
+| `yamllint` | `*.yaml`, `*.yml` | 左から順に `.yamllint`, `.yamllint.yaml`, `.yamllint.yml` | ✅ |
 | `zizmor` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | `zizmor.yml`, `zizmor.yaml`, `.github/zizmor.yml`, `.github/zizmor.yaml` | ✅ |
 
 ### 共有 linter ごとの実行メモ
 
 | linter | 実行メモ |
 | --- | --- |
-| `trivy` | Dockerfile, Containerfile misconfiguration scan 専用、SHA pin した official image での最小権限実行。 |
-| `dotenv-linter` | changed `.env` file への upstream default checks 直接適用、`--schema` と ignore-checks 注入は未対応。 |
-| `spectral` | `.spectral.js` 非対応、未配置時は `spectral:oas`、unknown format は無視。 |
-| `yamlfmt` | repo root config の明示指定、未配置時は temp default config 利用。 |
-| `markdownlint-cli2` | 静的 config のみ対応、`.cjs`, `.mjs` 非対応、`globs` 不使用。 |
-| `textlint` | repo root の `.textlintrc` のみ対応、YAML, JS, comment 付き config は非対応、`disabled: false` と exact version 付き `preset_packages` 指定時のみ動作。 |
-| `ruff` | `--force-exclude` 付与。 |
-| `rustfmt` | selected Rust file path の直接 `rustfmt --check` 実行。 |
 | `cargo-clippy` | 最寄り `Cargo.toml` 基準の package 単位実行、`.cargo/config*`, private registry, private git dependency は未対応。 |
 | `cargo-deny` | 最寄り `Cargo.toml` 基準の package 単位実行、`.cargo/config*`, private registry, private git dependency は未対応。 |
-| `taplo` | 未配置時の既定 `fmt --check`。 |
+| `dotenv-linter` | changed `.env` file への upstream default checks 直接適用、`--schema` と ignore-checks 注入は未対応。 |
 | `editorconfig-checker` | `PassedFiles` 制限、`NoColor` 強制。 |
+| `markdownlint-cli2` | 静的 config のみ対応、`.cjs`, `.mjs` 非対応、`globs` 不使用。 |
+| `ruff` | `--force-exclude` 付与。 |
+| `rustfmt` | selected Rust file path の直接 `rustfmt --check` 実行。 |
+| `spectral` | `.spectral.js` 非対応、未配置時は `spectral:oas`、unknown format は無視。 |
+| `taplo` | 未配置時の既定 `fmt --check`。 |
+| `textlint` | repo root の `.textlintrc` のみ対応、YAML, JS, comment 付き config は非対応、`disabled: false` と exact version 付き `preset_packages` 指定時のみ動作。 |
+| `trivy` | Dockerfile, Containerfile misconfiguration scan 専用、SHA pin した official image での最小権限実行。 |
+| `yamlfmt` | repo root config の明示指定、未配置時は temp default config 利用。 |
 | `zizmor` | `--offline` 実行。 |
 
 ## `.github/linter-service.json`
@@ -128,8 +130,8 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | 項目 | スコープ | 内容 |
 | --- | --- | --- |
 | `global.exclude_paths` | 全 linter | repo-relative glob pattern。全 linter への適用。 |
-| `linters.<name>.exclude_paths` | 個別 linter | repo-relative glob pattern。global exclude との併用。 |
 | `linters.<name>.disabled` | 個別 linter | `true` で選択対象外。`false` で `初期選択` 列で無効な linter の明示有効化。 |
+| `linters.<name>.exclude_paths` | 個別 linter | repo-relative glob pattern。global exclude との併用。 |
 | `linters.textlint.preset_packages` | `textlint` | exact version 付き npm package spec の配列。`textlint` 有効化時の必須項目。 |
 
 ## 共有 linter の追加方法
