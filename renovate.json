@@ -21,7 +21,7 @@
       "managerFilePatterns": ["/(^|/)\\.github/linter-service\\.ya?ml$/"],
       "datasourceTemplate": "npm",
       "matchStrings": [
-        "(^|\\n)\\s*-\\s*\"?(?<depName>(?:@[^/\\s\"#]+/)?textlint-rule-preset-[^@\\s\"#]+)@(?<currentValue>[^\"\\s#]+)\"?\\s*(?=\\n|$)"
+        "(?m)^\\s*-\\s*\"?(?<depName>(?:@[^/\\s\"#]+/)?textlint-rule-preset-[^@\\s\"#]+)@(?<currentValue>[^\"\\s#]+)\"?\\s*$"
       ]
     }
   ],
