@@ -1,9 +1,9 @@
 # linter-service
 
 このリポジトリは、複数 repository の PR と default branch push に対して、
-共通の GitHub Actions で lint を実行するための基盤です。
+共通の GitHub Actions で lint を実行するための基盤である。
 GitHub App Webhook を Cloudflare Worker が受け、この repository へ
-`repository_dispatch` を送ります。
+`repository_dispatch` を送る。
 
 ## 全体像
 
@@ -23,9 +23,9 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
  共通 lint workflow
 ```
 
-- 外部リポジトリの PR と default branch push は Worker 経由で処理します。
-- このリポジトリ自身の PR は `pull_request`、default branch 更新は `push` で処理します。
-- Worker は dispatch 先 repo からの self-webhook を無視し、二重実行と再帰起動を防ぎます。
+- 外部リポジトリの PR と default branch push は Worker 経由で処理する。
+- このリポジトリ自身の PR は `pull_request`、default branch 更新は `push` で処理する。
+- Worker は dispatch 先 repo からの self-webhook を無視し、二重実行と再帰起動を防ぐ。
 
 ## 主な場所
 
@@ -42,13 +42,14 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 
 ## 共有 linter 一覧
 
-- PR では changed file path から選択します。
-- default branch push では tracked file path 全体から選択します。
+- PR では changed file path から選択する。
+- default branch push では tracked file path 全体から選択する。
 - `.github/linter-service.json` がない場合は、`初期選択` 列で有効な linter を
-   この file による除外パス設定なしで選択します。
-- `textlint` のような `初期選択` 列で無効な linter と、
-   `required_root_files` 条件を満たさない linter は自動選択しません。
-- 設定ファイルの変更時は、対応 linter の target file path 全体を再評価します。
+   この file による除外パス設定なしで選択する。
+- `textlint` のような `初期選択` 列で無効な linter と、`linters.json` の
+   `required_root_files` に列挙した repo root 必須 file がそろわない linter は
+   自動選択しない。
+- 設定ファイルの変更時は、対応 linter の target file path 全体を再評価する。
 
 | linter | 対象ファイル | 設定ファイル | 初期選択 |
 | --- | --- | --- | --- |
@@ -95,8 +96,8 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 - 利用 repository 側の target selection 制御用である。
 - この file がない場合は、`初期選択` 列で有効な linter を、この file による
    除外パス設定なしで処理対象にする。
-- `初期選択` 列で無効な linter と、`required_root_files` 条件を満たさない
-   linter は自動選択しない。
+- `初期選択` 列で無効な linter と、`linters.json` の `required_root_files` に
+   列挙した repo root 必須 file がそろわない linter は自動選択しない。
 
 ```json
 {
@@ -135,10 +136,11 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 
 - 追加先は root の `linters.json` と root 直下の `<name>/` directory である。`.github/scripts/` は shared script 専用である。
 - 最低限の構成は `patterns.sh`, `install.sh`, `run.sh` である。shared helper が必要な場合のみ `common.sh` を追加する。
+- 参考実装は `actionlint/` が最小構成、`cargo-clippy/` と `textlint/` が隔離実行や config 解決を含む例である。
 - fixture は `tests/<case>/target/`, `result.json`, `sarif.json` の構成である。最低でも pass と fail の 2 系統を用意する。
 - `linters.json` が comment 見出し、成功 / 失敗文言、fallback message の正本である。通常は workflow 個別修正不要である。
 - untrusted PR でも安全に扱える実装を前提とし、任意コード実行につながる config は拒否または隔離実行で扱う。
-- 変更後は fixture test を実行する。
+- 変更後は `node .github/scripts/run-fixture-tests.js <name>` で fixture test を実行する。
 - 変更面に応じて focused unit test と `shellcheck`、`markdownlint-cli2`、`git diff --check` など既存 validation を実行する。
 
 ```text
