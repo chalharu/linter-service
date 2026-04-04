@@ -188,8 +188,12 @@ printf '{"details":"beta:%s:%s","exit_code":0}\\n' "$BETA_READY" "$1"
 		assert.equal(betaSummary.conclusion, "success");
 		assert.match(alphaSummary.comment_body, /alpha ok/u);
 		assert.match(betaSummary.comment_body, /beta ok/u);
+		assert.deepEqual(alphaSummary.checked_projects, []);
+		assert.deepEqual(alphaSummary.selected_files, ["alpha.txt"]);
 		assert.equal(alphaSummary.status, "success");
 		assert.equal(alphaSummary.target_summary, "1 file(s)");
+		assert.deepEqual(betaSummary.checked_projects, []);
+		assert.deepEqual(betaSummary.selected_files, ["beta.md"]);
 		assert.equal(betaSummary.status, "success");
 		assert.equal(betaSummary.target_summary, "1 file(s)");
 	} finally {
@@ -285,6 +289,8 @@ printf '{"details":"beta ok","exit_code":0}\\n'
 			),
 		);
 		assert.equal(alphaSummary.conclusion, "failure");
+		assert.deepEqual(alphaSummary.checked_projects, []);
+		assert.deepEqual(alphaSummary.selected_files, ["alpha.txt"]);
 		assert.match(alphaSummary.comment_body, /alpha infra failed/u);
 		assert.equal(alphaSummary.status, "infra_failure");
 		assert.equal(betaSummary.conclusion, "success");

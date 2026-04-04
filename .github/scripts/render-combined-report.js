@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const COMMENT_MARKER = "<!-- linter-service:results -->";
+const MAX_TARGET_PATHS = 50;
 
 function runFromEnv(env = process.env) {
 	const report = renderCombinedReport({
@@ -91,6 +92,8 @@ function renderCombinedReport({
 
 	appendSummaryTable(commentLines, rows);
 	appendSummaryTable(checkRunLines, rows);
+	appendTargetDetails(commentLines, rows);
+	appendTargetDetails(checkRunLines, rows);
 	appendFailureDetails(commentLines, detailSections);
 	appendFailureDetails(checkRunLines, detailSections);
 
@@ -120,10 +123,7 @@ function appendSummaryTable(lines, rows) {
 		return;
 	}
 
-	lines.push(
-		"| Linter | Result | Scope | Summary |",
-		"| --- | --- | --- | --- |",
-	);
+	lines.push("| Linter | Result | Summary |", "| --- | --- | --- |");
 
 	for (const row of rows) {
 		lines.push(
@@ -133,12 +133,29 @@ function appendSummaryTable(lines, rows) {
 				"|",
 				` ${escapeTableCell(buildResultLabel(row.status))} `,
 				"|",
-				` ${escapeTableCell(row.targetSummary)} `,
-				"|",
 				` ${escapeTableCell(stripLeadingStatusMarker(row.summaryText))} `,
 				"|",
 			].join(""),
 		);
+	}
+}
+
+function appendTargetDetails(lines, rows) {
+	const targetSections = rows
+		.map((row) => buildTargetSection(row))
+		.filter(Boolean);
+
+	if (targetSections.length === 0) {
+		return;
+	}
+
+	lines.push("");
+
+	for (const [index, targetSection] of targetSections.entries()) {
+		lines.push(targetSection);
+		if (index !== targetSections.length - 1) {
+			lines.push("");
+		}
 	}
 }
 
@@ -179,6 +196,50 @@ function buildDetailSection(summary) {
 	return lines.join("\n");
 }
 
+function buildTargetSection(summary) {
+	if (
+		summary.selectedFiles.length === 0 &&
+		summary.checkedProjects.length === 0
+	) {
+		return "";
+	}
+
+	const lines = [
+		`<details><summary>Show checked targets for ${escapeHtml(summary.linterName)}</summary>`,
+		"",
+	];
+
+	appendPathGroup(lines, "Target file paths", summary.selectedFiles);
+	if (summary.checkedProjects.length > 0) {
+		if (summary.selectedFiles.length > 0) {
+			lines.push("");
+		}
+		appendPathGroup(lines, "Cargo project targets", summary.checkedProjects);
+	}
+
+	lines.push("", "</details>");
+	return lines.join("\n");
+}
+
+function appendPathGroup(lines, title, paths) {
+	if (paths.length === 0) {
+		return;
+	}
+
+	const displayedPaths = paths.slice(0, MAX_TARGET_PATHS);
+	lines.push(`${title}:`);
+
+	for (const currentPath of displayedPaths) {
+		lines.push(`- <code>${escapeHtml(currentPath)}</code>`);
+	}
+
+	if (paths.length > displayedPaths.length) {
+		lines.push(
+			`- ... ${paths.length - displayedPaths.length} more path(s) omitted`,
+		);
+	}
+}
+
 function buildFallbackSummary({ decryptOutcome, linterName }) {
 	const summaryText =
 		decryptOutcome === "failure"
@@ -186,9 +247,11 @@ function buildFallbackSummary({ decryptOutcome, linterName }) {
 			: `❌ The \`${linterName}\` workflow failed before producing a detailed report. See the workflow logs.`;
 
 	return {
+		checked_projects: [],
 		conclusion: "failure",
 		details_text: summaryText,
 		linter_name: linterName,
+		selected_files: [],
 		status: "missing_summary",
 		summary_text: summaryText,
 		target_summary: "n/a",
@@ -222,12 +285,14 @@ function normalizeSummary(summary, linterName) {
 			: extractSummaryText(summary?.comment_body);
 
 	return {
+		checkedProjects: normalizeStringArray(summary?.checked_projects),
 		conclusion: normalizedConclusion,
 		detailsText:
 			typeof summary?.details_text === "string"
 				? summary.details_text.trim()
 				: "",
 		linterName,
+		selectedFiles: normalizeStringArray(summary?.selected_files),
 		status:
 			typeof summary?.status === "string" && summary.status.length > 0
 				? summary.status
@@ -304,6 +369,14 @@ function readLinterSummaries(summaryRoot) {
 	return summaries;
 }
 
+function normalizeStringArray(value) {
+	return Array.isArray(value)
+		? value.filter(
+				(entry) => typeof entry === "string" && entry.trim().length > 0,
+			)
+		: [];
+}
+
 function escapeTableCell(value) {
 	return String(value || "")
 		.replaceAll("|", "\\|")
@@ -315,6 +388,13 @@ function stripLeadingStatusMarker(text) {
 	return String(text || "")
 		.replace(/^[^A-Za-z0-9`]+/u, "")
 		.trim();
+}
+
+function escapeHtml(value) {
+	return String(value || "")
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;");
 }
 
 function parseSelectedLinters(rawValue) {

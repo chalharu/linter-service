@@ -51,6 +51,11 @@ test("lists checked file paths in a successful non-cargo linter report", () => {
 		assert.equal(summary.comment_body, report.body);
 		assert.equal(summary.conclusion, "success");
 		assert.equal(summary.status, "success");
+		assert.deepEqual(summary.checked_projects, []);
+		assert.deepEqual(summary.selected_files, [
+			".github/workflows/ci.yml",
+			".github/workflows/release.yml",
+		]);
 		assert.equal(
 			summary.summary_text,
 			"✅ No issues were reported for the selected GitHub Actions workflow target(s).",

@@ -447,6 +447,7 @@ function buildReportSummary({
 	targetSummary,
 }) {
 	return {
+		checked_projects: normalizeStringArray(checkedProjects),
 		checked_project_count: Array.isArray(checkedProjects)
 			? checkedProjects.length
 			: 0,
@@ -454,6 +455,7 @@ function buildReportSummary({
 		conclusion,
 		details_text: detailsText,
 		linter_name: linterName,
+		selected_files: normalizeStringArray(selectedFiles),
 		selected_file_count: Array.isArray(selectedFiles)
 			? selectedFiles.length
 			: 0,
@@ -469,6 +471,14 @@ function buildReportSummary({
 				? targetSummary
 				: "n/a",
 	};
+}
+
+function normalizeStringArray(values) {
+	return Array.isArray(values)
+		? values.filter(
+				(value) => typeof value === "string" && value.trim().length > 0,
+			)
+		: [];
 }
 
 function writeReportFiles({ linterName, report, runnerTemp }) {
