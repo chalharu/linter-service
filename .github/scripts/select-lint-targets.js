@@ -20,8 +20,9 @@ function runFromEnv(env = process.env) {
 		repositoryPath,
 	});
 	const configTriggerPatterns = readConfigTriggerPatterns({
-		configPath: env.LINTER_CONFIG_PATH,
+		env,
 		linterName,
+		linterServicePath: env.LINTER_SERVICE_PATH,
 	});
 	const changedFiles = readChangedFiles(context);
 	const candidatePaths = hasConfigTriggerMatch({
@@ -71,48 +72,34 @@ function readChangedFiles(context) {
 	return context.changed_files;
 }
 
-function readConfigTriggerPatterns({ configPath, linterName }) {
-	if (
-		typeof configPath !== "string" ||
-		configPath.length === 0 ||
-		!fs.existsSync(configPath)
-	) {
+function readConfigTriggerPatterns({
+	env = process.env,
+	execFileSyncImpl = execFileSync,
+	linterName,
+	linterServicePath,
+}) {
+	if (typeof linterServicePath !== "string" || linterServicePath.length === 0) {
 		return [];
 	}
 
-	const parsed = JSON.parse(fs.readFileSync(configPath, "utf8"));
-
-	if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.linters)) {
-		throw new Error("linters.json must include a linters array");
-	}
-
-	const definition = parsed.linters.find(
-		(entry) =>
-			entry &&
-			typeof entry === "object" &&
-			!Array.isArray(entry) &&
-			entry.name === linterName,
+	const scriptPath = path.join(
+		linterServicePath,
+		linterName,
+		"config_trigger_patterns.sh",
 	);
 
-	if (
-		!definition ||
-		typeof definition.config_trigger_patterns === "undefined"
-	) {
+	if (!fs.existsSync(scriptPath)) {
 		return [];
 	}
 
-	if (
-		!Array.isArray(definition.config_trigger_patterns) ||
-		definition.config_trigger_patterns.some(
-			(pattern) => typeof pattern !== "string" || pattern.trim().length === 0,
-		)
-	) {
-		throw new Error(
-			`${linterName}.config_trigger_patterns must be an array of non-empty strings`,
-		);
-	}
-
-	return definition.config_trigger_patterns;
+	return execFileSyncImpl("bash", [scriptPath], {
+		cwd: linterServicePath,
+		encoding: "utf8",
+		env,
+	})
+		.split(/\r?\n/u)
+		.map((line) => line.trim())
+		.filter(Boolean);
 }
 
 function hasConfigTriggerMatch({

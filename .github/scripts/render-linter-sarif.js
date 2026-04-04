@@ -54,11 +54,27 @@ function renderSarif({
 }) {
 	const linterConfig = readLinterConfig(configPath, linterName);
 	const sarifConfig = readSarifConfig(linterConfig);
+	const targetKind = readTargetKind(linterConfig);
 	const selectedFiles = readSelectedFiles(selectedFilesPath);
 	const result = readResult(resultPath);
+	const targetPaths = collectSarifTargetPaths({
+		linterName,
+		selectedFiles,
+		sourceRepositoryPath,
+		targetKind,
+	});
 
-	if (!sarifConfig || selectedFiles.length === 0) {
-		return { outputPath, produced: false, sarif: null };
+	if (selectedFiles.length === 0) {
+		return {
+			outputPath,
+			produced: false,
+			sarif: null,
+			targetStats: buildTargetStats({
+				results: [],
+				targetKind,
+				targetPaths,
+			}),
+		};
 	}
 
 	if (
@@ -66,18 +82,20 @@ function renderSarif({
 		!result ||
 		!Number.isInteger(result.exit_code)
 	) {
-		return { outputPath, produced: false, sarif: null };
+		return {
+			outputPath,
+			produced: false,
+			sarif: null,
+			targetStats: buildUnknownTargetStats({
+				targetKind,
+				targetPaths,
+			}),
+		};
 	}
 
-	const targetPaths = collectSarifTargetPaths({
-		linterName,
-		sarifConfig,
-		selectedFiles,
-		sourceRepositoryPath,
-	});
 	const details = resolveDiagnosticDetails(
 		result,
-		linterConfig.details_fallback,
+		buildDetailsFallback(linterName),
 	);
 	const reportedPathRoots = buildReportedPathRoots({
 		linterName,
@@ -89,13 +107,23 @@ function renderSarif({
 			? []
 			: buildSarifResults({
 					result,
-					defaultLevel: sarifConfig.default_level || "warning",
+					defaultLevel: sarifConfig?.default_level || "warning",
 					details,
 					linterName,
 					reportedPathRoots,
 					sourceRepositoryPath,
 					targetPaths,
 				});
+	const targetStats = buildTargetStats({
+		results,
+		targetKind,
+		targetPaths,
+	});
+
+	if (!sarifConfig) {
+		return { outputPath, produced: false, sarif: null, targetStats };
+	}
+
 	const rules = buildRuleDescriptors(results);
 	const category = sarifConfig.category || `linter-service/${linterName}`;
 	const toolName = sarifConfig.tool_name || `linter-service/${linterName}`;
@@ -122,6 +150,7 @@ function renderSarif({
 				},
 			],
 		},
+		targetStats,
 	};
 }
 
@@ -161,6 +190,12 @@ function readSarifConfig(linterConfig) {
 	return linterConfig.sarif.enabled === true ? linterConfig.sarif : null;
 }
 
+function readTargetKind(linterConfig) {
+	return linterConfig?.sarif?.target_kind === "cargo-projects"
+		? "cargo-project"
+		: "file";
+}
+
 function readSelectedFiles(selectedFilesPath) {
 	if (!fs.existsSync(selectedFilesPath)) {
 		return [];
@@ -198,13 +233,17 @@ function resolveDiagnosticDetails(result, fallback) {
 	return exitCode === 0 ? "" : fallback;
 }
 
+function buildDetailsFallback(linterName) {
+	return `The \`${linterName}\` run exited with issues but did not produce diagnostic output.`;
+}
+
 function collectSarifTargetPaths({
 	linterName,
-	sarifConfig,
 	selectedFiles,
 	sourceRepositoryPath,
+	targetKind,
 }) {
-	if (sarifConfig.target_kind === "cargo-projects") {
+	if (targetKind === "cargo-project") {
 		const projects = collectProjectTargets(
 			linterName,
 			sourceRepositoryPath,
@@ -214,6 +253,61 @@ function collectSarifTargetPaths({
 	}
 
 	return selectedFiles;
+}
+
+function buildTargetStats({ results, targetKind, targetPaths }) {
+	const targetCount = targetPaths.length;
+	const issueTargetCount = countIssueTargets(results, targetPaths);
+
+	return {
+		counts_known: true,
+		issue_count: results.length,
+		issue_target_count: issueTargetCount,
+		passed_target_count:
+			issueTargetCount === null
+				? null
+				: Math.max(targetCount - issueTargetCount, 0),
+		target_count: targetCount,
+		target_kind: targetKind,
+	};
+}
+
+function buildUnknownTargetStats({ targetKind, targetPaths }) {
+	return {
+		counts_known: false,
+		issue_count: null,
+		issue_target_count: null,
+		passed_target_count: null,
+		target_count: targetPaths.length,
+		target_kind: targetKind,
+	};
+}
+
+function countIssueTargets(results, targetPaths) {
+	if (!Array.isArray(results) || results.length === 0) {
+		return 0;
+	}
+
+	const locations = new Set(
+		results
+			.map(
+				(result) =>
+					result?.locations?.[0]?.physicalLocation?.artifactLocation?.uri || "",
+			)
+			.filter(Boolean),
+	);
+
+	if (locations.size > 0) {
+		return targetPaths.length > 0
+			? Math.min(locations.size, targetPaths.length)
+			: locations.size;
+	}
+
+	if (targetPaths.length > 0) {
+		return 1;
+	}
+
+	return null;
 }
 
 function buildReportedPathRoots({

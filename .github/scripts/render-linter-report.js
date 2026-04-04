@@ -42,6 +42,7 @@ function renderReport({
 	selectedFilesPath,
 	selectOutcome,
 	sourceRepositoryPath,
+	targetStats,
 }) {
 	const linterConfig = readLinterConfig(configPath, linterName);
 	const selectedFiles = readSelectedFiles(selectedFilesPath);
@@ -58,29 +59,69 @@ function renderReport({
 	const success =
 		!hasStepFailure && (selectedFiles.length === 0 || exitCodeRaw === "0");
 	const conclusion = success ? "success" : "failure";
-	const lines = [linterConfig.heading, ""];
+	const lines = [`### ${linterName}`, ""];
 	let detailsText = "";
 	let status = "failure";
 	let summaryText = "";
 
 	if (hasStepFailure && result === null) {
 		status = "infra_failure";
-		summaryText = linterConfig.infra_failure;
+		summaryText = buildSummaryText({
+			linterName,
+			status,
+			targetStats: normalizeTargetStats({
+				checkedProjects,
+				linterConfig,
+				selectedFiles,
+				status,
+				targetStats,
+			}),
+		});
 		lines.push(summaryText);
 		appendTargetLines(lines, targetLines);
 	} else if (selectedFiles.length === 0 && exitCodeRaw === "") {
 		status = "no_targets";
-		summaryText = linterConfig.no_files;
+		summaryText = buildSummaryText({
+			linterName,
+			status,
+			targetStats: normalizeTargetStats({
+				checkedProjects,
+				linterConfig,
+				selectedFiles,
+				status,
+				targetStats,
+			}),
+		});
 		lines.push(summaryText);
 	} else if (success) {
 		status = "success";
-		summaryText = linterConfig.success;
+		summaryText = buildSummaryText({
+			linterName,
+			status,
+			targetStats: normalizeTargetStats({
+				checkedProjects,
+				linterConfig,
+				selectedFiles,
+				status,
+				targetStats,
+			}),
+		});
 		lines.push(summaryText);
 		appendTargetLines(lines, targetLines);
 	} else {
 		status = "failure";
-		summaryText = linterConfig.failure;
-		detailsText = resolveDetails(result, linterConfig.details_fallback);
+		detailsText = resolveDetails(result, buildDetailsFallback(linterName));
+		summaryText = buildSummaryText({
+			linterName,
+			status,
+			targetStats: normalizeTargetStats({
+				checkedProjects,
+				linterConfig,
+				selectedFiles,
+				status,
+				targetStats,
+			}),
+		});
 		lines.push(summaryText);
 		appendTargetLines(lines, targetLines);
 		lines.push(
@@ -102,6 +143,13 @@ function renderReport({
 		selectedFiles,
 		status,
 		summaryText,
+		targetStats: normalizeTargetStats({
+			checkedProjects,
+			linterConfig,
+			selectedFiles,
+			status,
+			targetStats,
+		}),
 		targetSummary: buildTargetSummary(selectedFiles, checkedProjects),
 	};
 }
@@ -167,6 +215,151 @@ function resolveDetails(result, fallback) {
 	}
 
 	return details;
+}
+
+function buildDetailsFallback(linterName) {
+	return `The \`${linterName}\` run exited with issues but did not produce diagnostic output.`;
+}
+
+function buildSummaryText({ linterName, status, targetStats }) {
+	switch (status) {
+		case "success":
+			return `✅ ${formatRatio(targetStats.passedTargetCount, targetStats.targetCount)} ${formatTargetLabel(targetStats.targetKind, targetStats.targetCount)} passed.`;
+		case "no_targets":
+			return `⚪ 0 ${formatTargetLabel(targetStats.targetKind, 0)} checked.`;
+		case "infra_failure":
+			return targetStats.targetCount === null
+				? `❌ The \`${linterName}\` workflow failed before diagnostics were produced. See the workflow logs.`
+				: `❌ Matched ${formatTargetQuantity(targetStats.targetCount, targetStats.targetKind)}, but the workflow failed before diagnostics were produced.`;
+		case "failure":
+			if (
+				targetStats.countsKnown &&
+				targetStats.passedTargetCount !== null &&
+				targetStats.issueTargetCount !== null &&
+				targetStats.targetCount !== null
+			) {
+				return `❌ ${formatRatio(targetStats.passedTargetCount, targetStats.targetCount)} ${formatTargetLabel(targetStats.targetKind, targetStats.targetCount)} passed; ${formatTargetQuantity(targetStats.issueTargetCount, targetStats.targetKind)} reported issues.`;
+			}
+
+			return targetStats.targetCount === null
+				? `❌ The \`${linterName}\` run reported issues. See the workflow logs.`
+				: `❌ Checked ${formatTargetQuantity(targetStats.targetCount, targetStats.targetKind)}; issue counts are unavailable.`;
+		default:
+			return `❌ The \`${linterName}\` workflow failed before producing a detailed report. See the workflow logs.`;
+	}
+}
+
+function normalizeTargetStats({
+	checkedProjects,
+	linterConfig,
+	selectedFiles,
+	status,
+	targetStats,
+}) {
+	if (targetStats && typeof targetStats === "object") {
+		const targetKind =
+			targetStats.target_kind === "cargo-project" ||
+			targetStats.targetKind === "cargo-project"
+				? "cargo-project"
+				: "file";
+		const targetCount = normalizeOptionalCount(
+			targetStats.target_count ?? targetStats.targetCount,
+		);
+		const countsKnown =
+			typeof targetStats.counts_known === "boolean"
+				? targetStats.counts_known
+				: typeof targetStats.countsKnown === "boolean"
+					? targetStats.countsKnown
+					: status === "success" || status === "no_targets";
+		const issueTargetCount = normalizeOptionalCount(
+			targetStats.issue_target_count ?? targetStats.issueTargetCount,
+		);
+		const passedTargetCount = normalizeOptionalCount(
+			targetStats.passed_target_count ?? targetStats.passedTargetCount,
+		);
+
+		return {
+			countsKnown,
+			issueCount: normalizeOptionalCount(
+				targetStats.issue_count ?? targetStats.issueCount,
+			),
+			issueTargetCount:
+				countsKnown && issueTargetCount === null && status !== "infra_failure"
+					? 0
+					: issueTargetCount,
+			passedTargetCount:
+				countsKnown && passedTargetCount === null && targetCount !== null
+					? targetCount
+					: passedTargetCount,
+			targetCount,
+			targetKind,
+		};
+	}
+
+	const targetKind = readTargetKind(linterConfig);
+	const targetCount = deriveTargetCount({
+		checkedProjects,
+		selectedFiles,
+		targetKind,
+	});
+
+	if (status === "success" || status === "no_targets") {
+		return {
+			countsKnown: true,
+			issueCount: 0,
+			issueTargetCount: 0,
+			passedTargetCount: targetCount,
+			targetCount,
+			targetKind,
+		};
+	}
+
+	return {
+		countsKnown: false,
+		issueCount: null,
+		issueTargetCount: null,
+		passedTargetCount: null,
+		targetCount,
+		targetKind,
+	};
+}
+
+function readTargetKind(linterConfig) {
+	return linterConfig?.sarif?.target_kind === "cargo-projects"
+		? "cargo-project"
+		: "file";
+}
+
+function deriveTargetCount({ checkedProjects, selectedFiles, targetKind }) {
+	if (targetKind === "cargo-project") {
+		return checkedProjects.length > 0
+			? checkedProjects.length
+			: selectedFiles.length;
+	}
+
+	return selectedFiles.length > 0
+		? selectedFiles.length
+		: checkedProjects.length;
+}
+
+function normalizeOptionalCount(value) {
+	return Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function formatRatio(passed, total) {
+	return `${passed} / ${total}`;
+}
+
+function formatTargetQuantity(count, targetKind) {
+	return `${count} ${formatTargetLabel(targetKind, count)}`;
+}
+
+function formatTargetLabel(targetKind, count) {
+	if (targetKind === "cargo-project") {
+		return count === 1 ? "Cargo project" : "Cargo projects";
+	}
+
+	return count === 1 ? "file" : "files";
 }
 
 function appendTargetLines(lines, targetLines) {
@@ -444,8 +637,16 @@ function buildReportSummary({
 	selectedFiles = [],
 	status,
 	summaryText = "",
-	targetSummary,
+	targetStats,
 }) {
+	const normalizedTargetStats = normalizeTargetStats({
+		checkedProjects,
+		linterConfig: {},
+		selectedFiles,
+		status,
+		targetStats,
+	});
+
 	return {
 		checked_projects: normalizeStringArray(checkedProjects),
 		checked_project_count: Array.isArray(checkedProjects)
@@ -466,10 +667,12 @@ function buildReportSummary({
 					? "success"
 					: "failure",
 		summary_text: summaryText,
-		target_summary:
-			typeof targetSummary === "string" && targetSummary.length > 0
-				? targetSummary
-				: "n/a",
+		counts_known: normalizedTargetStats.countsKnown,
+		issue_count: normalizedTargetStats.issueCount,
+		issue_target_count: normalizedTargetStats.issueTargetCount,
+		passed_target_count: normalizedTargetStats.passedTargetCount,
+		target_count: normalizedTargetStats.targetCount,
+		target_kind: normalizedTargetStats.targetKind,
 	};
 }
 

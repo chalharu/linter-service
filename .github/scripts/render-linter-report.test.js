@@ -41,10 +41,7 @@ test("lists checked file paths in a successful non-cargo linter report", () => {
 			".github/workflows/release.yml",
 		]);
 		assert.match(report.body, /### actionlint/);
-		assert.match(
-			report.body,
-			/✅ No issues were reported for the selected GitHub Actions workflow target\(s\)\./,
-		);
+		assert.match(report.body, /✅ 2 \/ 2 files passed\./);
 		assert.match(report.body, /Target file paths:/);
 		assert.match(report.body, /- <code>\.github\/workflows\/ci\.yml<\/code>/);
 		assert.doesNotMatch(report.body, /2 changed GitHub Actions workflow/);
@@ -56,11 +53,11 @@ test("lists checked file paths in a successful non-cargo linter report", () => {
 			".github/workflows/ci.yml",
 			".github/workflows/release.yml",
 		]);
-		assert.equal(
-			summary.summary_text,
-			"✅ No issues were reported for the selected GitHub Actions workflow target(s).",
-		);
-		assert.equal(summary.target_summary, "2 file(s)");
+		assert.equal(summary.summary_text, "✅ 2 / 2 files passed.");
+		assert.equal(summary.target_count, 2);
+		assert.equal(summary.passed_target_count, 2);
+		assert.equal(summary.issue_target_count, 0);
+		assert.equal(summary.target_kind, "file");
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}
@@ -130,10 +127,7 @@ test("treats rustfmt as selected Rust files instead of Cargo projects", () => {
 
 		assert.equal(report.conclusion, "success");
 		assert.deepEqual(report.checkedProjects, []);
-		assert.match(
-			report.body,
-			/✅ No issues were reported for the selected Rust file target\(s\)\./,
-		);
+		assert.match(report.body, /✅ 2 \/ 2 files passed\./);
 		assert.match(report.body, /Target file paths:/);
 		assert.match(report.body, /- <code>src\/lib\.rs<\/code>/);
 		assert.match(report.body, /- <code>crates\/member\/src\/lib\.rs<\/code>/);
@@ -173,10 +167,7 @@ test("lists checked Cargo projects alongside changed file paths", () => {
 			"Cargo.toml",
 			"crates/member/Cargo.toml",
 		]);
-		assert.match(
-			report.body,
-			/✅ No issues were reported for the selected Cargo project target\(s\)\./,
-		);
+		assert.match(report.body, /✅ 3 \/ 3 files passed\./);
 		assert.match(report.body, /Target file paths:/);
 		assert.match(report.body, /Cargo project targets:/);
 		assert.match(report.body, /- <code>src\/lib\.rs<\/code>/);
@@ -221,10 +212,7 @@ test("lists checked Cargo projects for cargo-deny dependency target files", () =
 			"Cargo.toml",
 			"crates/member/Cargo.toml",
 		]);
-		assert.match(
-			report.body,
-			/✅ No issues were reported for the selected Cargo project target\(s\)\./,
-		);
+		assert.match(report.body, /✅ 2 \/ 2 Cargo projects passed\./);
 		assert.match(report.body, /Target file paths:/);
 		assert.match(report.body, /Cargo project targets:/);
 		assert.match(report.body, /- <code>Cargo\.lock<\/code>/);
@@ -307,7 +295,7 @@ test("includes checked targets before diagnostic details on failure", () => {
 		assert.equal(report.conclusion, "failure");
 		assert.match(
 			report.body,
-			/❌ Issues were reported for the selected YAML or JSON target\(s\)\./,
+			/❌ Checked 1 file; issue counts are unavailable\./,
 		);
 		assert.match(
 			report.body,
@@ -364,10 +352,7 @@ test("keeps no-files reports free from checked target sections", () => {
 		assert.equal(report.checkedProjects.length, 0);
 		assert.equal(report.status, "no_targets");
 		assert.equal(report.targetSummary, "n/a");
-		assert.match(
-			report.body,
-			/No matching Python files were selected for `ruff`\./,
-		);
+		assert.match(report.body, /⚪ 0 files checked\./);
 		assert.doesNotMatch(report.body, /Target file paths:/);
 		assert.doesNotMatch(report.body, /Cargo project targets:/);
 	} finally {

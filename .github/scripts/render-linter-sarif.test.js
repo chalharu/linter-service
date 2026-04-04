@@ -25,7 +25,6 @@ test("does not emit SARIF when the linter has no SARIF config", () => {
 				linters: [
 					{
 						name: "example",
-						details_fallback: "fallback",
 					},
 				],
 			},
@@ -73,7 +72,6 @@ test("emits empty SARIF when an enabled linter succeeds", () => {
 				linters: [
 					{
 						name: "example",
-						details_fallback: "fallback",
 						sarif: {
 							enabled: true,
 						},
@@ -132,7 +130,6 @@ test("does not emit SARIF when the linter run failed before producing a result",
 				linters: [
 					{
 						name: "example",
-						details_fallback: "fallback",
 						sarif: {
 							enabled: true,
 						},
@@ -179,7 +176,6 @@ test("parses file line and column diagnostics into SARIF results", () => {
 				linters: [
 					{
 						name: "example",
-						details_fallback: "fallback",
 						sarif: {
 							enabled: true,
 						},
@@ -272,7 +268,6 @@ test("keeps substring matches from changing the default SARIF severity", () => {
 				linters: [
 					{
 						name: "example",
-						details_fallback: "fallback",
 						sarif: {
 							enabled: true,
 						},

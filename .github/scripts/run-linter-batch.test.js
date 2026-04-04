@@ -73,24 +73,12 @@ test("runLinterBatch executes multiple linters and preserves workflow env update
 	writeLinterConfig(workspace.linterConfigPath, [
 		{
 			name: "alpha",
-			heading: "### alpha",
-			no_files: "no files",
-			success: "alpha ok",
-			failure: "alpha failed",
-			infra_failure: "alpha infra failed",
-			details_fallback: "alpha fallback",
 			sarif: {
 				enabled: false,
 			},
 		},
 		{
 			name: "beta",
-			heading: "### beta",
-			no_files: "no files",
-			success: "beta ok",
-			failure: "beta failed",
-			infra_failure: "beta infra failed",
-			details_fallback: "beta fallback",
 			sarif: {
 				enabled: false,
 			},
@@ -186,16 +174,22 @@ printf '{"details":"beta:%s:%s","exit_code":0}\\n' "$BETA_READY" "$1"
 		);
 		assert.equal(alphaSummary.conclusion, "success");
 		assert.equal(betaSummary.conclusion, "success");
-		assert.match(alphaSummary.comment_body, /alpha ok/u);
-		assert.match(betaSummary.comment_body, /beta ok/u);
+		assert.match(alphaSummary.comment_body, /✅ 1 \/ 1 file passed\./u);
+		assert.match(betaSummary.comment_body, /✅ 1 \/ 1 file passed\./u);
 		assert.deepEqual(alphaSummary.checked_projects, []);
 		assert.deepEqual(alphaSummary.selected_files, ["alpha.txt"]);
 		assert.equal(alphaSummary.status, "success");
-		assert.equal(alphaSummary.target_summary, "1 file(s)");
+		assert.equal(alphaSummary.target_count, 1);
+		assert.equal(alphaSummary.passed_target_count, 1);
+		assert.equal(alphaSummary.issue_target_count, 0);
+		assert.equal(alphaSummary.target_kind, "file");
 		assert.deepEqual(betaSummary.checked_projects, []);
 		assert.deepEqual(betaSummary.selected_files, ["beta.md"]);
 		assert.equal(betaSummary.status, "success");
-		assert.equal(betaSummary.target_summary, "1 file(s)");
+		assert.equal(betaSummary.target_count, 1);
+		assert.equal(betaSummary.passed_target_count, 1);
+		assert.equal(betaSummary.issue_target_count, 0);
+		assert.equal(betaSummary.target_kind, "file");
 	} finally {
 		cleanupTempWorkspace(workspace.tempDir);
 	}
@@ -208,24 +202,12 @@ test("runLinterBatch continues after an install failure and reports infrastructu
 	writeLinterConfig(workspace.linterConfigPath, [
 		{
 			name: "alpha",
-			heading: "### alpha",
-			no_files: "no files",
-			success: "alpha ok",
-			failure: "alpha failed",
-			infra_failure: "alpha infra failed",
-			details_fallback: "alpha fallback",
 			sarif: {
 				enabled: false,
 			},
 		},
 		{
 			name: "beta",
-			heading: "### beta",
-			no_files: "no files",
-			success: "beta ok",
-			failure: "beta failed",
-			infra_failure: "beta infra failed",
-			details_fallback: "beta fallback",
 			sarif: {
 				enabled: false,
 			},
@@ -291,7 +273,10 @@ printf '{"details":"beta ok","exit_code":0}\\n'
 		assert.equal(alphaSummary.conclusion, "failure");
 		assert.deepEqual(alphaSummary.checked_projects, []);
 		assert.deepEqual(alphaSummary.selected_files, ["alpha.txt"]);
-		assert.match(alphaSummary.comment_body, /alpha infra failed/u);
+		assert.match(
+			alphaSummary.comment_body,
+			/Matched 1 file, but the workflow failed before diagnostics were produced\./u,
+		);
 		assert.equal(alphaSummary.status, "infra_failure");
 		assert.equal(betaSummary.conclusion, "success");
 	} finally {

@@ -123,7 +123,10 @@ function appendSummaryTable(lines, rows) {
 		return;
 	}
 
-	lines.push("| Linter | Result | Summary |", "| --- | --- | --- |");
+	lines.push(
+		"| Linter | Result | Checked | Passed | Issues |",
+		"| --- | --- | --- | ---: | ---: |",
+	);
 
 	for (const row of rows) {
 		lines.push(
@@ -133,7 +136,11 @@ function appendSummaryTable(lines, rows) {
 				"|",
 				` ${escapeTableCell(buildResultLabel(row.status))} `,
 				"|",
-				` ${escapeTableCell(stripLeadingStatusMarker(row.summaryText))} `,
+				` ${escapeTableCell(formatCheckedMetric(row))} `,
+				"|",
+				` ${escapeTableCell(formatCountMetric(row.passedTargetCount))} `,
+				"|",
+				` ${escapeTableCell(formatCountMetric(row.issueTargetCount))} `,
 				"|",
 			].join(""),
 		);
@@ -249,12 +256,17 @@ function buildFallbackSummary({ decryptOutcome, linterName }) {
 	return {
 		checked_projects: [],
 		conclusion: "failure",
+		counts_known: false,
 		details_text: summaryText,
+		issue_count: null,
+		issue_target_count: null,
 		linter_name: linterName,
+		passed_target_count: null,
 		selected_files: [],
 		status: "missing_summary",
 		summary_text: summaryText,
-		target_summary: "n/a",
+		target_count: null,
+		target_kind: "file",
 	};
 }
 
@@ -283,31 +295,48 @@ function normalizeSummary(summary, linterName) {
 		summary.summary_text.trim().length > 0
 			? summary.summary_text.trim()
 			: extractSummaryText(summary?.comment_body);
+	const status =
+		typeof summary?.status === "string" && summary.status.length > 0
+			? summary.status
+			: normalizedConclusion === "success"
+				? "success"
+				: "failure";
+	const countsKnown =
+		typeof summary?.counts_known === "boolean"
+			? summary.counts_known
+			: normalizedConclusion === "success" || status === "no_targets";
+	const targetCount = normalizeTargetCount(summary);
+	const issueTargetCount = normalizeOptionalCount(summary?.issue_target_count);
+	const passedTargetCount = normalizeOptionalCount(
+		summary?.passed_target_count,
+	);
 
 	return {
 		checkedProjects: normalizeStringArray(summary?.checked_projects),
 		conclusion: normalizedConclusion,
+		countsKnown,
 		detailsText:
 			typeof summary?.details_text === "string"
 				? summary.details_text.trim()
 				: "",
+		issueTargetCount:
+			issueTargetCount !== null ? issueTargetCount : countsKnown ? 0 : null,
 		linterName,
+		passedTargetCount:
+			passedTargetCount !== null
+				? passedTargetCount
+				: countsKnown && targetCount !== null
+					? targetCount
+					: null,
 		selectedFiles: normalizeStringArray(summary?.selected_files),
-		status:
-			typeof summary?.status === "string" && summary.status.length > 0
-				? summary.status
-				: normalizedConclusion === "success"
-					? "success"
-					: "failure",
+		status,
 		summaryText:
 			summaryText.length > 0
 				? summaryText
 				: `❌ The \`${linterName}\` workflow failed before producing a detailed report. See the workflow logs.`,
-		targetSummary:
-			typeof summary?.target_summary === "string" &&
-			summary.target_summary.trim().length > 0
-				? summary.target_summary.trim()
-				: "n/a",
+		targetCount,
+		targetKind:
+			summary?.target_kind === "cargo-project" ? "cargo-project" : "file",
 	};
 }
 
@@ -375,6 +404,53 @@ function normalizeStringArray(value) {
 				(entry) => typeof entry === "string" && entry.trim().length > 0,
 			)
 		: [];
+}
+
+function normalizeOptionalCount(value) {
+	return Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function normalizeTargetCount(summary) {
+	const explicit = normalizeOptionalCount(summary?.target_count);
+
+	if (explicit !== null) {
+		return explicit;
+	}
+
+	const checkedProjects = normalizeStringArray(summary?.checked_projects);
+	const selectedFiles = normalizeStringArray(summary?.selected_files);
+	const targetKind =
+		summary?.target_kind === "cargo-project" ? "cargo-project" : "file";
+
+	if (targetKind === "cargo-project") {
+		return checkedProjects.length > 0
+			? checkedProjects.length
+			: selectedFiles.length;
+	}
+
+	return selectedFiles.length > 0
+		? selectedFiles.length
+		: checkedProjects.length;
+}
+
+function formatCheckedMetric(row) {
+	if (row.targetCount === null) {
+		return "n/a";
+	}
+
+	return `${row.targetCount} ${formatTargetLabel(row.targetKind, row.targetCount)}`;
+}
+
+function formatCountMetric(value) {
+	return value === null ? "n/a" : String(value);
+}
+
+function formatTargetLabel(targetKind, count) {
+	if (targetKind === "cargo-project") {
+		return count === 1 ? "Cargo project" : "Cargo projects";
+	}
+
+	return count === 1 ? "file" : "files";
 }
 
 function escapeTableCell(value) {

@@ -151,24 +151,6 @@ function runLinterBatch({
 		}
 
 		try {
-			const report = renderReportImpl({
-				configPath: linterConfigPath,
-				exitCodeRaw,
-				installOutcome,
-				linterName,
-				resultPath,
-				runOutcome,
-				selectedFilesPath,
-				selectOutcome,
-				sourceRepositoryPath,
-			});
-
-			fs.writeFileSync(
-				summaryPath,
-				JSON.stringify(buildReportSummary({ ...report, linterName }), null, 2),
-				"utf8",
-			);
-
 			const sarifReport = renderSarifImpl({
 				configPath: linterConfigPath,
 				installOutcome,
@@ -181,6 +163,32 @@ function runLinterBatch({
 				selectOutcome,
 				sourceRepositoryPath,
 			});
+			const report = renderReportImpl({
+				configPath: linterConfigPath,
+				exitCodeRaw,
+				installOutcome,
+				linterName,
+				resultPath,
+				runOutcome,
+				selectedFilesPath,
+				selectOutcome,
+				sourceRepositoryPath,
+				targetStats: sarifReport.targetStats,
+			});
+
+			fs.writeFileSync(
+				summaryPath,
+				JSON.stringify(
+					buildReportSummary({
+						...report,
+						linterName,
+						targetStats: sarifReport.targetStats,
+					}),
+					null,
+					2,
+				),
+				"utf8",
+			);
 
 			if (sarifReport.produced) {
 				fs.writeFileSync(
