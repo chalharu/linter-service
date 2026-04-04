@@ -19,6 +19,9 @@ const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const TEST_PRIVATE_KEY = privateKey
 	.export({ format: "pem", type: "pkcs1" })
 	.toString();
+const TEST_PRIVATE_KEY_ESCAPED = JSON.stringify(
+	TEST_PRIVATE_KEY.replace(/\n/g, "\r\n"),
+);
 
 const baseEnv: Env = {
 	GITHUB_CHECKER_APP_ID: "987654",
@@ -788,6 +791,46 @@ describe("github webhook proxy worker", () => {
 		expectValidDispatchSignature(dispatchBody.client_payload);
 	});
 
+	it("normalizes escaped checker app private keys before signing dispatch payloads", async () => {
+		const fetchMock = vi.mocked(fetch);
+
+		mockPushDispatch(fetchMock);
+
+		const request = createWebhookRequest(
+			"push",
+			{
+				after: "abc123",
+				installation: { id: 987 },
+				ref: "refs/heads/main",
+				repository: {
+					default_branch: "main",
+					full_name: "acme/source-repo",
+					id: 10,
+					name: "source-repo",
+					owner: { id: 1, login: "acme", type: "Organization" },
+					private: false,
+				},
+				sender: { id: 2, login: "octocat", type: "User" },
+			},
+			baseEnv.GITHUB_CHECKER_WEBHOOK_SECRET,
+		);
+
+		const response = await worker.fetch(request, {
+			...baseEnv,
+			GITHUB_CHECKER_APP_PRIVATE_KEY: TEST_PRIVATE_KEY_ESCAPED,
+		});
+		const dispatchBody = JSON.parse(
+			(fetchMock.mock.calls[2]?.[1] as RequestInit).body as string,
+		) as {
+			client_payload: {
+				signature: string;
+			} & Record<string, unknown>;
+		};
+
+		expect(response.status).toBe(200);
+		expectValidDispatchSignature(dispatchBody.client_payload);
+	});
+
 	it("skips push events outside the default branch", async () => {
 		const fetchMock = vi.mocked(fetch);
 
@@ -1155,6 +1198,20 @@ function expectValidDispatchSignature(
 			secret: TEST_PRIVATE_KEY,
 		});
 	}).not.toThrow();
+}
+
+function mockPushDispatch(
+	fetchMock: ReturnType<typeof vi.mocked<typeof fetch>>,
+): void {
+	fetchMock.mockResolvedValueOnce(
+		new Response(JSON.stringify({ id: 456 }), { status: 200 }),
+	);
+	fetchMock.mockResolvedValueOnce(
+		new Response(JSON.stringify({ token: "dispatcher-token" }), {
+			status: 201,
+		}),
+	);
+	fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
 }
 
 function mockPullRequestDispatchAndQueuedCheck(

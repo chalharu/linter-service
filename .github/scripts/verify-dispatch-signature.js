@@ -81,7 +81,16 @@ function normalizeSecret(secret) {
 		throw new Error("CHECKER_PRIVATE_KEY is required");
 	}
 
-	const normalizedSecret = secret.trim();
+	const trimmedSecret = secret.trim();
+	const unwrappedSecret =
+		trimmedSecret.startsWith('"') && trimmedSecret.endsWith('"')
+			? trimmedSecret.slice(1, -1)
+			: trimmedSecret;
+	const normalizedSecret = unwrappedSecret
+		.replace(/\\r/g, "\r")
+		.replace(/\\n/g, "\n")
+		.replace(/\r\n?/g, "\n")
+		.trim();
 
 	if (normalizedSecret.length === 0) {
 		throw new Error("CHECKER_PRIVATE_KEY is required");

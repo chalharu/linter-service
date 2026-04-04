@@ -103,6 +103,8 @@ npm run deploy
 Cloudflare では同じ値を Secret として入れる。
 dispatcher App の installation は owner/repo から引く。
 追加の installation ID 設定は不要です。
+PEM 系 secret は複数行の実改行でも、`.dev.vars.example` のような quoted `\n`
+形式でも扱えるように正規化する。
 
 ## Worker の環境変数
 

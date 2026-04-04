@@ -568,7 +568,7 @@ async function signDispatchPayload(
 	return {
 		...payload,
 		signature: `${DISPATCH_SIGNATURE_PREFIX}${await signHmacSha256Hex(
-			secret,
+			normalizeMultilineSecret(secret),
 			stableStringify(payload),
 		)}`,
 	};
@@ -1055,7 +1055,11 @@ function normalizeMultilineSecret(secret: string): string {
 			? trimmedSecret.slice(1, -1)
 			: trimmedSecret;
 
-	return unwrappedSecret.replace(/\\n/g, "\n");
+	return unwrappedSecret
+		.replace(/\\r/g, "\r")
+		.replace(/\\n/g, "\n")
+		.replace(/\r\n?/g, "\n")
+		.trim();
 }
 
 async function importAppPrivateKey(privateKeyPem: string): Promise<CryptoKey> {
