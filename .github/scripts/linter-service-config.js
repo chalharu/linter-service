@@ -108,8 +108,13 @@ function normalizeLinterConfigs(value) {
 		};
 
 		if (linterName === "textlint") {
+			if (currentConfig.preset_package !== undefined) {
+				throw new Error(
+					`linters.${linterName}.preset_package is no longer supported; use linters.${linterName}.preset_packages`,
+				);
+			}
+
 			entry.preset_packages = normalizeTextlintPresetPackages({
-				presetPackage: currentConfig.preset_package,
 				presetPackages: currentConfig.preset_packages,
 				label: `linters.${linterName}`,
 			});
@@ -119,7 +124,7 @@ function normalizeLinterConfigs(value) {
 				entry.preset_packages.length === 0
 			) {
 				throw new Error(
-					`linters.${linterName}.preset_package or linters.${linterName}.preset_packages is required when textlint is enabled`,
+					`linters.${linterName}.preset_packages is required when textlint is enabled`,
 				);
 			}
 		}
@@ -130,23 +135,7 @@ function normalizeLinterConfigs(value) {
 	return entries;
 }
 
-function normalizeTextlintPresetPackages({
-	label,
-	presetPackage,
-	presetPackages,
-}) {
-	if (presetPackage !== undefined && presetPackages !== undefined) {
-		throw new Error(
-			`${label}.preset_package and ${label}.preset_packages cannot be used together`,
-		);
-	}
-
-	if (presetPackage !== undefined) {
-		return [
-			normalizeExactPackageSpec(presetPackage, `${label}.preset_package`),
-		];
-	}
-
+function normalizeTextlintPresetPackages({ label, presetPackages }) {
 	if (presetPackages === undefined) {
 		return [];
 	}

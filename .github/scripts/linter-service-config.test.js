@@ -164,7 +164,7 @@ test("supports per-linter disable flags", () => {
 	}
 });
 
-test("requires explicit enablement and supports legacy textlint preset_package", () => {
+test("requires explicit enablement and supports textlint preset_packages", () => {
 	const context = makeTempRepo();
 
 	fs.writeFileSync(
@@ -174,7 +174,9 @@ test("requires explicit enablement and supports legacy textlint preset_package",
 				linters: {
 					textlint: {
 						disabled: false,
-						preset_package: "textlint-rule-preset-ja-technical-writing@12.0.2",
+						preset_packages: [
+							"textlint-rule-preset-ja-technical-writing@12.0.2",
+						],
 					},
 				},
 			},
@@ -196,6 +198,38 @@ test("requires explicit enablement and supports legacy textlint preset_package",
 		assert.deepEqual(getTextlintPresetPackages(config), [
 			"textlint-rule-preset-ja-technical-writing@12.0.2",
 		]);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("requires textlint preset_packages when textlint is enabled", () => {
+	const context = makeTempRepo();
+
+	fs.writeFileSync(
+		path.join(context.repoDir, ".github", "linter-service.json"),
+		JSON.stringify(
+			{
+				linters: {
+					textlint: {
+						disabled: false,
+					},
+				},
+			},
+			null,
+			2,
+		),
+		"utf8",
+	);
+
+	try {
+		assert.throws(
+			() =>
+				loadLinterServiceConfig({
+					repositoryPath: context.repoDir,
+				}),
+			/preset_packages is required/u,
+		);
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}
@@ -273,7 +307,7 @@ test("rejects invalid textlint preset package configuration", () => {
 				linters: {
 					textlint: {
 						disabled: false,
-						preset_package: "textlint-rule-preset-ja-technical-writing",
+						preset_packages: ["textlint-rule-preset-ja-technical-writing"],
 					},
 				},
 			},
@@ -332,7 +366,7 @@ test("rejects duplicate textlint preset package names", () => {
 	}
 });
 
-test("rejects mixing textlint preset_package and preset_packages", () => {
+test("rejects legacy textlint preset_package", () => {
 	const context = makeTempRepo();
 
 	fs.writeFileSync(
@@ -343,7 +377,6 @@ test("rejects mixing textlint preset_package and preset_packages", () => {
 					textlint: {
 						disabled: false,
 						preset_package: "textlint-rule-preset-ja-technical-writing@12.0.2",
-						preset_packages: ["textlint-rule-preset-ja-spacing@4.0.0"],
 					},
 				},
 			},
@@ -359,7 +392,7 @@ test("rejects mixing textlint preset_package and preset_packages", () => {
 				loadLinterServiceConfig({
 					repositoryPath: context.repoDir,
 				}),
-			/cannot be used together/u,
+			/no longer supported/u,
 		);
 	} finally {
 		cleanupTempRepo(context.tempDir);

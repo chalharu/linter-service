@@ -25,7 +25,7 @@ function resolveTextlintRuntime({ repositoryPath, outputPath }) {
 	const presetPackages = getTextlintPresetPackages(serviceConfig);
 	if (!Array.isArray(presetPackages) || presetPackages.length === 0) {
 		throw new Error(
-			"textlint requires linters.textlint.preset_package or linters.textlint.preset_packages in .github/linter-service.json",
+			"textlint requires linters.textlint.preset_packages in .github/linter-service.json",
 		);
 	}
 
