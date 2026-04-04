@@ -135,6 +135,16 @@ jobs:
                   if not isinstance(default_disabled, bool):
                       raise SystemExit(f"{linter_name}.default_disabled must be a boolean")
                   definition["default_disabled"] = default_disabled
+              config_trigger_patterns = item.get("config_trigger_patterns")
+              if config_trigger_patterns is not None:
+                  if not isinstance(config_trigger_patterns, list) or not all(
+                      isinstance(entry, str) and entry.strip()
+                      for entry in config_trigger_patterns
+                  ):
+                      raise SystemExit(
+                          f"{linter_name}.config_trigger_patterns must be an array of non-empty strings"
+                      )
+                  definition["config_trigger_patterns"] = config_trigger_patterns
               required_root_files = item.get("required_root_files")
               if required_root_files is not None:
                   if not isinstance(required_root_files, list) or not all(

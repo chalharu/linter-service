@@ -2,6 +2,9 @@
   "linters": [
     {
       "name": "actionlint",
+      "config_trigger_patterns": [
+        "^\\.github\\/actionlint\\.(?:yaml|yml)$"
+      ],
       "execution_group": "github-actions",
       "heading": "### actionlint",
       "no_files": "No matching workflow files were selected for `actionlint`.",
@@ -15,6 +18,9 @@
     },
     {
       "name": "ghalint",
+      "config_trigger_patterns": [
+        "^(?:\\.ghalint\\.(?:yaml|yml)|ghalint\\.(?:yaml|yml)|\\.github\\/ghalint\\.(?:yaml|yml))$"
+      ],
       "execution_group": "github-actions",
       "heading": "### ghalint",
       "no_files": "No matching GitHub Actions workflow files were selected for `ghalint`.",
@@ -28,6 +34,9 @@
     },
     {
       "name": "hadolint",
+      "config_trigger_patterns": [
+        "(?:^|\\/)\\.hadolint\\.(?:yaml|yml)$"
+      ],
       "heading": "### hadolint",
       "no_files": "No matching Dockerfile or Containerfile files were selected for `hadolint`.",
       "success": "✅ No issues were reported for the selected Dockerfile or Containerfile target(s).",
@@ -40,6 +49,9 @@
     },
     {
       "name": "trivy",
+      "config_trigger_patterns": [
+        "^(?:\\.trivyignore|trivy\\.(?:yaml|yml))$"
+      ],
       "heading": "### trivy",
       "no_files": "No matching Dockerfile or Containerfile files were selected for `trivy`.",
       "success": "✅ No misconfigurations were reported for the selected Dockerfile or Containerfile target(s).",
@@ -65,6 +77,9 @@
     },
     {
       "name": "spectral",
+      "config_trigger_patterns": [
+        "^\\.spectral\\.(?:yml|yaml|json|js)$"
+      ],
       "heading": "### spectral",
       "no_files": "No matching YAML or JSON files were selected for `spectral`.",
       "success": "✅ No issues were reported for the selected YAML or JSON target(s).",
@@ -77,6 +92,9 @@
     },
     {
       "name": "yamllint",
+      "config_trigger_patterns": [
+        "^\\.yamllint(?:\\.(?:yaml|yml))?$"
+      ],
       "execution_group": "yaml",
       "heading": "### yamllint",
       "no_files": "No matching YAML files were selected for `yamllint`.",
@@ -90,6 +108,9 @@
     },
     {
       "name": "yamlfmt",
+      "config_trigger_patterns": [
+        "^(?:\\.yamlfmt|yamlfmt\\.(?:yaml|yml)|\\.yamlfmt\\.(?:yaml|yml))$"
+      ],
       "execution_group": "yaml",
       "heading": "### yamlfmt",
       "no_files": "No matching YAML files were selected for `yamlfmt`.",
@@ -103,6 +124,9 @@
     },
     {
       "name": "markdownlint-cli2",
+      "config_trigger_patterns": [
+        "(?:^|\\/)\\.(?:markdownlint-cli2\\.(?:jsonc|yaml|cjs|mjs)|markdownlint\\.(?:jsonc|json|yaml|yml|cjs|mjs))$"
+      ],
       "heading": "### markdownlint-cli2",
       "no_files": "No matching Markdown files were selected for `markdownlint-cli2`.",
       "success": "✅ No issues were reported for the selected Markdown target(s).",
@@ -116,6 +140,9 @@
     {
       "name": "textlint",
       "default_disabled": true,
+      "config_trigger_patterns": [
+        "^\\.textlintrc$"
+      ],
       "required_root_files": [
         ".textlintrc"
       ],
@@ -131,6 +158,9 @@
     },
     {
       "name": "ruff",
+      "config_trigger_patterns": [
+        "(?:^|\\/)(?:pyproject\\.toml|ruff\\.toml|\\.ruff\\.toml)$"
+      ],
       "heading": "### ruff",
       "no_files": "No matching Python files were selected for `ruff`.",
       "success": "✅ No issues were reported for the selected Python target(s).",
@@ -143,6 +173,9 @@
     },
     {
       "name": "rustfmt",
+      "config_trigger_patterns": [
+        "(?:^|\\/)(?:rustfmt\\.toml|\\.rustfmt\\.toml|rust-toolchain(?:\\.toml)?)$"
+      ],
       "heading": "### rustfmt",
       "no_files": "No matching Rust files were selected for `rustfmt`.",
       "success": "✅ No issues were reported for the selected Rust file target(s).",
@@ -155,6 +188,9 @@
     },
     {
       "name": "cargo-clippy",
+      "config_trigger_patterns": [
+        "(?:^|\\/)(?:clippy\\.toml|\\.clippy\\.toml|rust-toolchain(?:\\.toml)?|\\.cargo\\/config(?:\\.toml)?)$"
+      ],
       "heading": "### cargo-clippy",
       "no_files": "No matching Rust files were selected for `cargo-clippy`.",
       "success": "✅ No issues were reported for the selected Cargo project target(s).",
@@ -180,6 +216,9 @@
     },
     {
       "name": "taplo",
+      "config_trigger_patterns": [
+        "^(?:\\.taplo\\.toml|taplo\\.toml)$"
+      ],
       "heading": "### taplo",
       "no_files": "No matching TOML files were selected for `taplo`.",
       "success": "✅ No issues were reported for the selected TOML target(s).",
@@ -192,6 +231,9 @@
     },
     {
       "name": "biome",
+      "config_trigger_patterns": [
+        "(?:^|\\/)(?:biome\\.jsonc?|\\.biome\\.jsonc?)$"
+      ],
       "heading": "### biome",
       "no_files": "No matching JavaScript, TypeScript, or JSON/JSONC files were selected for `biome`.",
       "success": "✅ No issues were reported for the selected JavaScript, TypeScript, or JSON/JSONC target(s).",
@@ -204,6 +246,10 @@
     },
     {
       "name": "editorconfig-checker",
+      "config_trigger_patterns": [
+        "(?:^|\\/)\\.editorconfig$",
+        "^(?:\\.editorconfig-checker\\.json|\\.ecrc)$"
+      ],
       "heading": "### editorconfig-checker",
       "no_files": "No matching editorconfig-checker files were selected for `editorconfig-checker`.",
       "success": "✅ No issues were reported for the selected editorconfig-checker target(s).",
@@ -216,6 +262,9 @@
     },
     {
       "name": "shellcheck",
+      "config_trigger_patterns": [
+        "(?:^|\\/)(?:\\.shellcheckrc|shellcheckrc)$"
+      ],
       "heading": "### shellcheck",
       "no_files": "No matching shell script files were selected for `shellcheck`.",
       "success": "✅ No issues were reported for the selected shell script target(s).",
@@ -228,6 +277,9 @@
     },
     {
       "name": "zizmor",
+      "config_trigger_patterns": [
+        "^(?:zizmor\\.(?:yaml|yml)|\\.github\\/zizmor\\.(?:yaml|yml))$"
+      ],
       "execution_group": "github-actions",
       "heading": "### zizmor",
       "no_files": "No matching workflow files were selected for `zizmor`.",

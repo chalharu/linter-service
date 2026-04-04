@@ -44,7 +44,8 @@ GitHub Actions が共通ルールで lint します。
 
 `repository-dispatch.yml` は PR では changed file path から、
 default branch push では repository 全体の tracked file path から対象 linter を選びます。
-一致した linter にだけ、対応する target file path を渡します。
+表の設定 file path も linter selection に使われ、PR で設定 file だけが変わった場合は
+その linter に対応する repository 全体の target file path を渡します。
 
 | linter | 対象ファイル | 設定ファイル | 制限事項 |
 |--------|--------------|--------------|----------|

@@ -21,6 +21,26 @@ function selectFiles({ candidatePaths, linterName, patterns, serviceConfig }) {
 	);
 }
 
+function hasPatternMatch({
+	candidatePaths,
+	linterName,
+	patterns,
+	serviceConfig,
+}) {
+	if (!Array.isArray(patterns) || patterns.length === 0) {
+		return false;
+	}
+
+	return (
+		selectFiles({
+			candidatePaths,
+			linterName,
+			patterns,
+			serviceConfig,
+		}).length > 0
+	);
+}
+
 function selectLinters({
 	candidatePaths,
 	definitions,
@@ -45,12 +65,18 @@ function selectLinters({
 		}
 
 		if (
-			selectFiles({
+			hasPatternMatch({
 				candidatePaths,
 				linterName: definition.name,
 				patterns: definition.patterns,
 				serviceConfig,
-			}).length > 0
+			}) ||
+			hasPatternMatch({
+				candidatePaths,
+				linterName: definition.name,
+				patterns: definition.config_trigger_patterns,
+				serviceConfig,
+			})
 		) {
 			selectedLinters.push(definition.name);
 		}
@@ -176,16 +202,28 @@ function validateDefinition(definition) {
 
 	if (
 		typeof definition.required_root_files !== "undefined" &&
-		(!Array.isArray(definition.required_root_files) ||
-			definition.required_root_files.some(
-				(filePath) =>
-					typeof filePath !== "string" || filePath.trim().length === 0,
-			))
+		!isNonEmptyStringArray(definition.required_root_files)
 	) {
 		throw new Error(
 			"required_root_files must be an array of non-empty strings",
 		);
 	}
+
+	if (
+		typeof definition.config_trigger_patterns !== "undefined" &&
+		!isNonEmptyStringArray(definition.config_trigger_patterns)
+	) {
+		throw new Error(
+			"config_trigger_patterns must be an array of non-empty strings",
+		);
+	}
+}
+
+function isNonEmptyStringArray(value) {
+	return (
+		Array.isArray(value) &&
+		value.every((entry) => typeof entry === "string" && entry.trim().length > 0)
+	);
 }
 
 module.exports = {
