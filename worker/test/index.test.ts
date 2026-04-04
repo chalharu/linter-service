@@ -1,8 +1,20 @@
 import { createHmac, generateKeyPairSync } from "node:crypto";
+import { createRequire } from "node:module";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import worker, { type Env } from "../src/index";
 
+const require = createRequire(import.meta.url);
+const { verifyDispatchSignature } =
+	require("../../.github/scripts/verify-dispatch-signature.js") as {
+		verifyDispatchSignature: ({
+			payloadJson,
+			secret,
+		}: {
+			payloadJson: string;
+			secret: string;
+		}) => void;
+	};
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const TEST_PRIVATE_KEY = privateKey
 	.export({ format: "pem", type: "pkcs1" })
@@ -152,9 +164,7 @@ describe("github webhook proxy worker", () => {
 			"feature/example",
 		);
 		expect(dispatchBody.client_payload.repository.owner.login).toBe("acme");
-		expect(dispatchBody.client_payload.signature).toMatch(
-			/^sha256=[a-f0-9]{64}$/u,
-		);
+		expectValidDispatchSignature(dispatchBody.client_payload);
 
 		const queuedCheckBody = JSON.parse(
 			(fetchMock.mock.calls[5]?.[1] as RequestInit).body as string,
@@ -775,9 +785,7 @@ describe("github webhook proxy worker", () => {
 		expect(dispatchBody.client_payload.push.ref).toBe("refs/heads/main");
 		expect(dispatchBody.client_payload.push.ref_name).toBe("main");
 		expect(dispatchBody.client_payload.repository.default_branch).toBe("main");
-		expect(dispatchBody.client_payload.signature).toMatch(
-			/^sha256=[a-f0-9]{64}$/u,
-		);
+		expectValidDispatchSignature(dispatchBody.client_payload);
 	});
 
 	it("skips push events outside the default branch", async () => {
@@ -1135,6 +1143,18 @@ function createWebhookRequest(
 		},
 		method: "POST",
 	});
+}
+
+function expectValidDispatchSignature(
+	payload: { signature: string } & Record<string, unknown>,
+): void {
+	expect(payload.signature).toMatch(/^sha256=[a-f0-9]{64}$/u);
+	expect(() => {
+		verifyDispatchSignature({
+			payloadJson: JSON.stringify(payload),
+			secret: TEST_PRIVATE_KEY,
+		});
+	}).not.toThrow();
 }
 
 function mockPullRequestDispatchAndQueuedCheck(

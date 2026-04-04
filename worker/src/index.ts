@@ -1,4 +1,3 @@
-import { createHmac } from "node:crypto";
 import { SignJWT } from "jose";
 
 export interface Env {
@@ -535,7 +534,7 @@ async function sendRepositoryDispatch(
 	token: string,
 	clientPayload: JsonRecord,
 ): Promise<void> {
-	const signedPayload = signDispatchPayload(
+	const signedPayload = await signDispatchPayload(
 		requireEnv(
 			env.GITHUB_CHECKER_APP_PRIVATE_KEY,
 			"GITHUB_CHECKER_APP_PRIVATE_KEY",
@@ -562,12 +561,16 @@ async function sendRepositoryDispatch(
 	);
 }
 
-function signDispatchPayload(secret: string, payload: JsonRecord): JsonRecord {
+async function signDispatchPayload(
+	secret: string,
+	payload: JsonRecord,
+): Promise<JsonRecord> {
 	return {
 		...payload,
-		signature: `${DISPATCH_SIGNATURE_PREFIX}${createHmac("sha256", secret)
-			.update(stableStringify(payload))
-			.digest("hex")}`,
+		signature: `${DISPATCH_SIGNATURE_PREFIX}${await signHmacSha256Hex(
+			secret,
+			stableStringify(payload),
+		)}`,
 	};
 }
 
@@ -844,10 +847,24 @@ async function verifySignature(
 	receivedSignature: string,
 	webhookSecret: string,
 ): Promise<void> {
+	const expectedSignature = `${DISPATCH_SIGNATURE_PREFIX}${await signHmacSha256Hex(
+		webhookSecret,
+		rawBody,
+	)}`;
+
+	if (!timingSafeEqual(expectedSignature, receivedSignature)) {
+		throw new HttpError(401, "invalid webhook signature");
+	}
+}
+
+async function signHmacSha256Hex(
+	secret: string,
+	message: string,
+): Promise<string> {
 	const encoder = new TextEncoder();
 	const key = await crypto.subtle.importKey(
 		"raw",
-		encoder.encode(webhookSecret),
+		encoder.encode(secret),
 		{ hash: "SHA-256", name: "HMAC" },
 		false,
 		["sign"],
@@ -855,13 +872,10 @@ async function verifySignature(
 	const signature = await crypto.subtle.sign(
 		"HMAC",
 		key,
-		encoder.encode(rawBody),
+		encoder.encode(message),
 	);
-	const expectedSignature = `sha256=${toHex(new Uint8Array(signature))}`;
 
-	if (!timingSafeEqual(expectedSignature, receivedSignature)) {
-		throw new HttpError(401, "invalid webhook signature");
-	}
+	return toHex(new Uint8Array(signature));
 }
 
 function getSourceInstallationId(
