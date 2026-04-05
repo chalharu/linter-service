@@ -23,11 +23,9 @@ test("does not emit SARIF when the linter has no SARIF config", () => {
 		configPath,
 		JSON.stringify(
 			{
-				linters: [
-					{
-						name: "example",
-					},
-				],
+				linters: {
+					example: {},
+				},
 			},
 			null,
 			2,
@@ -70,14 +68,13 @@ test("emits empty SARIF when an enabled linter succeeds", () => {
 		configPath,
 		JSON.stringify(
 			{
-				linters: [
-					{
-						name: "example",
+				linters: {
+					example: {
 						sarif: {
 							enabled: true,
 						},
 					},
-				],
+				},
 			},
 			null,
 			2,
@@ -128,14 +125,13 @@ test("does not emit SARIF when the linter run failed before producing a result",
 		configPath,
 		JSON.stringify(
 			{
-				linters: [
-					{
-						name: "example",
+				linters: {
+					example: {
 						sarif: {
 							enabled: true,
 						},
 					},
-				],
+				},
 			},
 			null,
 			2,
@@ -174,14 +170,13 @@ test("parses file line and column diagnostics into SARIF results", () => {
 		configPath,
 		JSON.stringify(
 			{
-				linters: [
-					{
-						name: "example",
+				linters: {
+					example: {
 						sarif: {
 							enabled: true,
 						},
 					},
-				],
+				},
 			},
 			null,
 			2,
@@ -266,14 +261,13 @@ test("keeps substring matches from changing the default SARIF severity", () => {
 		configPath,
 		JSON.stringify(
 			{
-				linters: [
-					{
-						name: "example",
+				linters: {
+					example: {
 						sarif: {
 							enabled: true,
 						},
 					},
-				],
+				},
 			},
 			null,
 			2,

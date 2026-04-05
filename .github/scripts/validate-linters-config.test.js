@@ -19,6 +19,11 @@ function writeJson(filePath, value) {
 	);
 }
 
+function writeText(filePath, value) {
+	fs.mkdirSync(path.dirname(filePath), { recursive: true });
+	fs.writeFileSync(filePath, value, "utf8");
+}
+
 test("accepts the repository linters.json", () => {
 	const report = validateLintersConfig({
 		configPath: rootConfigPath,
@@ -35,12 +40,11 @@ test("accepts supported optional linter metadata", () => {
 
 	writeJson(configPath, {
 		$schema: "./linters.schema.json",
-		linters: [
-			{
+		linters: {
+			example: {
 				default_disabled: true,
 				execution_group: "yaml-fast",
 				isolated: true,
-				name: "example",
 				required_root_files: [".example.yml"],
 				sarif: {
 					category: "custom/example",
@@ -49,7 +53,7 @@ test("accepts supported optional linter metadata", () => {
 					tool_name: "custom-example",
 				},
 			},
-		],
+		},
 	});
 
 	try {
@@ -69,16 +73,14 @@ test("rejects unsupported SARIF default levels", () => {
 	const configPath = path.join(tempDir, "linters.json");
 
 	writeJson(configPath, {
-		$schema: "./linters.schema.json",
-		linters: [
-			{
-				name: "example",
+		linters: {
+			example: {
 				sarif: {
 					default_level: "info",
 					enabled: true,
 				},
 			},
-		],
+		},
 	});
 
 	try {
@@ -100,13 +102,11 @@ test("rejects unexpected linter properties", () => {
 	const configPath = path.join(tempDir, "linters.json");
 
 	writeJson(configPath, {
-		$schema: "./linters.schema.json",
-		linters: [
-			{
-				name: "example",
+		linters: {
+			example: {
 				unknown_flag: true,
 			},
-		],
+		},
 	});
 
 	try {
@@ -123,21 +123,22 @@ test("rejects unexpected linter properties", () => {
 	}
 });
 
-test("rejects duplicate linter names", () => {
+test("rejects duplicate linter object keys in raw JSON", () => {
 	const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "linters-schema-"));
 	const configPath = path.join(tempDir, "linters.json");
 
-	writeJson(configPath, {
-		$schema: "./linters.schema.json",
-		linters: [
-			{
-				name: "example",
-			},
-			{
-				name: "example",
-			},
-		],
-	});
+	writeText(
+		configPath,
+		`{
+  "linters": {
+    "example": {},
+    "example": {
+      "isolated": true
+    }
+  }
+}
+`,
+	);
 
 	try {
 		assert.throws(
@@ -146,14 +147,45 @@ test("rejects duplicate linter names", () => {
 					configPath,
 					schemaPath: rootSchemaPath,
 				}),
-			/duplicate linter name/u,
+			/duplicate object key/u,
 		);
 	} finally {
 		fs.rmSync(tempDir, { force: true, recursive: true });
 	}
 });
 
-test("rejects linters.json files that omit the schema association", () => {
+test("rejects duplicate top-level linters keys in raw JSON", () => {
+	const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "linters-schema-"));
+	const configPath = path.join(tempDir, "linters.json");
+
+	writeText(
+		configPath,
+		`{
+  "linters": {
+    "alpha": {}
+  },
+  "linters": {
+    "beta": {}
+  }
+}
+`,
+	);
+
+	try {
+		assert.throws(
+			() =>
+				validateLintersConfig({
+					configPath,
+					schemaPath: rootSchemaPath,
+				}),
+			/\/linters/u,
+		);
+	} finally {
+		fs.rmSync(tempDir, { force: true, recursive: true });
+	}
+});
+
+test("rejects legacy array-shaped linters definitions", () => {
 	const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "linters-schema-"));
 	const configPath = path.join(tempDir, "linters.json");
 
@@ -172,7 +204,29 @@ test("rejects linters.json files that omit the schema association", () => {
 					configPath,
 					schemaPath: rootSchemaPath,
 				}),
-			/required property '\$schema'/u,
+			/\/linters: must be object/u,
+		);
+	} finally {
+		fs.rmSync(tempDir, { force: true, recursive: true });
+	}
+});
+
+test("accepts linters.json files that omit the schema association", () => {
+	const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "linters-schema-"));
+	const configPath = path.join(tempDir, "linters.json");
+
+	writeJson(configPath, {
+		linters: {
+			example: {},
+		},
+	});
+
+	try {
+		assert.doesNotThrow(() =>
+			validateLintersConfig({
+				configPath,
+				schemaPath: rootSchemaPath,
+			}),
 		);
 	} finally {
 		fs.rmSync(tempDir, { force: true, recursive: true });

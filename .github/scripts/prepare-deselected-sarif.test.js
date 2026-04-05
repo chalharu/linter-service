@@ -19,25 +19,21 @@ test("writes empty SARIF files for enabled deselected linters", () => {
 		configPath,
 		JSON.stringify(
 			{
-				linters: [
-					{
-						name: "actionlint",
+				linters: {
+					actionlint: {
 						sarif: {
 							enabled: true,
 						},
 					},
-					{
-						name: "hadolint",
+					hadolint: {
 						sarif: {
 							category: "custom/hadolint",
 							enabled: true,
 							tool_name: "custom-hadolint",
 						},
 					},
-					{
-						name: "ruff",
-					},
-				],
+					ruff: {},
+				},
 			},
 			null,
 			2,
@@ -79,14 +75,13 @@ test("returns without writing files when every enabled linter is selected", () =
 		configPath,
 		JSON.stringify(
 			{
-				linters: [
-					{
-						name: "actionlint",
+				linters: {
+					actionlint: {
 						sarif: {
 							enabled: true,
 						},
 					},
-				],
+				},
 			},
 			null,
 			2,

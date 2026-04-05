@@ -8,6 +8,10 @@ const {
 	isLinterEnabled,
 	loadLinterServiceConfig,
 } = require("./linter-service-config.js");
+const {
+	listLinterConfigs,
+	readLintersConfig,
+} = require("./lib/linter-shared.js");
 const { renderReport } = require("./render-linter-report.js");
 const { renderSarif } = require("./render-linter-sarif.js");
 const { selectFiles } = require("./linter-targeting.js");
@@ -24,14 +28,10 @@ function runCli(argv = process.argv.slice(2), env = process.env) {
 
 function runFixtureTests({ linterNames, repositoryPath, write = false }) {
 	const resolvedRepositoryPath = path.resolve(repositoryPath);
-	const config = JSON.parse(
-		fs.readFileSync(path.join(resolvedRepositoryPath, "linters.json"), "utf8"),
+	const config = readLintersConfig(
+		path.join(resolvedRepositoryPath, "linters.json"),
 	);
-	const availableLinters = Array.isArray(config.linters)
-		? config.linters
-				.filter((entry) => entry && typeof entry.name === "string")
-				.map((entry) => entry.name)
-		: [];
+	const availableLinters = listLinterConfigs(config).map((entry) => entry.name);
 	const requestedLinters =
 		Array.isArray(linterNames) && linterNames.length > 0
 			? linterNames

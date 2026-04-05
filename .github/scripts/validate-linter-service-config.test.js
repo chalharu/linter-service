@@ -59,9 +59,7 @@ test("supported linter names stay in sync with linters.json", () => {
 	const schema = JSON.parse(fs.readFileSync(rootSchemaPath, "utf8"));
 	const lintersConfig = JSON.parse(fs.readFileSync(rootLintersPath, "utf8"));
 	const schemaNames = [...schema.$defs.knownLinterName.enum].sort();
-	const configNames = lintersConfig.linters
-		.map((definition) => definition.name)
-		.sort();
+	const configNames = Object.keys(lintersConfig.linters).sort();
 
 	assert.deepEqual(schemaNames, configNames);
 });

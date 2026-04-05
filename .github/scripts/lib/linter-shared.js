@@ -1,10 +1,37 @@
 const fs = require("node:fs");
 
+const { validateLintersConfig } = require("../validate-linters-config.js");
+
+function listLinterConfigs(configData) {
+	if (
+		!configData ||
+		!configData.linters ||
+		typeof configData.linters !== "object" ||
+		Array.isArray(configData.linters)
+	) {
+		throw new Error("linters config must include a linters object");
+	}
+
+	return Object.entries(configData.linters).map(([name, value]) => {
+		if (!value || typeof value !== "object" || Array.isArray(value)) {
+			throw new Error(`${name} must be configured as an object`);
+		}
+
+		return {
+			...value,
+			name,
+		};
+	});
+}
+
+function readLintersConfig(configPath) {
+	return validateLintersConfig({ configPath }).config;
+}
+
 function readLinterConfig(configPath, linterName) {
-	const configData = JSON.parse(fs.readFileSync(configPath, "utf8"));
-	const linters = Array.isArray(configData.linters) ? configData.linters : [];
-	const config = linters.find(
-		(item) => item && typeof item.name === "string" && item.name === linterName,
+	const configData = readLintersConfig(configPath);
+	const config = listLinterConfigs(configData).find(
+		(item) => item.name === linterName,
 	);
 
 	if (!config) {
@@ -87,6 +114,8 @@ module.exports = {
 	deriveTargetCount,
 	escapeHtml,
 	formatTargetLabel,
+	listLinterConfigs,
+	readLintersConfig,
 	normalizeOptionalCount,
 	normalizeStringArray,
 	readLinterConfig,

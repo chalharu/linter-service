@@ -1,63 +1,52 @@
 {
-  "$schema": "./linters.schema.json",
-  "linters": [
-    {
-      "name": "actionlint",
+  "linters": {
+    "actionlint": {
       "sarif": {
         "enabled": true
       }
     },
-    {
-      "name": "ghalint",
+    "ghalint": {
       "sarif": {
         "enabled": true
       }
     },
-    {
-      "name": "hadolint",
+    "hadolint": {
       "sarif": {
         "enabled": true
       }
     },
-    {
-      "name": "trivy",
+    "trivy": {
       "sarif": {
         "enabled": true,
         "default_level": "warning"
       }
     },
-    {
-      "name": "dotenv-linter",
+    "dotenv-linter": {
       "sarif": {
         "enabled": true
       }
     },
-    {
-      "name": "spectral",
+    "spectral": {
       "sarif": {
         "enabled": true
       }
     },
-    {
-      "name": "yamllint",
+    "yamllint": {
       "sarif": {
         "enabled": true
       }
     },
-    {
-      "name": "yamlfmt",
+    "yamlfmt": {
       "sarif": {
         "enabled": true
       }
     },
-    {
-      "name": "markdownlint-cli2",
+    "markdownlint-cli2": {
       "sarif": {
         "enabled": true
       }
     },
-    {
-      "name": "textlint",
+    "textlint": {
       "isolated": true,
       "required_root_files": [
         ".textlintrc"
@@ -66,61 +55,52 @@
         "enabled": true
       }
     },
-    {
-      "name": "ruff",
+    "ruff": {
       "sarif": {
         "enabled": true
       }
     },
-    {
-      "name": "rustfmt",
+    "rustfmt": {
       "sarif": {
         "enabled": true
       }
     },
-    {
-      "name": "cargo-clippy",
+    "cargo-clippy": {
       "isolated": true,
       "sarif": {
         "enabled": true
       }
     },
-    {
-      "name": "cargo-deny",
+    "cargo-deny": {
       "sarif": {
         "enabled": true,
         "target_kind": "cargo-projects"
       }
     },
-    {
-      "name": "taplo",
+    "taplo": {
       "sarif": {
         "enabled": true
       }
     },
-    {
-      "name": "biome",
+    "biome": {
       "sarif": {
         "enabled": true
       }
     },
-    {
-      "name": "editorconfig-checker",
+    "editorconfig-checker": {
       "sarif": {
         "enabled": true
       }
     },
-    {
-      "name": "shellcheck",
+    "shellcheck": {
       "sarif": {
         "enabled": true
       }
     },
-    {
-      "name": "zizmor",
+    "zizmor": {
       "sarif": {
         "enabled": true
       }
     }
-  ]
+  }
 }
