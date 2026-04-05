@@ -7,6 +7,9 @@ const {
 	loadLinterServiceConfig,
 } = require("../.github/scripts/linter-service-config.js");
 const {
+	getTextlintPresetRuleKey,
+} = require("../.github/scripts/textlint-preset-package.js");
+const {
 	parseExactPackageSpec,
 } = require("../.github/scripts/npm-package-spec.js");
 
@@ -111,26 +114,6 @@ function buildSafeTextlintConfig({ config, presetPackages }) {
 	}
 
 	return safeConfig;
-}
-
-function getTextlintPresetRuleKey(packageName) {
-	if (
-		typeof packageName === "string" &&
-		packageName.startsWith("textlint-rule-preset-")
-	) {
-		return packageName.replace(/^textlint-rule-preset-/u, "preset-");
-	}
-
-	if (
-		typeof packageName === "string" &&
-		packageName.includes("/textlint-rule-preset-")
-	) {
-		return packageName.replace(/\/textlint-rule-preset-/u, "/preset-");
-	}
-
-	throw new Error(
-		`linters.textlint.preset_packages must use textlint preset packages: ${packageName}`,
-	);
 }
 
 function requireRepositoryPath(repositoryPath) {

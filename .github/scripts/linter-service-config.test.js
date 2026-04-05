@@ -428,6 +428,56 @@ test("rejects duplicate textlint preset package names", () => {
 	}
 });
 
+test("rejects non-preset textlint package names", () => {
+	const context = makeTempRepo();
+
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			textlint: {
+				disabled: false,
+				preset_packages: ["left-pad@1.3.0"],
+			},
+		},
+	});
+
+	try {
+		assert.throws(
+			() =>
+				loadLinterServiceConfig({
+					repositoryPath: context.repoDir,
+				}),
+			/must use textlint preset packages/u,
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("rejects malformed textlint preset package names", () => {
+	const context = makeTempRepo();
+
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			textlint: {
+				disabled: false,
+				preset_packages: ["textlint-rule-preset-_experimental@1.0.0"],
+			},
+		},
+	});
+
+	try {
+		assert.throws(
+			() =>
+				loadLinterServiceConfig({
+					repositoryPath: context.repoDir,
+				}),
+			/must use textlint preset packages/u,
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
 test("rejects legacy textlint preset_package", () => {
 	const context = makeTempRepo();
 

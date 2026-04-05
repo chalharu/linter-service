@@ -34,6 +34,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 |------|------|
 | `.github/codeql/` | CodeQL の分析設定 |
 | `.github/linter-service.yaml` | source repo 側の exclude / disable 設定 |
+| `.github/linter-service.schema.json` | `.github/linter-service.yaml` の editor validation / 補完用 schema |
 | `.github/scripts/` | shared helper / renderer / artifact utility |
 | `.github/workflows/ci.yml` | `worker/` 検証と fixture test CI |
 | `.github/workflows/codeql.yml` | fixture 除外付き CodeQL workflow |
@@ -105,6 +106,10 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 - 利用 repository 側の target selection 制御用である。
 - `.github/linter-service.yaml` を推奨し、互換のため
   `.github/linter-service.json` も読み込む。
+- この repository 内の sample `.github/linter-service.yaml` は
+  `# yaml-language-server: $schema=./linter-service.schema.json` で
+  local schema を参照する。利用側で同じ comment を使う場合は
+  `.github/linter-service.schema.json` も合わせて配置する。
 - どちらの file もない場合は、`初期選択` 列で有効な linter を、
   この file による除外パス設定なしで処理対象にする。
 - `linters.json` の `required_root_files` に列挙した repo root 必須 file と、

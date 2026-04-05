@@ -40,8 +40,8 @@ jobs:
           node-version: 24
       - name: Install shared Node dependencies
         run: npm ci
-      - name: Validate linters config schema
-        run: node --test .github/scripts/validate-linters-config.test.js
+      - name: Validate config schemas
+        run: node --test .github/scripts/validate-linters-config.test.js .github/scripts/validate-linter-service-config.test.js
       - name: Collect fixture test matrix
         id: collect
         run: |

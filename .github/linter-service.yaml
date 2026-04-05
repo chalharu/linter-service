@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=./linter-service.schema.json
 global:
   exclude_paths:
     - "**/tests/*/target/**"
