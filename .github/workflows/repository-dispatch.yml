@@ -668,6 +668,15 @@ jobs:
           path: linter-service
           persist-credentials: false
           ref: ${{ github.sha }}
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          cache: npm
+          cache-dependency-path: linter-service/package-lock.json
+          node-version: 24
+      - name: Install shared Node dependencies
+        working-directory: linter-service
+        run: npm ci
       - name: Derive artifact passphrase
         env:
           CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
