@@ -1,4 +1,5 @@
 {
+  "$schema": "./linters.schema.json",
   "linters": [
     {
       "name": "actionlint",

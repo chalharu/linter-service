@@ -41,6 +41,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | `.github/workflows/repository-dispatch.yml` | router workflow |
 | `<linter>/` | linter ごとの script / fixture test / helper |
 | `linters.json` | linter 定義と SARIF / 実行メタデータ |
+| `linters.schema.json` | `linters.json` の editor validation / 補完用 schema |
 | `worker/` | Webhook を受ける Cloudflare Worker |
 
 ## 共有 linter 一覧
@@ -134,6 +135,7 @@ linters:
 ## 共有 linter の追加方法
 
 - 追加先は root の `linters.json` と root 直下の `<name>/` directory である。`.github/scripts/` は shared script 専用である。
+- `linters.json` は root の `linters.schema.json` を `$schema` で参照する。schema と実データは同時に更新する。
 - 最低限の構成は `patterns.sh`, `install.sh`, `run.sh` である。設定ファイル変更で全 target を再評価する linter だけ `config_trigger_patterns.sh` を追加する。shared helper が必要な場合のみ `common.sh` を追加する。
 - `linters.json` で `isolated: true` を付けた linter は shared batch から分離し、専用 job で実行する。
 - 参考実装は `actionlint/` が最小構成、`cargo-clippy/` と `textlint/` が隔離実行や config 解決を含む例である。
