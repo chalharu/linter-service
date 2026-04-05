@@ -5,7 +5,7 @@
     "helpers:pinGitHubActionDigests",
     ":disableRateLimiting"
   ],
-  "enabledManagers": ["github-actions", "custom.regex"],
+  "enabledManagers": ["github-actions", "npm", "custom.regex"],
   "customManagers": [
     {
       "customType": "regex",
