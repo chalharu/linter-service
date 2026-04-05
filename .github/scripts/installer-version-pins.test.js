@@ -199,6 +199,28 @@ test("renovate manages installer pins with a three day hold", () => {
 	);
 });
 
+test("renovate enables npm package manifest updates", () => {
+	const config = JSON.parse(
+		fs.readFileSync(path.join(repoRoot, "renovate.json"), "utf8"),
+	);
+
+	assert.ok(config.enabledManagers.includes("npm"));
+
+	for (const manifestPath of ["package.json", "worker/package.json"]) {
+		const manifest = JSON.parse(
+			fs.readFileSync(path.join(repoRoot, manifestPath), "utf8"),
+		);
+		const dependencyCount =
+			Object.keys(manifest.dependencies ?? {}).length +
+			Object.keys(manifest.devDependencies ?? {}).length;
+
+		assert.ok(
+			dependencyCount > 0,
+			`${manifestPath} should expose npm dependencies for Renovate to update`,
+		);
+	}
+});
+
 test("renovate manages textlint preset package pins from YAML config", () => {
 	const config = JSON.parse(
 		fs.readFileSync(path.join(repoRoot, "renovate.json"), "utf8"),
