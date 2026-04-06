@@ -6,7 +6,7 @@ const test = require("node:test");
 
 const {
 	filterExcludedPaths,
-	getTextlintPresetPackages,
+	getLinterConfig,
 	isLinterEnabled,
 	isPathExcluded,
 	loadLinterServiceConfig,
@@ -295,7 +295,7 @@ test("supports textlint preset_packages when textlint is enabled", () => {
 		});
 
 		assert.equal(isLinterEnabled(config, "textlint"), true);
-		assert.deepEqual(getTextlintPresetPackages(config), [
+		assert.deepEqual(getLinterConfig(config, "textlint").preset_packages, [
 			"textlint-rule-preset-ja-technical-writing@12.0.2",
 		]);
 	} finally {
@@ -348,7 +348,7 @@ test("supports multiple textlint preset_packages", () => {
 		});
 
 		assert.equal(isLinterEnabled(config, "textlint"), true);
-		assert.deepEqual(getTextlintPresetPackages(config), [
+		assert.deepEqual(getLinterConfig(config, "textlint").preset_packages, [
 			"textlint-rule-preset-ja-technical-writing@12.0.2",
 			"textlint-rule-preset-ja-spacing@4.0.0",
 		]);

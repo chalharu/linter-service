@@ -172,6 +172,7 @@ function runFixtureCase({
 		? selectFiles({
 				candidatePaths,
 				linterName,
+				linterServicePath: repositoryPath,
 				patterns: patternStrings,
 				repositoryPath: caseRepositoryPath,
 				serviceConfig,

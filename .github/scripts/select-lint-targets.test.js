@@ -143,6 +143,17 @@ test("expands to all matching repository files when a config trigger changes", (
 
 	fs.mkdirSync(path.join(context.repoDir, "docs"), { recursive: true });
 	fs.writeFileSync(path.join(context.repoDir, ".textlintrc"), "{}\n", "utf8");
+	writeLinterServiceConfig(
+		context.repoDir,
+		[
+			"linters:",
+			"  textlint:",
+			"    disabled: false",
+			"    preset_packages:",
+			'      - "textlint-rule-preset-ja-technical-writing@12.0.2"',
+			"",
+		].join("\n"),
+	);
 	fs.writeFileSync(
 		path.join(context.repoDir, "README.md"),
 		"# README\n",
@@ -165,6 +176,13 @@ test("expands to all matching repository files when a config trigger changes", (
 	writeExecutable(
 		path.join(context.repoDir, "textlint", "config_trigger_patterns.sh"),
 		"#!/usr/bin/env bash\nprintf '%s\\n' '^\\.textlintrc$'\n",
+	);
+	fs.writeFileSync(
+		path.join(context.repoDir, "textlint", "filter-selected-files.js"),
+		`module.exports = require(${JSON.stringify(
+			path.join(__dirname, "..", "..", "textlint", "filter-selected-files.js"),
+		)});\n`,
+		"utf8",
 	);
 
 	try {
@@ -286,6 +304,13 @@ test("helmlint config trigger matches only files inside charts", () => {
 	writeExecutable(
 		path.join(context.repoDir, "helmlint", "config_trigger_patterns.sh"),
 		"#!/usr/bin/env bash\nprintf '%s\\n' '(?:^|/)values(?:[._-][^/]+)?\\.ya?ml$'\n",
+	);
+	fs.writeFileSync(
+		path.join(context.repoDir, "helmlint", "filter-selected-files.js"),
+		`module.exports = require(${JSON.stringify(
+			path.join(__dirname, "..", "..", "helmlint", "filter-selected-files.js"),
+		)});\n`,
+		"utf8",
 	);
 
 	try {

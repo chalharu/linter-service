@@ -20,16 +20,18 @@ function runFromEnv(env = process.env) {
 	const serviceConfig = loadLinterServiceConfig({
 		repositoryPath,
 	});
+	const linterServicePath = env.LINTER_SERVICE_PATH;
 	const configTriggerPatterns = readConfigTriggerPatterns({
 		env,
 		linterName,
-		linterServicePath: env.LINTER_SERVICE_PATH,
+		linterServicePath,
 	});
 	const changedFiles = readChangedFiles(context);
 	const candidatePaths = hasConfigTriggerMatch({
 		changedFiles,
 		configTriggerPatterns,
 		linterName,
+		linterServicePath,
 		repositoryPath,
 		serviceConfig,
 	})
@@ -38,6 +40,7 @@ function runFromEnv(env = process.env) {
 	const selectedFiles = selectFiles({
 		candidatePaths,
 		linterName,
+		linterServicePath,
 		patterns,
 		repositoryPath,
 		serviceConfig,
@@ -109,6 +112,7 @@ function hasConfigTriggerMatch({
 	changedFiles,
 	configTriggerPatterns,
 	linterName,
+	linterServicePath,
 	repositoryPath,
 	serviceConfig,
 }) {
@@ -123,6 +127,7 @@ function hasConfigTriggerMatch({
 		selectFiles({
 			candidatePaths: changedFiles,
 			linterName,
+			linterServicePath,
 			patterns: configTriggerPatterns,
 			repositoryPath,
 			serviceConfig,

@@ -3,14 +3,15 @@ const path = require("node:path");
 
 const {
 	filterExcludedPaths,
-	getTextlintPresetPackages,
 	isLinterEnabled,
 	normalizeRelativePath,
 } = require("./linter-service-config.js");
+const { loadLinterHook } = require("./lib/linter-hooks.js");
 
 function selectFiles({
 	candidatePaths,
 	linterName,
+	linterServicePath,
 	patterns,
 	repositoryPath,
 	serviceConfig,
@@ -23,18 +24,21 @@ function selectFiles({
 		normalizedCandidates,
 	);
 
-	return filterMatchedFiles({
+	return applySelectedFilesHook({
 		linterName,
+		linterServicePath,
 		repositoryPath,
 		selectedFiles: filteredCandidates.filter((candidatePath) =>
 			compiledPatterns.some((pattern) => pattern.test(candidatePath)),
 		),
+		serviceConfig,
 	});
 }
 
 function hasPatternMatch({
 	candidatePaths,
 	linterName,
+	linterServicePath,
 	patterns,
 	repositoryPath,
 	serviceConfig,
@@ -47,6 +51,7 @@ function hasPatternMatch({
 		selectFiles({
 			candidatePaths,
 			linterName,
+			linterServicePath,
 			patterns,
 			repositoryPath,
 			serviceConfig,
@@ -57,6 +62,7 @@ function hasPatternMatch({
 function selectLinters({
 	candidatePaths,
 	definitions,
+	linterServicePath,
 	repositoryPath,
 	serviceConfig,
 }) {
@@ -77,14 +83,11 @@ function selectLinters({
 			continue;
 		}
 
-		if (!hasRequiredRuntimeConfig(definition, serviceConfig)) {
-			continue;
-		}
-
 		if (
 			hasPatternMatch({
 				candidatePaths,
 				linterName: definition.name,
+				linterServicePath,
 				patterns: definition.patterns,
 				repositoryPath,
 				serviceConfig,
@@ -92,6 +95,7 @@ function selectLinters({
 			hasPatternMatch({
 				candidatePaths,
 				linterName: definition.name,
+				linterServicePath,
 				patterns: definition.config_trigger_patterns,
 				repositoryPath,
 				serviceConfig,
@@ -104,81 +108,36 @@ function selectLinters({
 	return selectedLinters;
 }
 
-function filterMatchedFiles({ linterName, repositoryPath, selectedFiles }) {
-	if (linterName !== "helmlint") {
+function applySelectedFilesHook({
+	linterName,
+	linterServicePath,
+	repositoryPath,
+	selectedFiles,
+	serviceConfig,
+}) {
+	const hook = loadLinterHook({
+		fileName: "filter-selected-files.js",
+		linterName,
+		linterServicePath,
+	});
+
+	if (typeof hook?.filterSelectedFiles !== "function") {
 		return selectedFiles;
 	}
 
-	if (typeof repositoryPath !== "string" || repositoryPath.length === 0) {
-		return selectedFiles;
-	}
+	const filtered = hook.filterSelectedFiles({
+		repositoryPath,
+		selectedFiles,
+		serviceConfig,
+	});
 
-	return selectedFiles.filter(
-		(candidatePath) =>
-			findHelmChartRoot({
-				filePath: candidatePath,
-				repositoryPath,
-			}) !== null,
-	);
-}
-
-function findHelmChartRoot({ filePath, repositoryPath }) {
-	if (
-		typeof filePath !== "string" ||
-		filePath.trim().length === 0 ||
-		typeof repositoryPath !== "string" ||
-		repositoryPath.length === 0
-	) {
-		return null;
-	}
-
-	const resolvedRepositoryPath = path.resolve(repositoryPath);
-	let currentDir = path.dirname(normalizeRelativePath(filePath));
-
-	if (currentDir.length === 0) {
-		currentDir = ".";
-	}
-
-	while (true) {
-		const candidatePath =
-			currentDir === "." ? "Chart.yaml" : path.join(currentDir, "Chart.yaml");
-		const resolvedCandidatePath = path.resolve(
-			resolvedRepositoryPath,
-			candidatePath,
+	if (!Array.isArray(filtered)) {
+		throw new Error(
+			`${linterName} filter-selected-files.js must return an array of file paths`,
 		);
-		const relativeCandidatePath = path.relative(
-			resolvedRepositoryPath,
-			resolvedCandidatePath,
-		);
-
-		if (
-			relativeCandidatePath !== ".." &&
-			!relativeCandidatePath.startsWith(`..${path.sep}`) &&
-			!path.isAbsolute(relativeCandidatePath) &&
-			fs.existsSync(resolvedCandidatePath)
-		) {
-			return currentDir === "." ? "." : normalizeRelativePath(currentDir);
-		}
-
-		if (currentDir === "." || currentDir === "/" || currentDir === "") {
-			return null;
-		}
-
-		const nextDir = path.dirname(currentDir);
-		if (nextDir === currentDir) {
-			return null;
-		}
-
-		currentDir = nextDir;
-	}
-}
-
-function hasRequiredRuntimeConfig(definition, serviceConfig) {
-	if (definition.name !== "textlint") {
-		return true;
 	}
 
-	return getTextlintPresetPackages(serviceConfig).length > 0;
+	return filtered.map(normalizeRelativePath);
 }
 
 function hasRequiredRootFiles(definition, repositoryPath) {

@@ -2,6 +2,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const requireEnv = require("./lib/require-env.js");
+const { loadLinterHook } = require("./lib/linter-hooks.js");
 const { buildSarifEnvelope } = require("./lib/sarif.js");
 const {
 	readLinterConfig,
@@ -10,9 +11,6 @@ const {
 	readTargetKind,
 } = require("./lib/linter-shared.js");
 
-const {
-	buildSarifResults: buildCargoDenySarifResults,
-} = require("../../cargo-deny/render-linter-sarif.js");
 const { collectProjectTargets } = require("./render-linter-report.js");
 
 const DETAILS_LIMIT = 8000;
@@ -66,6 +64,7 @@ function renderSarif({
 	const selectedFiles = readSelectedFiles(selectedFilesPath);
 	const result = readResult(resultPath);
 	const targetPaths = collectSarifTargetPaths({
+		configPath,
 		linterName,
 		selectedFiles,
 		sourceRepositoryPath,
@@ -114,6 +113,7 @@ function renderSarif({
 		result.exit_code === 0
 			? []
 			: buildSarifResults({
+					configPath,
 					result,
 					defaultLevel: sarifConfig?.default_level || "warning",
 					details,
@@ -174,17 +174,19 @@ function buildDetailsFallback(linterName) {
 }
 
 function collectSarifTargetPaths({
+	configPath,
 	linterName,
 	selectedFiles,
 	sourceRepositoryPath,
 	targetKind,
 }) {
 	if (targetKind === "cargo-project") {
-		const projects = collectProjectTargets(
+		const projects = collectProjectTargets({
+			configPath,
 			linterName,
-			sourceRepositoryPath,
 			selectedFiles,
-		);
+			sourceRepositoryPath,
+		});
 		return projects.length > 0 ? projects : selectedFiles;
 	}
 
@@ -261,6 +263,7 @@ function buildReportedPathRoots({
 }
 
 function buildSarifResults({
+	configPath,
 	defaultLevel,
 	details,
 	linterName,
@@ -270,6 +273,7 @@ function buildSarifResults({
 	targetPaths,
 }) {
 	const linterSpecificResults = buildLinterSpecificSarifResults({
+		configPath,
 		createResult,
 		dedupeResults,
 		defaultLevel,
@@ -327,6 +331,7 @@ function buildSarifResults({
 	}
 
 	return buildFallbackResults({
+		configPath,
 		defaultLevel,
 		details,
 		linterName,
@@ -337,6 +342,7 @@ function buildSarifResults({
 }
 
 function buildLinterSpecificSarifResults({
+	configPath,
 	createResult,
 	dedupeResults,
 	defaultLevel,
@@ -349,8 +355,14 @@ function buildLinterSpecificSarifResults({
 	targetPaths,
 	toSarifLevel,
 }) {
-	if (linterName === "cargo-deny") {
-		return buildCargoDenySarifResults({
+	const hook = loadLinterHook({
+		configPath,
+		fileName: "render-linter-sarif.js",
+		linterName,
+	});
+
+	if (typeof hook?.buildSarifResults === "function") {
+		const results = hook.buildSarifResults({
 			createResult,
 			dedupeResults,
 			defaultLevel,
@@ -363,143 +375,17 @@ function buildLinterSpecificSarifResults({
 			targetPaths,
 			toSarifLevel,
 		});
-	}
 
-	if (linterName === "helmlint") {
-		return buildHelmLintSarifResults({
-			createResult,
-			dedupeResults,
-			defaultLevel,
-			linterName,
-			normalizeReportedPath,
-			parseInteger,
-			reportedPathRoots,
-			result,
-			sourceRepositoryPath,
-			targetPaths,
-		});
+		if (!Array.isArray(results)) {
+			throw new Error(
+				`${linterName} render-linter-sarif.js must return an array of SARIF results`,
+			);
+		}
+
+		return results;
 	}
 
 	return [];
-}
-
-function buildHelmLintSarifResults({
-	createResult,
-	dedupeResults,
-	defaultLevel,
-	linterName,
-	normalizeReportedPath,
-	parseInteger,
-	reportedPathRoots,
-	result,
-	sourceRepositoryPath,
-	targetPaths,
-}) {
-	const details =
-		result && typeof result.details === "string" ? result.details : "";
-	const results = [];
-	let currentChartRoot = null;
-
-	for (const rawLine of details.split(/\r?\n/u)) {
-		const line = rawLine.trim();
-
-		if (line.length === 0 || line.startsWith("Error: ")) {
-			continue;
-		}
-
-		const chartMatch = /^==>\s+(?:helm lint|Linting)\s+(?<chartRoot>.+)$/u.exec(
-			line,
-		);
-		if (chartMatch?.groups?.chartRoot) {
-			currentChartRoot = chartMatch.groups.chartRoot.trim();
-			continue;
-		}
-
-		const diagnosticMatch =
-			/^\[(?<level>INFO|WARNING|ERROR)\]\s+(?<path>[^:]+):\s*(?<message>.+)$/u.exec(
-				line,
-			);
-		if (!diagnosticMatch?.groups) {
-			continue;
-		}
-
-		const filePath = resolveHelmLintPath({
-			currentChartRoot,
-			normalizeReportedPath,
-			reportedPath: diagnosticMatch.groups.path.trim(),
-			reportedPathRoots,
-			sourceRepositoryPath,
-			targetPaths,
-		});
-		const lineMatch = /\bline (?<line>\d+)\b/u.exec(
-			diagnosticMatch.groups.message,
-		);
-
-		results.push(
-			createResult({
-				defaultLevel,
-				filePath,
-				line: parseInteger(lineMatch?.groups?.line ?? null),
-				level:
-					{
-						ERROR: "error",
-						INFO: "note",
-						WARNING: "warning",
-					}[diagnosticMatch.groups.level] ?? defaultLevel,
-				linterName,
-				message: line,
-				ruleId: `${linterName}/diagnostic`,
-			}),
-		);
-	}
-
-	return dedupeResults(results);
-}
-
-function resolveHelmLintPath({
-	currentChartRoot,
-	normalizeReportedPath,
-	reportedPath,
-	reportedPathRoots,
-	sourceRepositoryPath,
-	targetPaths,
-}) {
-	const candidates = [];
-
-	if (reportedPath.length > 0) {
-		candidates.push(reportedPath);
-	}
-
-	if (
-		typeof currentChartRoot === "string" &&
-		currentChartRoot.length > 0 &&
-		reportedPath.length > 0 &&
-		reportedPath !== "."
-	) {
-		candidates.push(
-			currentChartRoot === "."
-				? reportedPath
-				: `${currentChartRoot}/${reportedPath}`,
-		);
-	}
-
-	if (typeof currentChartRoot === "string" && currentChartRoot.length > 0) {
-		candidates.push(currentChartRoot);
-	}
-
-	for (const candidate of candidates) {
-		const resolved = normalizeReportedPath(
-			sourceRepositoryPath,
-			candidate,
-			targetPaths,
-			reportedPathRoots,
-		);
-		if (resolved) {
-			return resolved;
-		}
-	}
-
-	return null;
 }
 
 function parsePathDiagnostics({
@@ -768,6 +654,7 @@ function parseShellcheckStyleDiagnostics({
 }
 
 function buildFallbackResults({
+	configPath,
 	defaultLevel,
 	details,
 	linterName,
@@ -777,6 +664,7 @@ function buildFallbackResults({
 }) {
 	const summaryMessage = summarizeDetails(details, linterName);
 	const collectedFallbackPaths = collectFallbackPaths({
+		configPath,
 		details,
 		linterName,
 		targetPaths,
@@ -812,8 +700,14 @@ function buildFallbackResults({
 	return dedupeResults(results);
 }
 
-function collectFallbackPaths({ details, linterName, targetPaths }) {
+function collectFallbackPaths({
+	configPath,
+	details,
+	linterName,
+	targetPaths,
+}) {
 	const explicitPaths = extractFallbackPaths({
+		configPath,
 		details,
 		linterName,
 		targetPaths,
@@ -826,27 +720,31 @@ function collectFallbackPaths({ details, linterName, targetPaths }) {
 	return targetPaths.filter((targetPath) => details.includes(targetPath));
 }
 
-function extractFallbackPaths({ details, linterName, targetPaths }) {
-	if (linterName !== "rustfmt") {
+function extractFallbackPaths({
+	configPath,
+	details,
+	linterName,
+	targetPaths,
+}) {
+	const hook = loadLinterHook({
+		configPath,
+		fileName: "render-linter-sarif.js",
+		linterName,
+	});
+
+	if (typeof hook?.collectFallbackPaths !== "function") {
 		return [];
 	}
 
-	const targetSet = new Set(targetPaths);
-	const fallbackPaths = [];
+	const fallbackPaths = hook.collectFallbackPaths({
+		details,
+		targetPaths,
+	});
 
-	for (const match of details.matchAll(
-		/^Diff in (?<filePath>.+?)(?::\d+| at line \d+):\s*$/gmu,
-	)) {
-		const filePath = match.groups?.filePath;
-		if (
-			!filePath ||
-			!targetSet.has(filePath) ||
-			fallbackPaths.includes(filePath)
-		) {
-			continue;
-		}
-
-		fallbackPaths.push(filePath);
+	if (!Array.isArray(fallbackPaths)) {
+		throw new Error(
+			`${linterName} render-linter-sarif.js must return an array of fallback paths`,
+		);
 	}
 
 	return fallbackPaths;

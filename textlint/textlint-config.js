@@ -2,13 +2,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const {
-	getTextlintPresetPackages,
+	getLinterConfig,
 	isLinterEnabled,
 	loadLinterServiceConfig,
 } = require("../.github/scripts/linter-service-config.js");
-const {
-	getTextlintPresetRuleKey,
-} = require("../.github/scripts/textlint-preset-package.js");
+const { getTextlintPresetRuleKey } = require("./textlint-preset-package.js");
 const {
 	parseExactPackageSpec,
 } = require("../.github/scripts/npm-package-spec.js");
@@ -27,7 +25,10 @@ function resolveTextlintRuntime({ repositoryPath, outputPath }) {
 		throw new Error(`textlint is disabled in ${serviceConfigPath}`);
 	}
 
-	const presetPackages = getTextlintPresetPackages(serviceConfig);
+	const presetPackages = getLinterConfig(
+		serviceConfig,
+		"textlint",
+	).preset_packages;
 	if (!Array.isArray(presetPackages) || presetPackages.length === 0) {
 		throw new Error(
 			`textlint requires linters.textlint.preset_packages in ${serviceConfigPath}`,
