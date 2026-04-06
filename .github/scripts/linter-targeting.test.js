@@ -103,6 +103,96 @@ test("selectLinters includes linters whose config trigger paths changed", () => 
 	}
 });
 
+test("selectFiles keeps helmlint targets only when a Chart.yaml ancestor exists", () => {
+	const context = fs.mkdtempSync(path.join(os.tmpdir(), "linter-targeting-"));
+	fs.mkdirSync(path.join(context, "charts", "app", "templates"), {
+		recursive: true,
+	});
+	fs.mkdirSync(path.join(context, "docs"), { recursive: true });
+	fs.writeFileSync(
+		path.join(context, "charts", "app", "Chart.yaml"),
+		"apiVersion: v2\nname: app\nversion: 0.1.0\n",
+		"utf8",
+	);
+	fs.writeFileSync(
+		path.join(context, "charts", "app", "values.yaml"),
+		"replicaCount: 1\n",
+		"utf8",
+	);
+	fs.writeFileSync(
+		path.join(context, "charts", "app", "templates", "deployment.yaml"),
+		"apiVersion: v1\nkind: ConfigMap\n",
+		"utf8",
+	);
+	fs.writeFileSync(
+		path.join(context, "docs", "values.yaml"),
+		"title: docs\n",
+		"utf8",
+	);
+
+	try {
+		const selected = selectFiles({
+			candidatePaths: [
+				"charts/app/values.yaml",
+				"docs/values.yaml",
+				"charts/app/templates/deployment.yaml",
+			],
+			linterName: "helmlint",
+			patterns: [
+				"(?:^|/)values(?:[._-][^/]+)?\\.ya?ml$",
+				"(?:^|/)(?:templates|crds)/.+$",
+			],
+			repositoryPath: context,
+			serviceConfig: {
+				global: {
+					exclude_paths: [],
+				},
+				linters: {},
+			},
+		});
+
+		assert.deepEqual(selected, [
+			"charts/app/values.yaml",
+			"charts/app/templates/deployment.yaml",
+		]);
+	} finally {
+		fs.rmSync(context, { force: true, recursive: true });
+	}
+});
+
+test("selectLinters skips helmlint when matching files are outside Helm charts", () => {
+	const context = fs.mkdtempSync(path.join(os.tmpdir(), "linter-targeting-"));
+	fs.mkdirSync(path.join(context, "docs"), { recursive: true });
+	fs.writeFileSync(
+		path.join(context, "docs", "values.yaml"),
+		"title: docs\n",
+		"utf8",
+	);
+
+	try {
+		const selected = selectLinters({
+			candidatePaths: ["docs/values.yaml"],
+			definitions: [
+				{
+					name: "helmlint",
+					patterns: ["(?:^|/)values(?:[._-][^/]+)?\\.ya?ml$"],
+				},
+			],
+			repositoryPath: context,
+			serviceConfig: {
+				global: {
+					exclude_paths: [],
+				},
+				linters: {},
+			},
+		});
+
+		assert.deepEqual(selected, []);
+	} finally {
+		fs.rmSync(context, { force: true, recursive: true });
+	}
+});
+
 test("selectLinters skips textlint until preset_packages are configured", () => {
 	const context = fs.mkdtempSync(path.join(os.tmpdir(), "linter-targeting-"));
 	fs.writeFileSync(path.join(context, ".textlintrc"), "{}\n", "utf8");

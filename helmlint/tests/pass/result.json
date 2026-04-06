@@ -1,0 +1,12 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "==> helm lint charts/demo\n==> Linting charts/demo\n[INFO] Chart.yaml: icon is recommended\n\n1 chart(s) linted, 0 chart(s) failed",
+    "exit_code": 0
+  },
+  "selected_files": [
+    "charts/demo/Chart.yaml",
+    "charts/demo/templates/configmap.yaml",
+    "charts/demo/values.yaml"
+  ]
+}

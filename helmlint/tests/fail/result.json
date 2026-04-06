@@ -1,0 +1,12 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "==> helm lint charts/bad\n==> Linting charts/bad\n[INFO] Chart.yaml: icon is recommended\n[ERROR] templates/configmap.yaml: unable to parse YAML: error converting YAML to JSON: yaml: line 4: could not find expected ':'\n\nError: 1 chart(s) linted, 1 chart(s) failed",
+    "exit_code": 1
+  },
+  "selected_files": [
+    "charts/bad/Chart.yaml",
+    "charts/bad/templates/configmap.yaml",
+    "charts/bad/values.yaml"
+  ]
+}

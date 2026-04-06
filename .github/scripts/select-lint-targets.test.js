@@ -143,6 +143,17 @@ test("expands to all matching repository files when a config trigger changes", (
 
 	fs.mkdirSync(path.join(context.repoDir, "docs"), { recursive: true });
 	fs.writeFileSync(path.join(context.repoDir, ".textlintrc"), "{}\n", "utf8");
+	writeLinterServiceConfig(
+		context.repoDir,
+		[
+			"linters:",
+			"  textlint:",
+			"    disabled: false",
+			"    preset_packages:",
+			'      - "textlint-rule-preset-ja-technical-writing@12.0.2"',
+			"",
+		].join("\n"),
+	);
 	fs.writeFileSync(
 		path.join(context.repoDir, "README.md"),
 		"# README\n",
@@ -165,6 +176,13 @@ test("expands to all matching repository files when a config trigger changes", (
 	writeExecutable(
 		path.join(context.repoDir, "textlint", "config_trigger_patterns.sh"),
 		"#!/usr/bin/env bash\nprintf '%s\\n' '^\\.textlintrc$'\n",
+	);
+	fs.writeFileSync(
+		path.join(context.repoDir, "textlint", "filter-selected-files.js"),
+		`module.exports = require(${JSON.stringify(
+			path.join(__dirname, "..", "..", "textlint", "filter-selected-files.js"),
+		)});\n`,
+		"utf8",
 	);
 
 	try {
@@ -246,6 +264,71 @@ test("expands repository selection when a config trigger also matches target pat
 	}
 });
 
+test("helmlint config trigger matches only files inside charts", () => {
+	const context = makeTempRepo();
+	const contextPath = path.join(context.runnerTemp, "context.json");
+	const outputPath = path.join(context.runnerTemp, "selected-files.txt");
+	const patternPath = path.join(context.runnerTemp, "patterns.txt");
+
+	fs.mkdirSync(path.join(context.repoDir, "charts", "demo"), {
+		recursive: true,
+	});
+	fs.mkdirSync(path.join(context.repoDir, "docs"), { recursive: true });
+	fs.writeFileSync(
+		path.join(context.repoDir, "charts", "demo", "Chart.yaml"),
+		"apiVersion: v2\nname: demo\nversion: 0.1.0\n",
+		"utf8",
+	);
+	fs.writeFileSync(
+		path.join(context.repoDir, "charts", "demo", "values.yaml"),
+		"replicaCount: 1\n",
+		"utf8",
+	);
+	fs.writeFileSync(
+		path.join(context.repoDir, "docs", "values.yaml"),
+		"title: docs\n",
+		"utf8",
+	);
+	fs.writeFileSync(
+		contextPath,
+		JSON.stringify({
+			changed_files: ["docs/values.yaml"],
+		}),
+		"utf8",
+	);
+	fs.writeFileSync(
+		patternPath,
+		"(?:^|/)values(?:[._-][^/]+)?\\.ya?ml$\n",
+		"utf8",
+	);
+	writeExecutable(
+		path.join(context.repoDir, "helmlint", "config_trigger_patterns.sh"),
+		"#!/usr/bin/env bash\nprintf '%s\\n' '(?:^|/)values(?:[._-][^/]+)?\\.ya?ml$'\n",
+	);
+	fs.writeFileSync(
+		path.join(context.repoDir, "helmlint", "filter-selected-files.js"),
+		`module.exports = require(${JSON.stringify(
+			path.join(__dirname, "..", "..", "helmlint", "filter-selected-files.js"),
+		)});\n`,
+		"utf8",
+	);
+
+	try {
+		const result = runFromEnv({
+			CONTEXT_PATH: contextPath,
+			LINTER_NAME: "helmlint",
+			LINTER_SERVICE_PATH: context.repoDir,
+			OUTPUT_PATH: outputPath,
+			PATTERN_PATH: patternPath,
+			SOURCE_REPOSITORY_PATH: context.repoDir,
+		});
+
+		assert.deepEqual(result.selectedFiles, []);
+		assert.equal(fs.readFileSync(outputPath, "utf8"), "");
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
 test("listRepositoryFiles skips directory symlinks in filesystem fallback mode", () => {
 	const context = makeTempRepo();
 	const realDir = path.join(context.repoDir, "docs");

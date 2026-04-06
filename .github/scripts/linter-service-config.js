@@ -2,8 +2,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const yaml = require("js-yaml");
 
-const { parseExactPackageSpec } = require("./npm-package-spec.js");
-const { getTextlintPresetRuleKey } = require("./textlint-preset-package.js");
+const {
+	loadLinterHook,
+	resolveLinterServicePath,
+} = require("./lib/linter-hooks.js");
 const requireEnv = require("./lib/require-env.js");
 const LINTER_SERVICE_CONFIG_CANDIDATES = [
 	".github/linter-service.yaml",
@@ -16,7 +18,11 @@ function runFromEnv(env = process.env) {
 	return loadLinterServiceConfig({ repositoryPath });
 }
 
-function loadLinterServiceConfig({ configPath, repositoryPath } = {}) {
+function loadLinterServiceConfig({
+	configPath,
+	linterServicePath,
+	repositoryPath,
+} = {}) {
 	const resolvedPath = resolveLinterServiceConfigPath({
 		configPath,
 		repositoryPath,
@@ -37,7 +43,9 @@ function loadLinterServiceConfig({ configPath, repositoryPath } = {}) {
 		configPath: resolvedPath,
 		source: fs.readFileSync(resolvedPath, "utf8"),
 	});
-	const normalized = normalizeLinterServiceConfig(parsed);
+	const normalized = normalizeLinterServiceConfig(parsed, {
+		linterServicePath: resolveLinterServicePath({ linterServicePath }),
+	});
 	return {
 		configPath: resolvedPath,
 		exists: true,
@@ -94,13 +102,13 @@ function parseYamlDocument(source) {
 	}
 }
 
-function normalizeLinterServiceConfig(value) {
+function normalizeLinterServiceConfig(value, { linterServicePath } = {}) {
 	if (!value || typeof value !== "object" || Array.isArray(value)) {
 		throw new Error("linter-service config must be an object");
 	}
 
 	const global = normalizeGlobalConfig(value.global);
-	const linters = normalizeLinterConfigs(value.linters);
+	const linters = normalizeLinterConfigs(value.linters, { linterServicePath });
 
 	return { global, linters };
 }
@@ -124,7 +132,7 @@ function normalizeGlobalConfig(value) {
 	};
 }
 
-function normalizeLinterConfigs(value) {
+function normalizeLinterConfigs(value, { linterServicePath } = {}) {
 	if (value === undefined) {
 		return {};
 	}
@@ -163,69 +171,50 @@ function normalizeLinterConfigs(value) {
 			),
 		};
 
-		if (linterName === "textlint") {
-			if (currentConfig.preset_package !== undefined) {
-				throw new Error(
-					`linters.${linterName}.preset_package is no longer supported; use linters.${linterName}.preset_packages`,
-				);
-			}
-
-			entry.preset_packages = normalizeTextlintPresetPackages({
-				presetPackages: currentConfig.preset_packages,
-				label: `linters.${linterName}`,
-			});
-
-			if (
-				currentConfig.disabled === false &&
-				entry.preset_packages.length === 0
-			) {
-				throw new Error(
-					`linters.${linterName}.preset_packages is required when textlint is enabled`,
-				);
-			}
-		}
-
-		entries[linterName] = entry;
+		entries[linterName] = normalizeLinterSpecificConfig({
+			currentConfig,
+			entry,
+			linterName,
+			linterServicePath,
+		});
 	}
 
 	return entries;
 }
 
-function normalizeTextlintPresetPackages({ label, presetPackages }) {
-	if (presetPackages === undefined) {
-		return [];
+function normalizeLinterSpecificConfig({
+	currentConfig,
+	entry,
+	linterName,
+	linterServicePath,
+}) {
+	const hook = loadLinterHook({
+		fileName: "linter-service-config.js",
+		linterName,
+		linterServicePath,
+	});
+
+	if (typeof hook?.normalizeConfig !== "function") {
+		return entry;
 	}
 
-	if (!Array.isArray(presetPackages)) {
-		throw new Error(`${label}.preset_packages must be an array`);
-	}
+	const normalized = hook.normalizeConfig({
+		currentConfig,
+		entry: { ...entry },
+		label: `linters.${linterName}`,
+	});
 
-	if (presetPackages.length === 0) {
-		throw new Error(`${label}.preset_packages must not be empty`);
-	}
-
-	const normalized = presetPackages.map((entry, index) =>
-		normalizeExactPackageSpec(entry, `${label}.preset_packages[${index}]`),
-	);
-	const seenNames = new Set();
-
-	for (const spec of normalized) {
-		const { name } = parseExactPackageSpec(spec, `${label}.preset_packages`);
-		getTextlintPresetRuleKey(name);
-		if (seenNames.has(name)) {
-			throw new Error(
-				`${label}.preset_packages must not contain duplicate package names`,
-			);
-		}
-		seenNames.add(name);
+	if (
+		!normalized ||
+		typeof normalized !== "object" ||
+		Array.isArray(normalized)
+	) {
+		throw new Error(
+			`${linterName} linter-service-config.js must return a config object`,
+		);
 	}
 
 	return normalized;
-}
-
-function normalizeExactPackageSpec(value, label) {
-	const { spec } = parseExactPackageSpec(value, label);
-	return spec;
 }
 
 function normalizeGlobList(value, label) {
@@ -271,13 +260,8 @@ function getLinterConfig(config, linterName) {
 			disabled: false,
 			disabled_explicit: false,
 			exclude_paths: [],
-			preset_packages: [],
 		}
 	);
-}
-
-function getTextlintPresetPackages(config) {
-	return [...getLinterConfig(config, "textlint").preset_packages];
 }
 
 function isLinterEnabled(config, linterName, { defaultDisabled = false } = {}) {
@@ -374,7 +358,6 @@ module.exports = {
 	filterExcludedPaths,
 	getLinterConfig,
 	getExcludedPatterns,
-	getTextlintPresetPackages,
 	isLinterEnabled,
 	isPathExcluded,
 	loadLinterServiceConfig,

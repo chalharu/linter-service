@@ -3,12 +3,19 @@ const path = require("node:path");
 
 const {
 	filterExcludedPaths,
-	getTextlintPresetPackages,
 	isLinterEnabled,
 	normalizeRelativePath,
 } = require("./linter-service-config.js");
+const { loadLinterHook } = require("./lib/linter-hooks.js");
 
-function selectFiles({ candidatePaths, linterName, patterns, serviceConfig }) {
+function selectFiles({
+	candidatePaths,
+	linterName,
+	linterServicePath,
+	patterns,
+	repositoryPath,
+	serviceConfig,
+}) {
 	const compiledPatterns = compilePatterns(patterns);
 	const normalizedCandidates = candidatePaths.map(normalizeRelativePath);
 	const filteredCandidates = filterExcludedPaths(
@@ -17,15 +24,23 @@ function selectFiles({ candidatePaths, linterName, patterns, serviceConfig }) {
 		normalizedCandidates,
 	);
 
-	return filteredCandidates.filter((candidatePath) =>
-		compiledPatterns.some((pattern) => pattern.test(candidatePath)),
-	);
+	return applySelectedFilesHook({
+		linterName,
+		linterServicePath,
+		repositoryPath,
+		selectedFiles: filteredCandidates.filter((candidatePath) =>
+			compiledPatterns.some((pattern) => pattern.test(candidatePath)),
+		),
+		serviceConfig,
+	});
 }
 
 function hasPatternMatch({
 	candidatePaths,
 	linterName,
+	linterServicePath,
 	patterns,
+	repositoryPath,
 	serviceConfig,
 }) {
 	if (!Array.isArray(patterns) || patterns.length === 0) {
@@ -36,7 +51,9 @@ function hasPatternMatch({
 		selectFiles({
 			candidatePaths,
 			linterName,
+			linterServicePath,
 			patterns,
+			repositoryPath,
 			serviceConfig,
 		}).length > 0
 	);
@@ -45,6 +62,7 @@ function hasPatternMatch({
 function selectLinters({
 	candidatePaths,
 	definitions,
+	linterServicePath,
 	repositoryPath,
 	serviceConfig,
 }) {
@@ -65,21 +83,21 @@ function selectLinters({
 			continue;
 		}
 
-		if (!hasRequiredRuntimeConfig(definition, serviceConfig)) {
-			continue;
-		}
-
 		if (
 			hasPatternMatch({
 				candidatePaths,
 				linterName: definition.name,
+				linterServicePath,
 				patterns: definition.patterns,
+				repositoryPath,
 				serviceConfig,
 			}) ||
 			hasPatternMatch({
 				candidatePaths,
 				linterName: definition.name,
+				linterServicePath,
 				patterns: definition.config_trigger_patterns,
+				repositoryPath,
 				serviceConfig,
 			})
 		) {
@@ -90,12 +108,36 @@ function selectLinters({
 	return selectedLinters;
 }
 
-function hasRequiredRuntimeConfig(definition, serviceConfig) {
-	if (definition.name !== "textlint") {
-		return true;
+function applySelectedFilesHook({
+	linterName,
+	linterServicePath,
+	repositoryPath,
+	selectedFiles,
+	serviceConfig,
+}) {
+	const hook = loadLinterHook({
+		fileName: "filter-selected-files.js",
+		linterName,
+		linterServicePath,
+	});
+
+	if (typeof hook?.filterSelectedFiles !== "function") {
+		return selectedFiles;
 	}
 
-	return getTextlintPresetPackages(serviceConfig).length > 0;
+	const filtered = hook.filterSelectedFiles({
+		repositoryPath,
+		selectedFiles,
+		serviceConfig,
+	});
+
+	if (!Array.isArray(filtered)) {
+		throw new Error(
+			`${linterName} filter-selected-files.js must return an array of file paths`,
+		);
+	}
+
+	return filtered.map(normalizeRelativePath);
 }
 
 function hasRequiredRootFiles(definition, repositoryPath) {

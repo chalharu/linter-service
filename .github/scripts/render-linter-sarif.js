@@ -2,6 +2,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const requireEnv = require("./lib/require-env.js");
+const { loadLinterHook } = require("./lib/linter-hooks.js");
 const { buildSarifEnvelope } = require("./lib/sarif.js");
 const {
 	readLinterConfig,
@@ -10,9 +11,6 @@ const {
 	readTargetKind,
 } = require("./lib/linter-shared.js");
 
-const {
-	buildSarifResults: buildCargoDenySarifResults,
-} = require("../../cargo-deny/render-linter-sarif.js");
 const { collectProjectTargets } = require("./render-linter-report.js");
 
 const DETAILS_LIMIT = 8000;
@@ -66,6 +64,7 @@ function renderSarif({
 	const selectedFiles = readSelectedFiles(selectedFilesPath);
 	const result = readResult(resultPath);
 	const targetPaths = collectSarifTargetPaths({
+		configPath,
 		linterName,
 		selectedFiles,
 		sourceRepositoryPath,
@@ -114,6 +113,7 @@ function renderSarif({
 		result.exit_code === 0
 			? []
 			: buildSarifResults({
+					configPath,
 					result,
 					defaultLevel: sarifConfig?.default_level || "warning",
 					details,
@@ -174,17 +174,19 @@ function buildDetailsFallback(linterName) {
 }
 
 function collectSarifTargetPaths({
+	configPath,
 	linterName,
 	selectedFiles,
 	sourceRepositoryPath,
 	targetKind,
 }) {
 	if (targetKind === "cargo-project") {
-		const projects = collectProjectTargets(
+		const projects = collectProjectTargets({
+			configPath,
 			linterName,
-			sourceRepositoryPath,
 			selectedFiles,
-		);
+			sourceRepositoryPath,
+		});
 		return projects.length > 0 ? projects : selectedFiles;
 	}
 
@@ -261,6 +263,7 @@ function buildReportedPathRoots({
 }
 
 function buildSarifResults({
+	configPath,
 	defaultLevel,
 	details,
 	linterName,
@@ -270,6 +273,7 @@ function buildSarifResults({
 	targetPaths,
 }) {
 	const linterSpecificResults = buildLinterSpecificSarifResults({
+		configPath,
 		createResult,
 		dedupeResults,
 		defaultLevel,
@@ -327,6 +331,7 @@ function buildSarifResults({
 	}
 
 	return buildFallbackResults({
+		configPath,
 		defaultLevel,
 		details,
 		linterName,
@@ -337,6 +342,7 @@ function buildSarifResults({
 }
 
 function buildLinterSpecificSarifResults({
+	configPath,
 	createResult,
 	dedupeResults,
 	defaultLevel,
@@ -349,8 +355,14 @@ function buildLinterSpecificSarifResults({
 	targetPaths,
 	toSarifLevel,
 }) {
-	if (linterName === "cargo-deny") {
-		return buildCargoDenySarifResults({
+	const hook = loadLinterHook({
+		configPath,
+		fileName: "render-linter-sarif.js",
+		linterName,
+	});
+
+	if (typeof hook?.buildSarifResults === "function") {
+		const results = hook.buildSarifResults({
 			createResult,
 			dedupeResults,
 			defaultLevel,
@@ -363,6 +375,14 @@ function buildLinterSpecificSarifResults({
 			targetPaths,
 			toSarifLevel,
 		});
+
+		if (!Array.isArray(results)) {
+			throw new Error(
+				`${linterName} render-linter-sarif.js must return an array of SARIF results`,
+			);
+		}
+
+		return results;
 	}
 
 	return [];
@@ -634,6 +654,7 @@ function parseShellcheckStyleDiagnostics({
 }
 
 function buildFallbackResults({
+	configPath,
 	defaultLevel,
 	details,
 	linterName,
@@ -643,6 +664,7 @@ function buildFallbackResults({
 }) {
 	const summaryMessage = summarizeDetails(details, linterName);
 	const collectedFallbackPaths = collectFallbackPaths({
+		configPath,
 		details,
 		linterName,
 		targetPaths,
@@ -678,8 +700,14 @@ function buildFallbackResults({
 	return dedupeResults(results);
 }
 
-function collectFallbackPaths({ details, linterName, targetPaths }) {
+function collectFallbackPaths({
+	configPath,
+	details,
+	linterName,
+	targetPaths,
+}) {
 	const explicitPaths = extractFallbackPaths({
+		configPath,
 		details,
 		linterName,
 		targetPaths,
@@ -692,27 +720,31 @@ function collectFallbackPaths({ details, linterName, targetPaths }) {
 	return targetPaths.filter((targetPath) => details.includes(targetPath));
 }
 
-function extractFallbackPaths({ details, linterName, targetPaths }) {
-	if (linterName !== "rustfmt") {
+function extractFallbackPaths({
+	configPath,
+	details,
+	linterName,
+	targetPaths,
+}) {
+	const hook = loadLinterHook({
+		configPath,
+		fileName: "render-linter-sarif.js",
+		linterName,
+	});
+
+	if (typeof hook?.collectFallbackPaths !== "function") {
 		return [];
 	}
 
-	const targetSet = new Set(targetPaths);
-	const fallbackPaths = [];
+	const fallbackPaths = hook.collectFallbackPaths({
+		details,
+		targetPaths,
+	});
 
-	for (const match of details.matchAll(
-		/^Diff in (?<filePath>.+?)(?::\d+| at line \d+):\s*$/gmu,
-	)) {
-		const filePath = match.groups?.filePath;
-		if (
-			!filePath ||
-			!targetSet.has(filePath) ||
-			fallbackPaths.includes(filePath)
-		) {
-			continue;
-		}
-
-		fallbackPaths.push(filePath);
+	if (!Array.isArray(fallbackPaths)) {
+		throw new Error(
+			`${linterName} render-linter-sarif.js must return an array of fallback paths`,
+		);
 	}
 
 	return fallbackPaths;
@@ -723,13 +755,17 @@ function createResult({
 	defaultLevel,
 	filePath,
 	line,
+	level,
 	linterName,
 	message,
 	ruleId,
 }) {
 	const sanitizedMessage = truncate(message, 1000);
 	const result = {
-		level: toSarifLevel(sanitizedMessage, defaultLevel),
+		level:
+			typeof level === "string" && level.length > 0
+				? level
+				: toSarifLevel(sanitizedMessage, defaultLevel),
 		message: {
 			text: sanitizedMessage,
 		},
