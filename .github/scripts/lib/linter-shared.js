@@ -3,16 +3,13 @@ const fs = require("node:fs");
 const { validateLintersConfig } = require("../validate-linters-config.js");
 
 function listLinterConfigs(configData) {
-	if (
-		!configData ||
-		!configData.linters ||
-		typeof configData.linters !== "object" ||
-		Array.isArray(configData.linters)
-	) {
+	const linters = configData?.linters;
+
+	if (!linters || typeof linters !== "object" || Array.isArray(linters)) {
 		throw new Error("linters config must include a linters object");
 	}
 
-	return Object.entries(configData.linters).map(([name, value]) => {
+	return Object.entries(linters).map(([name, value]) => {
 		if (!value || typeof value !== "object" || Array.isArray(value)) {
 			throw new Error(`${name} must be configured as an object`);
 		}
