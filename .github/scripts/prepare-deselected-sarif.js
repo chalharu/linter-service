@@ -1,6 +1,10 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const requireEnv = require("./lib/require-env.js");
+const {
+	listLinterConfigs,
+	readLintersConfig,
+} = require("./lib/linter-shared.js");
 const { buildSarifEnvelope } = require("./lib/sarif.js");
 
 function runFromEnv(env = process.env) {
@@ -26,8 +30,8 @@ function prepareDeselectedSarif({
 	outputRoot,
 	selectedLintersJson,
 }) {
-	const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-	const linters = Array.isArray(config.linters) ? config.linters : [];
+	const config = readLintersConfig(configPath);
+	const linters = listLinterConfigs(config);
 	const selectedLinters = new Set(parseSelectedLinters(selectedLintersJson));
 
 	fs.mkdirSync(outputRoot, { recursive: true });

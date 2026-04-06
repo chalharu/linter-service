@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "linter-service linters.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "linters"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "./linters.schema.json",
+      "description": "Local schema reference for editor validation."
+    },
+    "linters": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/linterName"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/linterDefinition"
+      }
+    }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "linterName": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "nonEmptyStringArray": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/nonEmptyString"
+      }
+    },
+    "sarifConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "default_level": {
+          "type": "string",
+          "enum": [
+            "error",
+            "note",
+            "warning"
+          ]
+        },
+        "target_kind": {
+          "type": "string",
+          "enum": [
+            "cargo-projects"
+          ]
+        },
+        "category": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "tool_name": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "linterDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "execution_group": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "default_disabled": {
+          "type": "boolean"
+        },
+        "isolated": {
+          "type": "boolean"
+        },
+        "required_root_files": {
+          "$ref": "#/$defs/nonEmptyStringArray"
+        },
+        "sarif": {
+          "$ref": "#/$defs/sarifConfig"
+        }
+      }
+    }
+  }
+}

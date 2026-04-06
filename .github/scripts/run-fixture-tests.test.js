@@ -38,14 +38,13 @@ function scaffoldFakeLinterRepo(repoDir) {
 		path.join(repoDir, "linters.json"),
 		JSON.stringify(
 			{
-				linters: [
-					{
-						name: "fake-linter",
+				linters: {
+					"fake-linter": {
 						sarif: {
 							enabled: true,
 						},
 					},
-				],
+				},
 			},
 			null,
 			2,

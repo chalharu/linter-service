@@ -114,82 +114,75 @@ jobs:
           LINTER_CONFIG_PATH: ${{ github.workspace }}/linter-service/linters.json
           LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
         run: |
-          python3 - <<'PY'
-          import json
-          import os
-          import subprocess
-          from pathlib import Path
+          node - <<'NODE'
+          const childProcess = require("node:child_process");
+          const fs = require("node:fs");
+          const path = require("node:path");
+          const { listLinterConfigs, readLintersConfig } = require(path.join(
+            process.env.LINTER_SERVICE_PATH,
+            ".github/scripts/lib/linter-shared.js",
+          ));
+          const { validateDefinition } = require(path.join(
+            process.env.LINTER_SERVICE_PATH,
+            ".github/scripts/linter-targeting.js",
+          ));
 
-          config_path = Path(os.environ["LINTER_CONFIG_PATH"])
-          config_data = json.loads(config_path.read_text(encoding="utf-8"))
-          linters = config_data.get("linters", [])
-          script_root = Path(os.environ["LINTER_SERVICE_PATH"])
-          definitions = []
+          const scriptRoot = process.env.LINTER_SERVICE_PATH;
+          const config = readLintersConfig(process.env.LINTER_CONFIG_PATH);
+          const definitions = listLinterConfigs(config).map((item) => {
+            const definition = {
+              name: item.name,
+              patterns: readPatternScript(path.join(scriptRoot, item.name, "patterns.sh")),
+            };
 
-          if not isinstance(linters, list):
-              raise SystemExit("linter config must include a linters array")
+            if (typeof item.execution_group === "string" && item.execution_group.length > 0) {
+              definition.execution_group = item.execution_group;
+            }
+            if (typeof item.isolated === "boolean") {
+              definition.isolated = item.isolated;
+            }
+            if (typeof item.default_disabled === "boolean") {
+              definition.default_disabled = item.default_disabled;
+            }
+            if (Array.isArray(item.required_root_files)) {
+              definition.required_root_files = item.required_root_files;
+            }
 
-          for item in linters:
-              if not isinstance(item, dict) or not isinstance(item.get("name"), str):
-                  raise SystemExit("each linter config entry must include a name")
+            const configScriptPath = path.join(
+              scriptRoot,
+              item.name,
+              "config_trigger_patterns.sh",
+            );
+            if (fs.existsSync(configScriptPath)) {
+              const configTriggerPatterns = readPatternScript(configScriptPath);
+              if (configTriggerPatterns.length > 0) {
+                definition.config_trigger_patterns = configTriggerPatterns;
+              }
+            }
 
-              linter_name = item["name"]
-              script_path = script_root / linter_name / "patterns.sh"
-              result = subprocess.run(
-                  ["bash", str(script_path)],
-                  capture_output=True,
-                  check=True,
-                  text=True,
-              )
-              patterns = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-              definition = {"name": linter_name, "patterns": patterns}
-              execution_group = item.get("execution_group")
-              if isinstance(execution_group, str) and execution_group:
-                  definition["execution_group"] = execution_group
-              isolated = item.get("isolated")
-              if isolated is not None:
-                  if not isinstance(isolated, bool):
-                      raise SystemExit(f"{linter_name}.isolated must be a boolean")
-                  definition["isolated"] = isolated
-              default_disabled = item.get("default_disabled")
-              if default_disabled is not None:
-                  if not isinstance(default_disabled, bool):
-                      raise SystemExit(f"{linter_name}.default_disabled must be a boolean")
-                  definition["default_disabled"] = default_disabled
-              config_script_path = script_root / linter_name / "config_trigger_patterns.sh"
-              if config_script_path.is_file():
-                  config_result = subprocess.run(
-                      ["bash", str(config_script_path)],
-                      capture_output=True,
-                      check=True,
-                      text=True,
-                  )
-                  config_trigger_patterns = [
-                      line.strip()
-                      for line in config_result.stdout.splitlines()
-                      if line.strip()
-                  ]
-                  if config_trigger_patterns:
-                      definition["config_trigger_patterns"] = config_trigger_patterns
-              required_root_files = item.get("required_root_files")
-              if required_root_files is not None:
-                  if not isinstance(required_root_files, list) or not all(
-                      isinstance(entry, str) and entry.strip()
-                      for entry in required_root_files
-                  ):
-                      raise SystemExit(
-                          f"{linter_name}.required_root_files must be an array of non-empty strings"
-                      )
-                  definition["required_root_files"] = required_root_files
-              definitions.append(definition)
+            validateDefinition(definition);
+            return definition;
+          });
 
-          output_path = Path(os.environ["RUNNER_TEMP"]) / "linter-definitions.json"
-          output_path.write_text(json.dumps(definitions), encoding="utf-8")
+          const outputPath = path.join(process.env.RUNNER_TEMP, "linter-definitions.json");
+          fs.writeFileSync(outputPath, JSON.stringify(definitions), "utf8");
+          fs.appendFileSync(
+            process.env.GITHUB_OUTPUT,
+            `path=${outputPath}\n`,
+            "utf8",
+          );
 
-          github_output = Path(os.environ["GITHUB_OUTPUT"])
-          with github_output.open("a", encoding="utf-8") as fh:
-              fh.write(f"path={output_path}\n")
-          PY
+          function readPatternScript(scriptPath) {
+            return childProcess
+              .execFileSync("bash", [scriptPath], {
+                cwd: scriptRoot,
+                encoding: "utf8",
+              })
+              .split(/\r?\n/u)
+              .map((line) => line.trim())
+              .filter(Boolean);
+          }
+          NODE
       - name: Get checker token
         id: get_checker_token
         uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
@@ -675,6 +668,15 @@ jobs:
           path: linter-service
           persist-credentials: false
           ref: ${{ github.sha }}
+      - name: Set up Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          cache: npm
+          cache-dependency-path: linter-service/package-lock.json
+          node-version: 24
+      - name: Install shared Node dependencies
+        working-directory: linter-service
+        run: npm ci
       - name: Derive artifact passphrase
         env:
           CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}

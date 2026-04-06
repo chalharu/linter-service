@@ -70,20 +70,18 @@ test("runLinterBatch executes multiple linters and preserves workflow env update
 	const workspace = createTempWorkspace();
 	writeFile(path.join(workspace.sourceRepositoryPath, "alpha.txt"), "alpha\n");
 	writeFile(path.join(workspace.sourceRepositoryPath, "beta.md"), "# beta\n");
-	writeLinterConfig(workspace.linterConfigPath, [
-		{
-			name: "alpha",
+	writeLinterConfig(workspace.linterConfigPath, {
+		alpha: {
 			sarif: {
 				enabled: false,
 			},
 		},
-		{
-			name: "beta",
+		beta: {
 			sarif: {
 				enabled: false,
 			},
 		},
-	]);
+	});
 	writeFakeLinter(workspace.linterServicePath, {
 		name: "alpha",
 		installScript: `#!/usr/bin/env bash
@@ -199,20 +197,18 @@ test("runLinterBatch continues after an install failure and reports infrastructu
 	const workspace = createTempWorkspace();
 	writeFile(path.join(workspace.sourceRepositoryPath, "alpha.txt"), "alpha\n");
 	writeFile(path.join(workspace.sourceRepositoryPath, "beta.md"), "# beta\n");
-	writeLinterConfig(workspace.linterConfigPath, [
-		{
-			name: "alpha",
+	writeLinterConfig(workspace.linterConfigPath, {
+		alpha: {
 			sarif: {
 				enabled: false,
 			},
 		},
-		{
-			name: "beta",
+		beta: {
 			sarif: {
 				enabled: false,
 			},
 		},
-	]);
+	});
 	writeFakeLinter(workspace.linterServicePath, {
 		name: "alpha",
 		installScript: `#!/usr/bin/env bash

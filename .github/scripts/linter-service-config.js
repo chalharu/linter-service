@@ -3,6 +3,7 @@ const path = require("node:path");
 const yaml = require("js-yaml");
 
 const { parseExactPackageSpec } = require("./npm-package-spec.js");
+const { getTextlintPresetRuleKey } = require("./textlint-preset-package.js");
 const requireEnv = require("./lib/require-env.js");
 const LINTER_SERVICE_CONFIG_CANDIDATES = [
 	".github/linter-service.yaml",
@@ -210,6 +211,7 @@ function normalizeTextlintPresetPackages({ label, presetPackages }) {
 
 	for (const spec of normalized) {
 		const { name } = parseExactPackageSpec(spec, `${label}.preset_packages`);
+		getTextlintPresetRuleKey(name);
 		if (seenNames.has(name)) {
 			throw new Error(
 				`${label}.preset_packages must not contain duplicate package names`,
@@ -379,5 +381,6 @@ module.exports = {
 	normalizeGlobPattern,
 	normalizeLinterServiceConfig,
 	normalizeRelativePath,
+	parseLinterServiceConfigSource,
 	runFromEnv,
 };

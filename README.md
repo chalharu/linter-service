@@ -34,13 +34,15 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 |------|------|
 | `.github/codeql/` | CodeQL の分析設定 |
 | `.github/linter-service.yaml` | source repo 側の exclude / disable 設定 |
+| `.github/linter-service.schema.json` | `.github/linter-service.yaml` の editor validation / 補完用 schema |
 | `.github/scripts/` | shared helper / renderer / artifact utility |
 | `.github/workflows/ci.yml` | `worker/` 検証と fixture test CI |
 | `.github/workflows/codeql.yml` | fixture 除外付き CodeQL workflow |
 | `.github/workflows/lint-common.yml` | 共通 reusable workflow |
 | `.github/workflows/repository-dispatch.yml` | router workflow |
 | `<linter>/` | linter ごとの script / fixture test / helper |
-| `linters.json` | linter 定義と SARIF / 実行メタデータ |
+| `linters.json` | linter 定義 object と SARIF / 実行メタデータ |
+| `linters.schema.json` | `linters.json` の editor validation / 補完用 schema |
 | `worker/` | Webhook を受ける Cloudflare Worker |
 
 ## 共有 linter 一覧
@@ -104,6 +106,10 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 - 利用 repository 側の target selection 制御用である。
 - `.github/linter-service.yaml` を推奨し、互換のため
   `.github/linter-service.json` も読み込む。
+- この repository 内の sample `.github/linter-service.yaml` は
+  `# yaml-language-server: $schema=./linter-service.schema.json` で
+  local schema を参照する。利用側で同じ comment を使う場合は
+  `.github/linter-service.schema.json` も合わせて配置する。
 - どちらの file もない場合は、`初期選択` 列で有効な linter を、
   この file による除外パス設定なしで処理対象にする。
 - `linters.json` の `required_root_files` に列挙した repo root 必須 file と、
@@ -134,6 +140,7 @@ linters:
 ## 共有 linter の追加方法
 
 - 追加先は root の `linters.json` と root 直下の `<name>/` directory である。`.github/scripts/` は shared script 専用である。
+- `linters.json` は `linters.<name>` を key に持つ object である。editor validation が必要な場合だけ root の `linters.schema.json` を `$schema` で参照する。schema と実データは同時に更新する。
 - 最低限の構成は `patterns.sh`, `install.sh`, `run.sh` である。設定ファイル変更で全 target を再評価する linter だけ `config_trigger_patterns.sh` を追加する。shared helper が必要な場合のみ `common.sh` を追加する。
 - `linters.json` で `isolated: true` を付けた linter は shared batch から分離し、専用 job で実行する。
 - 参考実装は `actionlint/` が最小構成、`cargo-clippy/` と `textlint/` が隔離実行や config 解決を含む例である。
