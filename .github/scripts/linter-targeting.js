@@ -8,7 +8,13 @@ const {
 	normalizeRelativePath,
 } = require("./linter-service-config.js");
 
-function selectFiles({ candidatePaths, linterName, patterns, serviceConfig }) {
+function selectFiles({
+	candidatePaths,
+	linterName,
+	patterns,
+	repositoryPath,
+	serviceConfig,
+}) {
 	const compiledPatterns = compilePatterns(patterns);
 	const normalizedCandidates = candidatePaths.map(normalizeRelativePath);
 	const filteredCandidates = filterExcludedPaths(
@@ -17,15 +23,20 @@ function selectFiles({ candidatePaths, linterName, patterns, serviceConfig }) {
 		normalizedCandidates,
 	);
 
-	return filteredCandidates.filter((candidatePath) =>
-		compiledPatterns.some((pattern) => pattern.test(candidatePath)),
-	);
+	return filterMatchedFiles({
+		linterName,
+		repositoryPath,
+		selectedFiles: filteredCandidates.filter((candidatePath) =>
+			compiledPatterns.some((pattern) => pattern.test(candidatePath)),
+		),
+	});
 }
 
 function hasPatternMatch({
 	candidatePaths,
 	linterName,
 	patterns,
+	repositoryPath,
 	serviceConfig,
 }) {
 	if (!Array.isArray(patterns) || patterns.length === 0) {
@@ -37,6 +48,7 @@ function hasPatternMatch({
 			candidatePaths,
 			linterName,
 			patterns,
+			repositoryPath,
 			serviceConfig,
 		}).length > 0
 	);
@@ -74,12 +86,14 @@ function selectLinters({
 				candidatePaths,
 				linterName: definition.name,
 				patterns: definition.patterns,
+				repositoryPath,
 				serviceConfig,
 			}) ||
 			hasPatternMatch({
 				candidatePaths,
 				linterName: definition.name,
 				patterns: definition.config_trigger_patterns,
+				repositoryPath,
 				serviceConfig,
 			})
 		) {
@@ -88,6 +102,75 @@ function selectLinters({
 	}
 
 	return selectedLinters;
+}
+
+function filterMatchedFiles({ linterName, repositoryPath, selectedFiles }) {
+	if (linterName !== "helmlint") {
+		return selectedFiles;
+	}
+
+	if (typeof repositoryPath !== "string" || repositoryPath.length === 0) {
+		return selectedFiles;
+	}
+
+	return selectedFiles.filter(
+		(candidatePath) =>
+			findHelmChartRoot({
+				filePath: candidatePath,
+				repositoryPath,
+			}) !== null,
+	);
+}
+
+function findHelmChartRoot({ filePath, repositoryPath }) {
+	if (
+		typeof filePath !== "string" ||
+		filePath.trim().length === 0 ||
+		typeof repositoryPath !== "string" ||
+		repositoryPath.length === 0
+	) {
+		return null;
+	}
+
+	const resolvedRepositoryPath = path.resolve(repositoryPath);
+	let currentDir = path.dirname(normalizeRelativePath(filePath));
+
+	if (currentDir.length === 0) {
+		currentDir = ".";
+	}
+
+	while (true) {
+		const candidatePath =
+			currentDir === "." ? "Chart.yaml" : path.join(currentDir, "Chart.yaml");
+		const resolvedCandidatePath = path.resolve(
+			resolvedRepositoryPath,
+			candidatePath,
+		);
+		const relativeCandidatePath = path.relative(
+			resolvedRepositoryPath,
+			resolvedCandidatePath,
+		);
+
+		if (
+			relativeCandidatePath !== ".." &&
+			!relativeCandidatePath.startsWith(`..${path.sep}`) &&
+			!path.isAbsolute(relativeCandidatePath) &&
+			fs.existsSync(resolvedCandidatePath)
+		) {
+			return currentDir === "." ? "." : normalizeRelativePath(currentDir);
+		}
+
+		if (currentDir === "." || currentDir === "/" || currentDir === "") {
+			return null;
+		}
+
+		const nextDir = path.dirname(currentDir);
+		if (nextDir === currentDir) {
+			return null;
+		}
+
+		currentDir = nextDir;
+	}
 }
 
 function hasRequiredRuntimeConfig(definition, serviceConfig) {

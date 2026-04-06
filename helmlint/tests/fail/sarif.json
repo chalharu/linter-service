@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/helmlint"
+      },
+      "results": [
+        {
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "charts/bad/templates/configmap.yaml"
+                },
+                "region": {
+                  "startColumn": 1,
+                  "startLine": 4
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "[ERROR] templates/configmap.yaml: unable to parse YAML: error converting YAML to JSON: yaml: line 4: could not find expected ':'"
+          },
+          "properties": {
+            "linter_name": "helmlint"
+          },
+          "ruleId": "helmlint/diagnostic"
+        },
+        {
+          "level": "note",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "charts/bad/Chart.yaml"
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "[INFO] Chart.yaml: icon is recommended"
+          },
+          "properties": {
+            "linter_name": "helmlint"
+          },
+          "ruleId": "helmlint/diagnostic"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/chalharu/linter-service",
+          "name": "linter-service/helmlint",
+          "rules": [
+            {
+              "id": "helmlint/diagnostic",
+              "name": "helmlint/diagnostic",
+              "shortDescription": {
+                "text": "helmlint/diagnostic"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

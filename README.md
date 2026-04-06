@@ -71,6 +71,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | `editorconfig-checker` | upstream default exclude に含まれない file | 対象 file の親 directory ごとの `.editorconfig`, repo root の `.editorconfig-checker.json`, `.ecrc` | ✅ |
 | `ghalint` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | 左から順に `.ghalint.yaml`, `.ghalint.yml`, `ghalint.yaml`, `ghalint.yml`, `.github/ghalint.yaml`, `.github/ghalint.yml` | ✅ |
 | `hadolint` | `Dockerfile`, `Dockerfile.*`, `Containerfile`, `Containerfile.*`, `*.dockerfile`, `*.containerfile` | 対象 file の親方向の `.hadolint.yaml`, `.hadolint.yml` | ✅ |
+| `helmlint` | `Chart.yaml`, `Chart.lock`, `values*.yaml`, `values*.yml`, `values.schema.json`, `templates/**`, `crds/**`, `charts/**` | なし | ✅ |
 | `markdownlint-cli2` | `*.md`, `*.markdown` | 左から順に `.markdownlint-cli2.jsonc`, `.markdownlint-cli2.yaml`, `.markdownlint.jsonc`, `.markdownlint.json`, `.markdownlint.yaml`, `.markdownlint.yml` | ✅ |
 | `ruff` | `*.py`, `*.pyi` | 同一 directory では左から順に `.ruff.toml`, `ruff.toml`, `pyproject.toml` の `[tool.ruff]` | ✅ |
 | `rustfmt` | `*.rs` | `rustfmt.toml`, `.rustfmt.toml`, `rust-toolchain.toml`, `rust-toolchain` | ✅ |
@@ -91,6 +92,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | `cargo-deny` | 最寄り `Cargo.toml` 基準の package 単位実行、`.cargo/config*`, private registry, private git dependency は未対応。 |
 | `dotenv-linter` | changed `.env` file への upstream default checks 直接適用、`--schema` と ignore-checks 注入は未対応。 |
 | `editorconfig-checker` | `PassedFiles` 制限、`NoColor` 強制。 |
+| `helmlint` | changed file から親方向の `Chart.yaml` を解決し、chart directory ごとに重複排除して `helm lint` 実行。 |
 | `markdownlint-cli2` | 静的 config のみ対応、`.cjs`, `.mjs` 非対応、`globs` 不使用。 |
 | `ruff` | `--force-exclude` 付与。 |
 | `rustfmt` | selected Rust file path の直接 `rustfmt --check` 実行。 |

@@ -35,6 +35,7 @@
         "actionlint",
         "ghalint",
         "hadolint",
+        "helmlint",
         "trivy",
         "dotenv-linter",
         "spectral",

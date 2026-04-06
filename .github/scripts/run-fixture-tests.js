@@ -173,6 +173,7 @@ function runFixtureCase({
 				candidatePaths,
 				linterName,
 				patterns: patternStrings,
+				repositoryPath: caseRepositoryPath,
 				serviceConfig,
 			})
 		: [];

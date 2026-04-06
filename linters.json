@@ -15,6 +15,11 @@
         "enabled": true
       }
     },
+    "helmlint": {
+      "sarif": {
+        "enabled": true
+      }
+    },
     "trivy": {
       "sarif": {
         "enabled": true,

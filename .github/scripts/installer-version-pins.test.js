@@ -43,6 +43,15 @@ const installerExpectations = [
 		],
 	},
 	{
+		path: "helmlint/install.sh",
+		required: [
+			/# renovate: datasource=github-releases depName=helm\/helm/u,
+			/helm_version="[^"\n]+"/u,
+			/asset="helm-\$\{helm_version\}-linux-amd64\.tar\.gz"/u,
+			/get\.helm\.sh\/\$asset/u,
+		],
+	},
+	{
 		path: "dotenv-linter/install.sh",
 		required: [
 			/# renovate: datasource=github-releases depName=dotenv-linter\/dotenv-linter/u,

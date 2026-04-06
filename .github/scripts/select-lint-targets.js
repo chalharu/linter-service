@@ -38,6 +38,7 @@ function runFromEnv(env = process.env) {
 		candidatePaths,
 		linterName,
 		patterns,
+		repositoryPath,
 		serviceConfig,
 	});
 
