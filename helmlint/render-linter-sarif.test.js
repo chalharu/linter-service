@@ -75,3 +75,44 @@ test("emits SARIF for helmlint path diagnostics", () => {
 		cleanupTempRepo(context.tempDir);
 	}
 });
+
+test("keeps INFO helmlint diagnostics as note even when the message mentions error", () => {
+	const context = makeTempRepo("render-linter-sarif-helmlint-info-");
+
+	writeFile(
+		path.join(context.repoDir, "charts/demo/Chart.yaml"),
+		"apiVersion: v2\nname: demo\nversion: 0.1.0\n",
+	);
+	writeFile(
+		path.join(context.runnerTemp, "selected-files.txt"),
+		"charts/demo/Chart.yaml\n",
+	);
+	writeFile(
+		path.join(context.runnerTemp, "linter-result.json"),
+		JSON.stringify({
+			details:
+				"==> helm lint charts/demo\n==> Linting charts/demo\n[INFO] Chart.yaml: error field 'icon' is missing",
+			exit_code: 1,
+		}),
+	);
+
+	try {
+		const report = runFromEnv({
+			INSTALL_TOOL_OUTCOME: "success",
+			LINTER_CONFIG_PATH: configPath,
+			LINTER_NAME: "helmlint",
+			OUTPUT_PATH: path.join(context.runnerTemp, "helmlint.sarif"),
+			RESULT_PATH: path.join(context.runnerTemp, "linter-result.json"),
+			RUNNER_TEMP: context.runnerTemp,
+			RUN_LINTER_OUTCOME: "success",
+			SELECTED_FILES_PATH: path.join(context.runnerTemp, "selected-files.txt"),
+			SELECT_FILES_OUTCOME: "success",
+			SOURCE_REPOSITORY_PATH: context.repoDir,
+		});
+
+		assert.equal(report.produced, true);
+		assert.equal(report.sarif.runs[0].results[0].level, "note");
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});

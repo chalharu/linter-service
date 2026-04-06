@@ -30,6 +30,7 @@ function runFromEnv(env = process.env) {
 		changedFiles,
 		configTriggerPatterns,
 		linterName,
+		repositoryPath,
 		serviceConfig,
 	})
 		? listRepositoryFiles(repositoryPath)
@@ -108,6 +109,7 @@ function hasConfigTriggerMatch({
 	changedFiles,
 	configTriggerPatterns,
 	linterName,
+	repositoryPath,
 	serviceConfig,
 }) {
 	if (
@@ -122,6 +124,7 @@ function hasConfigTriggerMatch({
 			candidatePaths: changedFiles,
 			linterName,
 			patterns: configTriggerPatterns,
+			repositoryPath,
 			serviceConfig,
 		}).length > 0
 	);

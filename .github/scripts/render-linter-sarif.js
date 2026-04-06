@@ -440,6 +440,12 @@ function buildHelmLintSarifResults({
 				defaultLevel,
 				filePath,
 				line: parseInteger(lineMatch?.groups?.line ?? null),
+				level:
+					{
+						ERROR: "error",
+						INFO: "note",
+						WARNING: "warning",
+					}[diagnosticMatch.groups.level] ?? defaultLevel,
 				linterName,
 				message: line,
 				ruleId: `${linterName}/diagnostic`,
@@ -851,13 +857,17 @@ function createResult({
 	defaultLevel,
 	filePath,
 	line,
+	level,
 	linterName,
 	message,
 	ruleId,
 }) {
 	const sanitizedMessage = truncate(message, 1000);
 	const result = {
-		level: toSarifLevel(sanitizedMessage, defaultLevel),
+		level:
+			typeof level === "string" && level.length > 0
+				? level
+				: toSarifLevel(sanitizedMessage, defaultLevel),
 		message: {
 			text: sanitizedMessage,
 		},
