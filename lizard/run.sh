@@ -20,7 +20,7 @@ const normalized = source
   .filter(Boolean)
   .map((line) => {
     const match =
-      /^(?<path>.+?):(?<line>\d+): warning: (?<function>.+?) has (?<ccn>\d+) CCN\b/u.exec(
+      /^(?<path>.+?):(?<line>\d+): warning: (?<function>.+?) has .*?(?<ccn>\d+) CCN\b/u.exec(
         line,
       );
 
