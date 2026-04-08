@@ -57,6 +57,12 @@
         "enabled": true
       }
     },
+    "renovate": {
+      "isolated": true,
+      "sarif": {
+        "enabled": true
+      }
+    },
     "textlint": {
       "isolated": true,
       "required_root_files": [

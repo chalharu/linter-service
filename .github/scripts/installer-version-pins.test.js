@@ -119,6 +119,14 @@ const installerExpectations = [
 		],
 	},
 	{
+		path: "renovate/install.sh",
+		required: [
+			/# renovate: datasource=npm depName=renovate/u,
+			/renovate_version="[^"\n]+"/u,
+			/renovate@\$renovate_version/u,
+		],
+	},
+	{
 		path: "spectral/install.sh",
 		required: [
 			/# renovate: datasource=npm depName=@stoplight\/spectral-cli/u,
