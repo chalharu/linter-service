@@ -277,6 +277,113 @@ test("supports per-linter disable flags", () => {
 	}
 });
 
+test("supports lizard languages when lizard is explicitly enabled", () => {
+	const context = makeTempRepo();
+
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			lizard: {
+				disabled: false,
+				languages: ["javascript", "typescript"],
+			},
+		},
+	});
+
+	try {
+		const config = loadLinterServiceConfig({
+			repositoryPath: context.repoDir,
+		});
+
+		assert.equal(
+			isLinterEnabled(config, "lizard", { defaultDisabled: true }),
+			true,
+		);
+		assert.deepEqual(getLinterConfig(config, "lizard").languages, [
+			"javascript",
+			"typescript",
+		]);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("lizard stays default disabled without an explicit enable", () => {
+	const context = makeTempRepo();
+
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			lizard: {
+				languages: ["javascript"],
+			},
+		},
+	});
+
+	try {
+		const config = loadLinterServiceConfig({
+			repositoryPath: context.repoDir,
+		});
+
+		assert.equal(
+			isLinterEnabled(config, "lizard", { defaultDisabled: true }),
+			false,
+		);
+		assert.deepEqual(getLinterConfig(config, "lizard").languages, [
+			"javascript",
+		]);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("requires lizard languages when lizard is enabled", () => {
+	const context = makeTempRepo();
+
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			lizard: {
+				disabled: false,
+			},
+		},
+	});
+
+	try {
+		assert.throws(
+			() =>
+				loadLinterServiceConfig({
+					repositoryPath: context.repoDir,
+				}),
+			/languages is required/u,
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("rejects unknown lizard languages", () => {
+	const context = makeTempRepo();
+
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			lizard: {
+				disabled: false,
+				languages: ["brainfuck"],
+			},
+		},
+	});
+
+	try {
+		assert.throws(
+			() =>
+				loadLinterServiceConfig({
+					repositoryPath: context.repoDir,
+				}),
+			/must be one of/u,
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
 test("supports textlint preset_packages when textlint is enabled", () => {
 	const context = makeTempRepo();
 

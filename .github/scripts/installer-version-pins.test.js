@@ -135,6 +135,14 @@ const installerExpectations = [
 		],
 	},
 	{
+		path: "lizard/install.sh",
+		required: [
+			/# renovate: datasource=pypi depName=lizard/u,
+			/lizard_version="[^"\n]+"/u,
+			/lizard==\$lizard_version/u,
+		],
+	},
+	{
 		path: "zizmor/install.sh",
 		required: [
 			/# renovate: datasource=pypi depName=zizmor/u,

@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "src/app.js:1: complex exceeds the CCN limit with 16 CCN",
+    "exit_code": 1
+  },
+  "selected_files": [
+    "src/app.js"
+  ]
+}

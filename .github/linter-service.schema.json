@@ -19,6 +19,9 @@
         "$ref": "#/$defs/knownLinterName"
       },
       "properties": {
+        "lizard": {
+          "$ref": "#/$defs/lizardLinterConfig"
+        },
         "textlint": {
           "$ref": "#/$defs/textlintLinterConfig"
         }
@@ -36,6 +39,7 @@
         "ghalint",
         "hadolint",
         "helmlint",
+        "lizard",
         "trivy",
         "dotenv-linter",
         "spectral",
@@ -75,6 +79,79 @@
           "$ref": "#/$defs/nonEmptyStringArray"
         }
       }
+    },
+    "lizardLanguage": {
+      "type": "string",
+      "enum": [
+        "cpp",
+        "csharp",
+        "erlang",
+        "fortran",
+        "gdscript",
+        "go",
+        "java",
+        "javascript",
+        "kotlin",
+        "lua",
+        "objectivec",
+        "perl",
+        "php",
+        "plsql",
+        "python",
+        "r",
+        "ruby",
+        "rust",
+        "scala",
+        "solidity",
+        "st",
+        "swift",
+        "ttcn",
+        "typescript",
+        "vue",
+        "zig"
+      ]
+    },
+    "lizardLanguageArray": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/lizardLanguage"
+      }
+    },
+    "lizardLinterConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "disabled": {
+          "type": "boolean"
+        },
+        "exclude_paths": {
+          "$ref": "#/$defs/nonEmptyStringArray"
+        },
+        "languages": {
+          "$ref": "#/$defs/lizardLanguageArray"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "disabled": {
+                "const": false
+              }
+            },
+            "required": [
+              "disabled"
+            ]
+          },
+          "then": {
+            "required": [
+              "languages"
+            ]
+          }
+        }
+      ]
     },
     "textlintPresetPackage": {
       "type": "string",

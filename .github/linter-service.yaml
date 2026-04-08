@@ -4,6 +4,11 @@ global:
     - "**/tests/*/target/**"
     - "**/tests/*/sarif.json"
 linters:
+  lizard:
+    disabled: false
+    languages:
+      - javascript
+      - typescript
   textlint:
     disabled: false
     preset_packages:

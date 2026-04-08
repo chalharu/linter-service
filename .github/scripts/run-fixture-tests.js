@@ -31,7 +31,11 @@ function runFixtureTests({ linterNames, repositoryPath, write = false }) {
 	const config = readLintersConfig(
 		path.join(resolvedRepositoryPath, "linters.json"),
 	);
-	const availableLinters = listLinterConfigs(config).map((entry) => entry.name);
+	const availableLinterConfigs = listLinterConfigs(config);
+	const availableLinters = availableLinterConfigs.map((entry) => entry.name);
+	const availableLinterConfigByName = new Map(
+		availableLinterConfigs.map((entry) => [entry.name, entry]),
+	);
 	const requestedLinters =
 		Array.isArray(linterNames) && linterNames.length > 0
 			? linterNames
@@ -45,6 +49,7 @@ function runFixtureTests({ linterNames, repositoryPath, write = false }) {
 
 		results.push(
 			runLinterFixtureSuite({
+				linterConfig: availableLinterConfigByName.get(linterName),
 				linterName,
 				repositoryPath: resolvedRepositoryPath,
 				write,
@@ -58,13 +63,21 @@ function runFixtureTests({ linterNames, repositoryPath, write = false }) {
 	};
 }
 
-function runLinterFixtureSuite({ linterName, repositoryPath, write }) {
+function runLinterFixtureSuite({
+	linterConfig,
+	linterName,
+	repositoryPath,
+	write,
+}) {
 	const fixtureNames = listFixtureNames(repositoryPath, linterName);
 
 	if (fixtureNames.length < 2) {
 		throw new Error(
 			`${linterName} must include at least 2 fixture tests under ${linterName}/tests`,
 		);
+	}
+	if (!linterConfig || typeof linterConfig !== "object") {
+		throw new Error(`unknown linter fixture suite: ${linterName}`);
 	}
 
 	const installState = installLinterTools({
@@ -73,6 +86,7 @@ function runLinterFixtureSuite({ linterName, repositoryPath, write }) {
 	});
 	const fixtures = fixtureNames.map((fixtureName) =>
 		runFixtureCase({
+			defaultDisabled: linterConfig.default_disabled === true,
 			executionEnv: installState.executionEnv,
 			fixtureName,
 			linterName,
@@ -130,6 +144,7 @@ function installLinterTools({ linterName, repositoryPath }) {
 }
 
 function runFixtureCase({
+	defaultDisabled = false,
 	executionEnv,
 	fixtureName,
 	linterName,
@@ -168,7 +183,9 @@ function runFixtureCase({
 	const serviceConfig = loadLinterServiceConfig({
 		repositoryPath: caseRepositoryPath,
 	});
-	const selectedFiles = isLinterEnabled(serviceConfig, linterName)
+	const selectedFiles = isLinterEnabled(serviceConfig, linterName, {
+		defaultDisabled,
+	})
 		? selectFiles({
 				candidatePaths,
 				linterName,

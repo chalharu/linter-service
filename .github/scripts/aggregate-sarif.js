@@ -5,6 +5,7 @@ const requireEnv = require("./lib/require-env.js");
 
 const TOOL_NAME = "linter-service";
 const TOOL_URI = "https://github.com/chalharu/linter-service";
+const MAX_RUNS_PER_FILE = 20;
 
 function runFromEnv(env = process.env) {
 	return aggregateSarif({
@@ -38,25 +39,62 @@ function aggregateSarif({ inputRoot, outputPath }) {
 	}
 
 	fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-	fs.writeFileSync(
-		outputPath,
-		JSON.stringify(
-			{
-				$schema: "https://json.schemastore.org/sarif-2.1.0.json",
-				version: "2.1.0",
-				runs,
-			},
-			null,
-			2,
-		),
-		"utf8",
-	);
+	writeSarifOutputs({ outputPath, runs });
 
 	return {
 		fileCount: fileNames.length,
 		outputPath,
 		runCount: runs.length,
 	};
+}
+
+function writeSarifOutputs({ outputPath, runs }) {
+	const chunks = chunkRuns(runs, MAX_RUNS_PER_FILE);
+
+	for (const [index, chunk] of chunks.entries()) {
+		const chunkOutputPath =
+			chunks.length === 1
+				? outputPath
+				: buildChunkOutputPath(outputPath, index + 1, chunks.length);
+
+		fs.writeFileSync(
+			chunkOutputPath,
+			JSON.stringify(
+				{
+					$schema: "https://json.schemastore.org/sarif-2.1.0.json",
+					version: "2.1.0",
+					runs: chunk,
+				},
+				null,
+				2,
+			),
+			"utf8",
+		);
+	}
+}
+
+function chunkRuns(runs, chunkSize) {
+	if (!Array.isArray(runs) || runs.length === 0) {
+		return [[]];
+	}
+
+	const chunks = [];
+
+	for (let index = 0; index < runs.length; index += chunkSize) {
+		chunks.push(runs.slice(index, index + chunkSize));
+	}
+
+	return chunks;
+}
+
+function buildChunkOutputPath(outputPath, chunkIndex, chunkCount) {
+	const directory = path.dirname(outputPath);
+	const extension = path.extname(outputPath);
+	const baseName = path.basename(outputPath, extension);
+	const width = String(chunkCount).length;
+	const suffix = String(chunkIndex).padStart(width, "0");
+
+	return path.join(directory, `${baseName}-${suffix}${extension}`);
 }
 
 function normalizeRun({ fileName, run }) {
@@ -253,6 +291,8 @@ if (require.main === module) {
 
 module.exports = {
 	aggregateSarif,
+	buildChunkOutputPath,
+	chunkRuns,
 	deriveLinterName,
 	normalizePartialFingerprints,
 	normalizeRun,

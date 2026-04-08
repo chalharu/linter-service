@@ -33,8 +33,8 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | パス | 役割 |
 |------|------|
 | `.github/codeql/` | CodeQL の分析設定 |
-| `.github/linter-service.yaml` | source repo 側の exclude / disable 設定 |
-| `.github/linter-service.schema.json` | `.github/linter-service.yaml` の editor validation / 補完用 schema |
+| `.github/linter-service.yaml`, `.github/linter-service.yml` | source repo 側の exclude / disable 設定 |
+| `.github/linter-service.schema.json` | `.github/linter-service.yaml`, `.github/linter-service.yml` の editor validation / 補完用 schema |
 | `.github/scripts/` | shared helper / renderer / artifact utility |
 | `.github/workflows/ci.yml` | `worker/` 検証と fixture test CI |
 | `.github/workflows/codeql.yml` | fixture 除外付き CodeQL workflow |
@@ -49,8 +49,8 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 
 - PR では changed file path から選択する。
 - default branch push では tracked file path 全体から選択する。
-- `.github/linter-service.yaml` を優先して読み込み、互換のため
-  `.github/linter-service.json` も fallback で読み込む。
+- `.github/linter-service.yaml`, `.github/linter-service.yml` を優先して読み込み、
+  互換のため `.github/linter-service.json` も fallback で読み込む。
 - どちらの file もない場合は、`初期選択` 列で有効な linter を
   この file による除外パス設定なしで選択する。
 - `linters.json` の `required_root_files` に列挙した repo root 必須 file が
@@ -72,6 +72,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | `ghalint` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | 左から順に `.ghalint.yaml`, `.ghalint.yml`, `ghalint.yaml`, `ghalint.yml`, `.github/ghalint.yaml`, `.github/ghalint.yml` | ✅ |
 | `hadolint` | `Dockerfile`, `Dockerfile.*`, `Containerfile`, `Containerfile.*`, `*.dockerfile`, `*.containerfile` | 対象 file の親方向の `.hadolint.yaml`, `.hadolint.yml` | ✅ |
 | `helmlint` | `Chart.yaml`, `Chart.lock`, `values*.yaml`, `values*.yml`, `values.schema.json`, `templates/**`, `crds/**`, `charts/**` | なし | ✅ |
+| `lizard` | `linters.lizard.languages` で選んだ言語に対応する source file | `.github/linter-service.yaml`, `.github/linter-service.yml`, `.github/linter-service.json`, repo root の `whitelizard.txt` | ❌ |
 | `markdownlint-cli2` | `*.md`, `*.markdown` | 左から順に `.markdownlint-cli2.jsonc`, `.markdownlint-cli2.yaml`, `.markdownlint.jsonc`, `.markdownlint.json`, `.markdownlint.yaml`, `.markdownlint.yml` | ✅ |
 | `ruff` | `*.py`, `*.pyi` | 同一 directory では左から順に `.ruff.toml`, `ruff.toml`, `pyproject.toml` の `[tool.ruff]` | ✅ |
 | `rustfmt` | `*.rs` | `rustfmt.toml`, `.rustfmt.toml`, `rust-toolchain.toml`, `rust-toolchain` | ✅ |
@@ -93,6 +94,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | `dotenv-linter` | changed `.env` file への upstream default checks 直接適用、`--schema` と ignore-checks 注入は未対応。 |
 | `editorconfig-checker` | `PassedFiles` 制限、`NoColor` 強制。 |
 | `helmlint` | changed file から親方向の `Chart.yaml` を解決し、chart directory ごとに重複排除して `helm lint` 実行。 |
+| `lizard` | default disabled。repo 側の `linters.lizard.languages` で選んだ言語だけを対象にし、repo root の `whitelizard.txt` をそのまま利用する。 |
 | `markdownlint-cli2` | 静的 config のみ対応、`.cjs`, `.mjs` 非対応、`globs` 不使用。 |
 | `ruff` | `--force-exclude` 付与。 |
 | `rustfmt` | selected Rust file path の直接 `rustfmt --check` 実行。 |
@@ -106,8 +108,8 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 ## `.github/linter-service.yaml`
 
 - 利用 repository 側の target selection 制御用である。
-- `.github/linter-service.yaml` を推奨し、互換のため
-  `.github/linter-service.json` も読み込む。
+- `.github/linter-service.yaml` を推奨し、`.github/linter-service.yml` も読める。
+  互換のため `.github/linter-service.json` も読み込む。
 - この repository 内の sample `.github/linter-service.yaml` は
   `# yaml-language-server: $schema=./linter-service.schema.json` で
   local schema を参照する。利用側で同じ comment を使う場合は
@@ -125,6 +127,11 @@ linters:
   yamllint:
     exclude_paths:
       - "docs/openapi/**"
+  lizard:
+    disabled: false
+    languages:
+      - javascript
+      - typescript
   textlint:
     preset_packages:
       - "textlint-rule-preset-ja-technical-writing@12.0.2"
@@ -137,7 +144,23 @@ linters:
 | `global.exclude_paths` | 全 linter | repo-relative glob pattern。全 linter への適用。 |
 | `linters.<name>.disabled` | 個別 linter | `true` で選択対象外。`false` は明示的な無効化解除として扱う。 |
 | `linters.<name>.exclude_paths` | 個別 linter | repo-relative glob pattern。global exclude との併用。 |
+| `linters.lizard.languages` | `lizard` | `lizard` opt-in 時の対象言語一覧。`disabled: false` と併用する。 |
 | `linters.textlint.preset_packages` | `textlint` | exact version 付き npm package spec の配列。`.textlintrc` と併せて `textlint` 自動選択時の必須項目。 |
+
+- `lizard` は `default_disabled` であるため、`linters.lizard.disabled: false` を明示した場合だけ選択対象になる。
+- `linters.lizard.languages` で指定できる値は次のとおりである。
+
+|  |  |  |
+| --- | --- | --- |
+| `cpp` | `csharp` | `erlang` |
+| `fortran` | `gdscript` | `go` |
+| `java` | `javascript` | `kotlin` |
+| `lua` | `objectivec` | `perl` |
+| `php` | `plsql` | `python` |
+| `r` | `ruby` | `rust` |
+| `scala` | `solidity` | `st` |
+| `swift` | `ttcn` | `typescript` |
+| `vue` | `zig` |  |
 
 ## 共有 linter の追加方法
 

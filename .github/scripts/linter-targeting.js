@@ -8,7 +8,10 @@ const {
 } = require("./linter-service-config.js");
 const { loadLinterHook } = require("./lib/linter-hooks.js");
 
+const EXECUTION_GROUP_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/u;
+
 function selectFiles({
+	applyExcludes = true,
 	candidatePaths,
 	linterName,
 	linterServicePath,
@@ -18,11 +21,9 @@ function selectFiles({
 }) {
 	const compiledPatterns = compilePatterns(patterns);
 	const normalizedCandidates = candidatePaths.map(normalizeRelativePath);
-	const filteredCandidates = filterExcludedPaths(
-		serviceConfig,
-		linterName,
-		normalizedCandidates,
-	);
+	const filteredCandidates = applyExcludes
+		? filterExcludedPaths(serviceConfig, linterName, normalizedCandidates)
+		: normalizedCandidates;
 
 	return applySelectedFilesHook({
 		linterName,
@@ -36,6 +37,7 @@ function selectFiles({
 }
 
 function hasPatternMatch({
+	applyExcludes = true,
 	candidatePaths,
 	linterName,
 	linterServicePath,
@@ -49,6 +51,7 @@ function hasPatternMatch({
 
 	return (
 		selectFiles({
+			applyExcludes,
 			candidatePaths,
 			linterName,
 			linterServicePath,
@@ -97,6 +100,7 @@ function selectLinters({
 				linterName: definition.name,
 				linterServicePath,
 				patterns: definition.config_trigger_patterns,
+				applyExcludes: false,
 				repositoryPath,
 				serviceConfig,
 			})
@@ -225,6 +229,21 @@ function compilePatterns(patterns) {
 }
 
 function validateDefinition(definition) {
+	validateDefinitionShape(definition);
+	validateExecutionGroup(definition.execution_group);
+	validateOptionalBoolean(definition.default_disabled, "default_disabled");
+	validateOptionalBoolean(definition.isolated, "isolated");
+	validateOptionalNonEmptyStringArray(
+		definition.required_root_files,
+		"required_root_files",
+	);
+	validateOptionalNonEmptyStringArray(
+		definition.config_trigger_patterns,
+		"config_trigger_patterns",
+	);
+}
+
+function validateDefinitionShape(definition) {
 	if (
 		!definition ||
 		typeof definition !== "object" ||
@@ -233,47 +252,40 @@ function validateDefinition(definition) {
 	) {
 		throw new Error("Each linter definition must include name and patterns");
 	}
+}
+
+function validateExecutionGroup(executionGroup) {
+	if (typeof executionGroup === "undefined") {
+		return;
+	}
 
 	if (
-		typeof definition.execution_group !== "undefined" &&
-		(typeof definition.execution_group !== "string" ||
-			!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(definition.execution_group))
+		typeof executionGroup !== "string" ||
+		!EXECUTION_GROUP_PATTERN.test(executionGroup)
 	) {
 		throw new Error(
 			"execution_group must contain only letters, digits, dot, underscore, or hyphen",
 		);
 	}
+}
 
-	if (
-		typeof definition.default_disabled !== "undefined" &&
-		typeof definition.default_disabled !== "boolean"
-	) {
-		throw new Error("default_disabled must be a boolean when present");
+function validateOptionalBoolean(value, fieldName) {
+	if (typeof value === "undefined") {
+		return;
 	}
 
-	if (
-		typeof definition.isolated !== "undefined" &&
-		typeof definition.isolated !== "boolean"
-	) {
-		throw new Error("isolated must be a boolean when present");
+	if (typeof value !== "boolean") {
+		throw new Error(`${fieldName} must be a boolean when present`);
+	}
+}
+
+function validateOptionalNonEmptyStringArray(value, fieldName) {
+	if (typeof value === "undefined") {
+		return;
 	}
 
-	if (
-		typeof definition.required_root_files !== "undefined" &&
-		!isNonEmptyStringArray(definition.required_root_files)
-	) {
-		throw new Error(
-			"required_root_files must be an array of non-empty strings",
-		);
-	}
-
-	if (
-		typeof definition.config_trigger_patterns !== "undefined" &&
-		!isNonEmptyStringArray(definition.config_trigger_patterns)
-	) {
-		throw new Error(
-			"config_trigger_patterns must be an array of non-empty strings",
-		);
+	if (!isNonEmptyStringArray(value)) {
+		throw new Error(`${fieldName} must be an array of non-empty strings`);
 	}
 }
 

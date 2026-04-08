@@ -125,6 +125,7 @@ function hasConfigTriggerMatch({
 
 	return (
 		selectFiles({
+			applyExcludes: false,
 			candidatePaths: changedFiles,
 			linterName,
 			linterServicePath,

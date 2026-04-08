@@ -1,7 +1,15 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
+const {
+	buildCargoDenyPackageLabel,
+	listCargoDenyWarningKinds,
+	normalizeCargoDenyWarningEntries,
+	normalizeCargoDenyWarnings,
+} = require("./common.js");
+
 const ADVISORY_WARNING_KINDS = new Set(["notice", "unmaintained", "unsound"]);
+const DEFAULT_CARGO_DENY_MESSAGE = "cargo-deny reported an issue";
 
 function parseJsonLines(text) {
 	const items = [];
@@ -54,90 +62,147 @@ function guessCargoDenyDisplayPath(run, diagnostic) {
 	return run.manifest_path || run.config_path || "";
 }
 
+function resolveCargoDenyAdvisory(advisory, { defaultId, fallbackTitle }) {
+	const normalizedAdvisory =
+		advisory && typeof advisory === "object" ? advisory : {};
+
+	return {
+		id: normalizedAdvisory.id || defaultId,
+		title: normalizedAdvisory.title || normalizedAdvisory.id || fallbackTitle,
+	};
+}
+
+function formatCargoDenyAuditLine({
+	advisory,
+	defaultId,
+	fallbackTitle,
+	packageInfo,
+	severity,
+}) {
+	const { id, title } = resolveCargoDenyAdvisory(advisory, {
+		defaultId,
+		fallbackTitle,
+	});
+	const packageLabel = buildCargoDenyPackageLabel(packageInfo);
+
+	return `${severity}[${id}]: ${packageLabel ? `${packageLabel} - ` : ""}${title}`;
+}
+
+function formatCargoDenyVulnerabilityLine(entry) {
+	return formatCargoDenyAuditLine({
+		advisory: entry?.advisory,
+		defaultId: "vulnerability",
+		fallbackTitle: "cargo-deny advisory",
+		packageInfo: entry?.package,
+		severity: "error",
+	});
+}
+
+function formatCargoDenyWarningLine(kind, entry) {
+	return formatCargoDenyAuditLine({
+		advisory: entry?.advisory,
+		defaultId: kind,
+		fallbackTitle: kind,
+		packageInfo: entry?.package,
+		severity: "warning",
+	});
+}
+
 function formatCargoDenyAuditReport(report) {
-	const lines = [];
 	const vulnerabilities = Array.isArray(report?.vulnerabilities)
 		? report.vulnerabilities
 		: [];
-	const warnings =
-		report && typeof report.warnings === "object" && report.warnings
-			? report.warnings
-			: {};
+	const warnings = normalizeCargoDenyWarnings(report?.warnings);
 
-	for (const entry of vulnerabilities) {
-		const advisory = entry?.advisory || {};
-		const packageInfo = entry?.package || {};
-		const title = advisory.title || advisory.id || "cargo-deny advisory";
-		const id = advisory.id || "vulnerability";
-		const packageLabel = [packageInfo.name, packageInfo.version]
-			.filter(Boolean)
-			.join(" ");
+	return [
+		...vulnerabilities.map(formatCargoDenyVulnerabilityLine),
+		...listCargoDenyWarningKinds(warnings).flatMap((kind) =>
+			normalizeCargoDenyWarningEntries(warnings[kind]).map((entry) =>
+				formatCargoDenyWarningLine(kind, entry),
+			),
+		),
+	];
+}
 
-		lines.push(
-			`error[${id}]: ${packageLabel ? `${packageLabel} - ` : ""}${title}`,
-		);
+function resolveCargoDenySeverity(fields) {
+	return typeof fields.severity === "string" && fields.severity.length > 0
+		? fields.severity.toLowerCase()
+		: "error";
+}
+
+function resolveCargoDenyCode(fields) {
+	return typeof fields.code === "string" && fields.code.length > 0
+		? `[${fields.code}]`
+		: "";
+}
+
+function resolveCargoDenyDetailMessage(fields) {
+	return typeof fields.message === "string" && fields.message.length > 0
+		? fields.message
+		: DEFAULT_CARGO_DENY_MESSAGE;
+}
+
+function resolveCargoDenyLabelMessage(label, fallbackMessage) {
+	if (typeof label?.message === "string" && label.message.length > 0) {
+		return label.message;
 	}
 
-	for (const kind of Object.keys(warnings).sort()) {
-		for (const entry of Array.isArray(warnings[kind]) ? warnings[kind] : []) {
-			const advisory = entry?.advisory || {};
-			const packageInfo = entry?.package || {};
-			const title = advisory.title || advisory.id || kind;
-			const id = advisory.id || kind;
-			const packageLabel = [packageInfo.name, packageInfo.version]
-				.filter(Boolean)
-				.join(" ");
-
-			lines.push(
-				`warning[${id}]: ${packageLabel ? `${packageLabel} - ` : ""}${title}`,
-			);
-		}
+	if (typeof label?.span === "string" && label.span.length > 0) {
+		return label.span;
 	}
 
-	return lines;
+	return fallbackMessage;
+}
+
+function formatCargoDenyDiagnosticHeader(fields) {
+	return `${resolveCargoDenySeverity(fields)}${resolveCargoDenyCode(fields)}: ${resolveCargoDenyDetailMessage(fields)}`;
+}
+
+function formatCargoDenyDiagnosticLabel({
+	displayPath,
+	fallbackMessage,
+	label,
+}) {
+	const labelMessage = resolveCargoDenyLabelMessage(label, fallbackMessage);
+
+	if (!displayPath) {
+		return labelMessage;
+	}
+
+	const line = Number.isInteger(label?.line) ? label.line : 1;
+	const column = Number.isInteger(label?.column) ? label.column : 1;
+
+	return `${displayPath}:${line}:${column}: ${labelMessage}`;
+}
+
+function formatCargoDenyDiagnosticLabels(fields, displayPath) {
+	const labels = Array.isArray(fields.labels) ? fields.labels : [];
+	const fallbackMessage = resolveCargoDenyDetailMessage(fields);
+
+	return labels.map((label) =>
+		formatCargoDenyDiagnosticLabel({
+			displayPath,
+			fallbackMessage,
+			label,
+		}),
+	);
+}
+
+function formatCargoDenyDiagnosticNotes(fields) {
+	const notes = Array.isArray(fields.notes) ? fields.notes : [];
+
+	return notes.map((note) => `note: ${note}`);
 }
 
 function formatCargoDenyDiagnostic(run, diagnostic) {
 	const fields = diagnostic?.fields || {};
-	const severity =
-		typeof fields.severity === "string" && fields.severity.length > 0
-			? fields.severity.toLowerCase()
-			: "error";
-	const code =
-		typeof fields.code === "string" && fields.code.length > 0
-			? `[${fields.code}]`
-			: "";
-	const message =
-		typeof fields.message === "string" && fields.message.length > 0
-			? fields.message
-			: "cargo-deny reported an issue";
-	const labels = Array.isArray(fields.labels) ? fields.labels : [];
-	const notes = Array.isArray(fields.notes) ? fields.notes : [];
 	const displayPath = guessCargoDenyDisplayPath(run, diagnostic);
-	const lines = [`${severity}${code}: ${message}`];
 
-	for (const label of labels) {
-		const line = Number.isInteger(label?.line) ? label.line : 1;
-		const column = Number.isInteger(label?.column) ? label.column : 1;
-		const labelMessage =
-			typeof label?.message === "string" && label.message.length > 0
-				? label.message
-				: typeof label?.span === "string" && label.span.length > 0
-					? label.span
-					: message;
-
-		if (displayPath) {
-			lines.push(`${displayPath}:${line}:${column}: ${labelMessage}`);
-		} else {
-			lines.push(labelMessage);
-		}
-	}
-
-	for (const note of notes) {
-		lines.push(`note: ${note}`);
-	}
-
-	return lines;
+	return [
+		formatCargoDenyDiagnosticHeader(fields),
+		...formatCargoDenyDiagnosticLabels(fields, displayPath),
+		...formatCargoDenyDiagnosticNotes(fields),
+	];
 }
 
 function normalizeCargoDenyRun(run) {

@@ -19,55 +19,83 @@ function filterSelectedFiles({ repositoryPath, selectedFiles }) {
 	);
 }
 
+function hasValidHelmLookupInputs({ filePath, repositoryPath }) {
+	return (
+		typeof filePath === "string" &&
+		filePath.trim().length > 0 &&
+		typeof repositoryPath === "string" &&
+		repositoryPath.length > 0
+	);
+}
+
+function normalizeHelmSearchDirectory(filePath) {
+	const currentDir = path.dirname(normalizeRelativePath(filePath));
+
+	return currentDir.length === 0 ? "." : currentDir;
+}
+
+function resolveChartCandidatePath(currentDir, resolvedRepositoryPath) {
+	const candidatePath =
+		currentDir === "." ? "Chart.yaml" : path.join(currentDir, "Chart.yaml");
+
+	return path.resolve(resolvedRepositoryPath, candidatePath);
+}
+
+function isRepositoryRelativePath(relativePath) {
+	return (
+		relativePath !== ".." &&
+		!relativePath.startsWith(`..${path.sep}`) &&
+		!path.isAbsolute(relativePath)
+	);
+}
+
+function hasHelmChartFile({ currentDir, resolvedRepositoryPath }) {
+	const resolvedCandidatePath = resolveChartCandidatePath(
+		currentDir,
+		resolvedRepositoryPath,
+	);
+	const relativeCandidatePath = path.relative(
+		resolvedRepositoryPath,
+		resolvedCandidatePath,
+	);
+
+	return (
+		isRepositoryRelativePath(relativeCandidatePath) &&
+		fs.existsSync(resolvedCandidatePath)
+	);
+}
+
+function getNextSearchDirectory(currentDir) {
+	if (currentDir === "." || currentDir === "/" || currentDir === "") {
+		return null;
+	}
+
+	const nextDir = path.dirname(currentDir);
+
+	return nextDir === currentDir ? null : nextDir;
+}
+
+function normalizeChartRoot(currentDir) {
+	return currentDir === "." ? "." : normalizeRelativePath(currentDir);
+}
+
 function findHelmChartRoot({ filePath, repositoryPath }) {
-	if (
-		typeof filePath !== "string" ||
-		filePath.trim().length === 0 ||
-		typeof repositoryPath !== "string" ||
-		repositoryPath.length === 0
-	) {
+	if (!hasValidHelmLookupInputs({ filePath, repositoryPath })) {
 		return null;
 	}
 
 	const resolvedRepositoryPath = path.resolve(repositoryPath);
-	let currentDir = path.dirname(normalizeRelativePath(filePath));
+	let currentDir = normalizeHelmSearchDirectory(filePath);
 
-	if (currentDir.length === 0) {
-		currentDir = ".";
+	while (currentDir !== null) {
+		if (hasHelmChartFile({ currentDir, resolvedRepositoryPath })) {
+			return normalizeChartRoot(currentDir);
+		}
+
+		currentDir = getNextSearchDirectory(currentDir);
 	}
 
-	while (true) {
-		const candidatePath =
-			currentDir === "." ? "Chart.yaml" : path.join(currentDir, "Chart.yaml");
-		const resolvedCandidatePath = path.resolve(
-			resolvedRepositoryPath,
-			candidatePath,
-		);
-		const relativeCandidatePath = path.relative(
-			resolvedRepositoryPath,
-			resolvedCandidatePath,
-		);
-
-		if (
-			relativeCandidatePath !== ".." &&
-			!relativeCandidatePath.startsWith(`..${path.sep}`) &&
-			!path.isAbsolute(relativeCandidatePath) &&
-			fs.existsSync(resolvedCandidatePath)
-		) {
-			return currentDir === "." ? "." : normalizeRelativePath(currentDir);
-		}
-
-		if (currentDir === "." || currentDir === "/" || currentDir === "") {
-			return null;
-		}
-
-		const nextDir = path.dirname(currentDir);
-		if (nextDir === currentDir) {
-			return null;
-		}
-
-		currentDir = nextDir;
-	}
+	return null;
 }
 
 module.exports = {

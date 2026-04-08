@@ -77,6 +77,10 @@ test("accepts supported linter-service config fields", () => {
 				exclude_paths: ["docs/generated/**"],
 			},
 			linters: {
+				lizard: {
+					disabled: false,
+					languages: ["javascript", "typescript"],
+				},
 				textlint: {
 					disabled: false,
 					exclude_paths: ["docs/drafts/**"],
@@ -153,6 +157,63 @@ test("rejects unknown linter names", () => {
 					schemaPath: rootSchemaPath,
 				}),
 			/must be equal to one of the allowed values/u,
+		);
+	} finally {
+		fs.rmSync(tempDir, { force: true, recursive: true });
+	}
+});
+
+test("rejects explicitly enabled lizard without languages", () => {
+	const tempDir = fs.mkdtempSync(
+		path.join(os.tmpdir(), "linter-service-schema-"),
+	);
+	const configPath = path.join(tempDir, "linter-service.yaml");
+
+	writeConfig(configPath, {
+		linters: {
+			lizard: {
+				disabled: false,
+			},
+		},
+	});
+
+	try {
+		assert.throws(
+			() =>
+				validateLinterServiceConfig({
+					configPath,
+					schemaPath: rootSchemaPath,
+				}),
+			/languages/u,
+		);
+	} finally {
+		fs.rmSync(tempDir, { force: true, recursive: true });
+	}
+});
+
+test("rejects unsupported lizard languages", () => {
+	const tempDir = fs.mkdtempSync(
+		path.join(os.tmpdir(), "linter-service-schema-"),
+	);
+	const configPath = path.join(tempDir, "linter-service.yaml");
+
+	writeConfig(configPath, {
+		linters: {
+			lizard: {
+				disabled: false,
+				languages: ["brainfuck"],
+			},
+		},
+	});
+
+	try {
+		assert.throws(
+			() =>
+				validateLinterServiceConfig({
+					configPath,
+					schemaPath: rootSchemaPath,
+				}),
+			/allowed values|languages/u,
 		);
 	} finally {
 		fs.rmSync(tempDir, { force: true, recursive: true });
