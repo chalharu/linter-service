@@ -94,6 +94,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | `dotenv-linter` | changed `.env` file への upstream default checks 直接適用、`--schema` と ignore-checks 注入は未対応。 |
 | `editorconfig-checker` | `PassedFiles` 制限、`NoColor` 強制。 |
 | `helmlint` | changed file から親方向の `Chart.yaml` を解決し、chart directory ごとに重複排除して `helm lint` 実行。 |
+| `biome` | native `--reporter=sarif --reporter-file=...` を前提に実行する。 |
 | `lizard` | default disabled。repo 側の `linters.lizard.languages` で選んだ言語だけを対象にし、repo root の `whitelizard.txt` をそのまま利用する。 |
 | `markdownlint-cli2` | 静的 config のみ対応、`.cjs`, `.mjs` 非対応、`globs` 不使用。 |
 | `ruff` | `--force-exclude` 付与。 |

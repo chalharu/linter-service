@@ -114,6 +114,7 @@ function renderSarif({
 			? []
 			: buildSarifResults({
 					configPath,
+					runnerTemp,
 					result,
 					defaultLevel: sarifConfig?.default_level || "warning",
 					details,
@@ -132,7 +133,16 @@ function renderSarif({
 		return { outputPath, produced: false, sarif: null, targetStats };
 	}
 
-	const rules = buildRuleDescriptors(results);
+	const linterSpecificRules = buildLinterSpecificSarifRules({
+		configPath,
+		linterName,
+		result,
+		runnerTemp,
+	});
+	const rules =
+		linterSpecificRules === null
+			? buildRuleDescriptors(results)
+			: linterSpecificRules;
 	const category = sarifConfig.category || `linter-service/${linterName}`;
 	const toolName = sarifConfig.tool_name || `linter-service/${linterName}`;
 
@@ -269,6 +279,7 @@ function buildSarifResults({
 	linterName,
 	result,
 	reportedPathRoots,
+	runnerTemp,
 	sourceRepositoryPath,
 	targetPaths,
 }) {
@@ -282,6 +293,7 @@ function buildSarifResults({
 		parseInteger,
 		reportedPathRoots,
 		result,
+		runnerTemp,
 		sourceRepositoryPath,
 		targetPaths,
 		toSarifLevel,
@@ -351,6 +363,7 @@ function buildLinterSpecificSarifResults({
 	parseInteger,
 	reportedPathRoots,
 	result,
+	runnerTemp,
 	sourceRepositoryPath,
 	targetPaths,
 	toSarifLevel,
@@ -371,6 +384,7 @@ function buildLinterSpecificSarifResults({
 			parseInteger,
 			reportedPathRoots,
 			result,
+			runnerTemp,
 			sourceRepositoryPath,
 			targetPaths,
 			toSarifLevel,
@@ -386,6 +400,41 @@ function buildLinterSpecificSarifResults({
 	}
 
 	return [];
+}
+
+function buildLinterSpecificSarifRules({
+	configPath,
+	linterName,
+	result,
+	runnerTemp,
+}) {
+	const hook = loadLinterHook({
+		configPath,
+		fileName: "render-linter-sarif.js",
+		linterName,
+	});
+
+	if (typeof hook?.buildSarifRules !== "function") {
+		return null;
+	}
+
+	const rules = hook.buildSarifRules({
+		linterName,
+		result,
+		runnerTemp,
+	});
+
+	if (rules === null || typeof rules === "undefined") {
+		return null;
+	}
+
+	if (!Array.isArray(rules)) {
+		throw new Error(
+			`${linterName} render-linter-sarif.js must return an array of SARIF rules`,
+		);
+	}
+
+	return rules;
 }
 
 function parsePathDiagnostics({
