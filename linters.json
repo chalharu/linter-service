@@ -20,6 +20,12 @@
         "enabled": true
       }
     },
+    "lizard": {
+      "default_disabled": true,
+      "sarif": {
+        "enabled": true
+      }
+    },
     "trivy": {
       "sarif": {
         "enabled": true,

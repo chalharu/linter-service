@@ -103,6 +103,38 @@ test("selectLinters includes linters whose config trigger paths changed", () => 
 	}
 });
 
+test("selectLinters ignores exclude paths for config trigger matches", () => {
+	const selected = selectLinters({
+		candidatePaths: [".github/linter-service.yaml"],
+		definitions: [
+			{
+				default_disabled: true,
+				name: "lizard",
+				config_trigger_patterns: [
+					"^\\.github\\/linter-service\\.(?:json|ya?ml)$",
+				],
+				patterns: ["\\.(?:js|py)$"],
+			},
+		],
+		linterServicePath: path.join(__dirname, "..", ".."),
+		serviceConfig: {
+			global: {
+				exclude_paths: [".github/**"],
+			},
+			linters: {
+				lizard: {
+					disabled: false,
+					disabled_explicit: true,
+					exclude_paths: [],
+					languages: ["javascript"],
+				},
+			},
+		},
+	});
+
+	assert.deepEqual(selected, ["lizard"]);
+});
+
 test("selectFiles keeps helmlint targets only when a Chart.yaml ancestor exists", () => {
 	const context = fs.mkdtempSync(path.join(os.tmpdir(), "linter-targeting-"));
 	fs.mkdirSync(path.join(context, "charts", "app", "templates"), {
@@ -282,6 +314,76 @@ test("selectLinters skips linters whose required root files are missing", () => 
 	} finally {
 		fs.rmSync(context, { force: true, recursive: true });
 	}
+});
+
+test("selectLinters keeps default-disabled lizard off until explicitly enabled", () => {
+	const definitions = [
+		{
+			default_disabled: true,
+			name: "lizard",
+			patterns: ["\\.(?:js|py)$"],
+		},
+	];
+	const linterServicePath = path.join(__dirname, "..", "..");
+
+	const selectedWithoutExplicitEnable = selectLinters({
+		candidatePaths: ["src/app.js"],
+		definitions,
+		linterServicePath,
+		serviceConfig: {
+			global: {
+				exclude_paths: [],
+			},
+			linters: {
+				lizard: {
+					disabled: false,
+					disabled_explicit: false,
+					exclude_paths: [],
+					languages: ["javascript"],
+				},
+			},
+		},
+	});
+	const selectedWithMismatchedLanguage = selectLinters({
+		candidatePaths: ["src/app.js"],
+		definitions,
+		linterServicePath,
+		serviceConfig: {
+			global: {
+				exclude_paths: [],
+			},
+			linters: {
+				lizard: {
+					disabled: false,
+					disabled_explicit: true,
+					exclude_paths: [],
+					languages: ["python"],
+				},
+			},
+		},
+	});
+	const selectedWithMatchingLanguage = selectLinters({
+		candidatePaths: ["src/app.js"],
+		definitions,
+		linterServicePath,
+		serviceConfig: {
+			global: {
+				exclude_paths: [],
+			},
+			linters: {
+				lizard: {
+					disabled: false,
+					disabled_explicit: true,
+					exclude_paths: [],
+					languages: ["javascript"],
+				},
+			},
+		},
+	});
+
+	assert.deepEqual(selectedWithoutExplicitEnable, []);
+	assert.deepEqual(selectedWithMismatchedLanguage, []);
+	assert.deepEqual(selectedWithMatchingLanguage, ["lizard"]);
 });
 
 test("selectLinters rejects invalid config trigger patterns", () => {

@@ -9,6 +9,7 @@ const {
 const { loadLinterHook } = require("./lib/linter-hooks.js");
 
 function selectFiles({
+	applyExcludes = true,
 	candidatePaths,
 	linterName,
 	linterServicePath,
@@ -18,11 +19,9 @@ function selectFiles({
 }) {
 	const compiledPatterns = compilePatterns(patterns);
 	const normalizedCandidates = candidatePaths.map(normalizeRelativePath);
-	const filteredCandidates = filterExcludedPaths(
-		serviceConfig,
-		linterName,
-		normalizedCandidates,
-	);
+	const filteredCandidates = applyExcludes
+		? filterExcludedPaths(serviceConfig, linterName, normalizedCandidates)
+		: normalizedCandidates;
 
 	return applySelectedFilesHook({
 		linterName,
@@ -36,6 +35,7 @@ function selectFiles({
 }
 
 function hasPatternMatch({
+	applyExcludes = true,
 	candidatePaths,
 	linterName,
 	linterServicePath,
@@ -49,6 +49,7 @@ function hasPatternMatch({
 
 	return (
 		selectFiles({
+			applyExcludes,
 			candidatePaths,
 			linterName,
 			linterServicePath,
@@ -97,6 +98,7 @@ function selectLinters({
 				linterName: definition.name,
 				linterServicePath,
 				patterns: definition.config_trigger_patterns,
+				applyExcludes: false,
 				repositoryPath,
 				serviceConfig,
 			})

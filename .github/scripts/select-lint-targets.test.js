@@ -329,6 +329,65 @@ test("helmlint config trigger matches only files inside charts", () => {
 		cleanupTempRepo(context.tempDir);
 	}
 });
+
+test("lizard config trigger expands to repository files even when config paths are excluded", () => {
+	const context = makeTempRepo();
+	const contextPath = path.join(context.runnerTemp, "context.json");
+	const linterServicePath = path.join(__dirname, "..", "..");
+	const outputPath = path.join(context.runnerTemp, "selected-files.txt");
+	const patternPath = path.join(context.runnerTemp, "patterns.txt");
+
+	fs.mkdirSync(path.join(context.repoDir, "src"), { recursive: true });
+	writeLinterServiceConfig(
+		context.repoDir,
+		[
+			"global:",
+			"  exclude_paths:",
+			'    - ".github/**"',
+			"",
+			"linters:",
+			"  lizard:",
+			"    disabled: false",
+			"    languages:",
+			'      - "javascript"',
+			"",
+		].join("\n"),
+	);
+	fs.writeFileSync(
+		path.join(context.repoDir, "src", "app.js"),
+		"function ok() { return 1; }\n",
+		"utf8",
+	);
+	fs.writeFileSync(
+		path.join(context.repoDir, "src", "tool.py"),
+		"def ok():\n    return 1\n",
+		"utf8",
+	);
+	fs.writeFileSync(
+		contextPath,
+		JSON.stringify({
+			changed_files: [".github/linter-service.yaml"],
+		}),
+		"utf8",
+	);
+	fs.writeFileSync(patternPath, "\\.(?:js|py)$\n", "utf8");
+
+	try {
+		const result = runFromEnv({
+			CONTEXT_PATH: contextPath,
+			LINTER_NAME: "lizard",
+			LINTER_SERVICE_PATH: linterServicePath,
+			OUTPUT_PATH: outputPath,
+			PATTERN_PATH: patternPath,
+			SOURCE_REPOSITORY_PATH: context.repoDir,
+		});
+
+		assert.deepEqual(result.selectedFiles, ["src/app.js"]);
+		assert.equal(fs.readFileSync(outputPath, "utf8"), "src/app.js\n");
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
 test("listRepositoryFiles skips directory symlinks in filesystem fallback mode", () => {
 	const context = makeTempRepo();
 	const realDir = path.join(context.repoDir, "docs");

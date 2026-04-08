@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/lizard"
+      },
+      "results": [
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/app.js"
+                },
+                "region": {
+                  "startColumn": 1,
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "complex exceeds the CCN limit with 16 CCN"
+          },
+          "properties": {
+            "linter_name": "lizard"
+          },
+          "ruleId": "lizard/diagnostic"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/chalharu/linter-service",
+          "name": "linter-service/lizard",
+          "rules": [
+            {
+              "id": "lizard/diagnostic",
+              "name": "lizard/diagnostic",
+              "shortDescription": {
+                "text": "lizard/diagnostic"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}
