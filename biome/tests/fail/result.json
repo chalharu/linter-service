@@ -1,7 +1,7 @@
 {
   "checked_projects": [],
   "result": {
-    "details": "src/index.js:1:7 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  × Expected an identifier, an array pattern, or an object pattern but instead found '= 1'.\n  \n  > 1 │ const = 1;\n      │       ^^^\n    2 │ \n  \n  i Expected an identifier, an array pattern, or an object pattern here.\n  \n  > 1 │ const = 1;\n      │       ^^^\n    2 │ \n  \n\nsrc/index.js:1:10 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  × expected `,` but instead found `;`\n  \n  > 1 │ const = 1;\n      │          ^\n    2 │ \n  \n  i Remove ;\n  \n\nsrc/index.js:1:7 parse ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  × Expected an identifier, an array pattern, or an object pattern but instead found '= 1'.\n  \n  > 1 │ const = 1;\n      │       ^^^\n    2 │ \n  \n  i Expected an identifier, an array pattern, or an object pattern here.\n  \n  > 1 │ const = 1;\n      │       ^^^\n    2 │ \n  \n\nChecked 1 file in <duration>. No fixes applied.\nFound 3 errors.\nlint ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  × Some errors were emitted while running checks.",
+    "details": "lint ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  × Some errors were emitted while running checks.",
     "exit_code": 1
   },
   "selected_files": [
