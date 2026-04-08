@@ -2,6 +2,12 @@ const {
 	isCargoDenyAdvisoryLikeDiagnostic,
 	isCargoDenyConfigLikeDiagnostic,
 } = require("./cargo-deny-result.js");
+const {
+	buildCargoDenyPackageLabel,
+	listCargoDenyWarningKinds,
+	normalizeCargoDenyWarningEntries,
+	normalizeCargoDenyWarnings,
+} = require("./common.js");
 
 function buildSarifResults({
 	createResult,
@@ -61,6 +67,78 @@ function buildSarifResults({
 	return dedupeResults(results);
 }
 
+function normalizeCargoDenyAuditReports(run) {
+	return Array.isArray(run?.audit_reports) ? run.audit_reports : [];
+}
+
+function normalizeCargoDenyVulnerabilities(report) {
+	return Array.isArray(report?.vulnerabilities) ? report.vulnerabilities : [];
+}
+
+function normalizeCargoDenyDiagnostics(run) {
+	return Array.isArray(run?.diagnostics) ? run.diagnostics : [];
+}
+
+function resolveCargoDenyAuditMessage({
+	advisory,
+	fallbackTitle,
+	packageInfo,
+}) {
+	const title = advisory?.title || advisory?.id || fallbackTitle;
+	const packageLabel = buildCargoDenyPackageLabel(packageInfo);
+
+	return packageLabel ? `${packageLabel}: ${title}` : title;
+}
+
+function resolveCargoDenyRunPaths({
+	normalizeReportedPath,
+	reportedPathRoots,
+	run,
+	sourceRepositoryPath,
+	targetPaths,
+}) {
+	return {
+		configPath: normalizeCargoDenyStructuredPath(
+			normalizeReportedPath,
+			sourceRepositoryPath,
+			run?.config_path,
+			targetPaths,
+			reportedPathRoots,
+		),
+		manifestPath: normalizeCargoDenyStructuredPath(
+			normalizeReportedPath,
+			sourceRepositoryPath,
+			run?.manifest_path,
+			targetPaths,
+			reportedPathRoots,
+		),
+	};
+}
+
+function createCargoDenyAuditSarifResult({
+	createResult,
+	defaultFilePath,
+	defaultLevel,
+	fallbackRuleId,
+	fallbackTitle,
+	finding,
+	linterName,
+}) {
+	return createResult({
+		column: defaultFilePath ? 1 : null,
+		defaultLevel,
+		filePath: defaultFilePath,
+		line: defaultFilePath ? 1 : null,
+		linterName,
+		message: resolveCargoDenyAuditMessage({
+			advisory: finding?.advisory,
+			fallbackTitle,
+			packageInfo: finding?.package,
+		}),
+		ruleId: finding?.advisory?.id || fallbackRuleId,
+	});
+}
+
 function parseCargoDenyAuditReportResults({
 	createResult,
 	defaultLevel,
@@ -71,80 +149,151 @@ function parseCargoDenyAuditReportResults({
 	sourceRepositoryPath,
 	targetPaths,
 }) {
-	const results = [];
-	const auditReports = Array.isArray(run?.audit_reports)
-		? run.audit_reports
-		: [];
-	const manifestPath = normalizeCargoDenyStructuredPath(
+	const auditReports = normalizeCargoDenyAuditReports(run);
+	const { configPath, manifestPath } = resolveCargoDenyRunPaths({
 		normalizeReportedPath,
-		sourceRepositoryPath,
-		run?.manifest_path,
-		targetPaths,
 		reportedPathRoots,
-	);
-	const defaultFilePath =
-		manifestPath ||
-		normalizeCargoDenyStructuredPath(
-			normalizeReportedPath,
-			sourceRepositoryPath,
-			run?.config_path,
-			targetPaths,
-			reportedPathRoots,
-		);
+		run,
+		sourceRepositoryPath,
+		targetPaths,
+	});
+	const defaultFilePath = manifestPath || configPath;
 
-	for (const report of auditReports) {
-		for (const vulnerability of Array.isArray(report?.vulnerabilities)
-			? report.vulnerabilities
-			: []) {
-			const advisory = vulnerability?.advisory || {};
-			const packageInfo = vulnerability?.package || {};
-			const packageLabel = [packageInfo.name, packageInfo.version]
-				.filter(Boolean)
-				.join(" ");
-			const title = advisory.title || advisory.id || "cargo-deny advisory";
-
-			results.push(
-				createResult({
-					column: defaultFilePath ? 1 : null,
+	return auditReports.flatMap((report) => [
+		...normalizeCargoDenyVulnerabilities(report).map((vulnerability) =>
+			createCargoDenyAuditSarifResult({
+				createResult,
+				defaultFilePath,
+				defaultLevel,
+				fallbackRuleId: "cargo-deny/advisory",
+				fallbackTitle: "cargo-deny advisory",
+				finding: vulnerability,
+				linterName,
+			}),
+		),
+		...listCargoDenyWarningKinds(report?.warnings).flatMap((kind) =>
+			normalizeCargoDenyWarningEntries(
+				normalizeCargoDenyWarnings(report?.warnings)[kind],
+			).map((warning) =>
+				createCargoDenyAuditSarifResult({
+					createResult,
+					defaultFilePath,
 					defaultLevel,
-					filePath: defaultFilePath,
-					line: defaultFilePath ? 1 : null,
+					fallbackRuleId: `cargo-deny/${kind}`,
+					fallbackTitle: kind,
+					finding: warning,
 					linterName,
-					message: packageLabel ? `${packageLabel}: ${title}` : title,
-					ruleId: advisory.id || "cargo-deny/advisory",
 				}),
-			);
-		}
+			),
+		),
+	]);
+}
 
-		for (const [kind, entries] of Object.entries(
-			report && typeof report.warnings === "object" && report.warnings
-				? report.warnings
-				: {},
-		)) {
-			for (const warning of Array.isArray(entries) ? entries : []) {
-				const advisory = warning?.advisory || {};
-				const packageInfo = warning?.package || {};
-				const packageLabel = [packageInfo.name, packageInfo.version]
-					.filter(Boolean)
-					.join(" ");
-				const title = advisory.title || advisory.id || kind;
+function resolveCargoDenyPrimaryLabel(fields) {
+	return Array.isArray(fields.labels) ? fields.labels[0] : null;
+}
 
-				results.push(
-					createResult({
-						column: defaultFilePath ? 1 : null,
-						defaultLevel,
-						filePath: defaultFilePath,
-						line: defaultFilePath ? 1 : null,
-						linterName,
-						message: packageLabel ? `${packageLabel}: ${title}` : title,
-						ruleId: advisory.id || `cargo-deny/${kind}`,
-					}),
-				);
-			}
-		}
+function resolveCargoDenyDiagnosticFilePath({
+	configPath,
+	diagnostic,
+	manifestPath,
+}) {
+	if (configPath && isCargoDenyConfigLikeDiagnostic(diagnostic)) {
+		return configPath;
 	}
 
-	return results;
+	return manifestPath || configPath;
+}
+
+function resolveCargoDenyDiagnosticRegion({
+	configPath,
+	filePath,
+	label,
+	parseInteger,
+}) {
+	if (!filePath) {
+		return {
+			column: null,
+			line: null,
+		};
+	}
+
+	if (filePath !== configPath || !label) {
+		return {
+			column: 1,
+			line: 1,
+		};
+	}
+
+	return {
+		column: parseInteger(label?.column),
+		line: parseInteger(label?.line),
+	};
+}
+
+function resolveCargoDenyDiagnosticLevel({
+	defaultLevel,
+	fields,
+	toSarifLevel,
+}) {
+	return typeof fields.severity === "string"
+		? toSarifLevel(fields.severity, defaultLevel)
+		: defaultLevel;
+}
+
+function resolveCargoDenySarifMessage(fields, diagnostic) {
+	return typeof fields.message === "string" && fields.message.length > 0
+		? fields.message
+		: summarizeCargoDenyDiagnostic(diagnostic);
+}
+
+function createCargoDenyDiagnosticResult({
+	configPath,
+	createResult,
+	defaultLevel,
+	diagnostic,
+	linterName,
+	manifestPath,
+	parseInteger,
+	toSarifLevel,
+}) {
+	const fields = diagnostic?.fields || {};
+	const label = resolveCargoDenyPrimaryLabel(fields);
+	const filePath = resolveCargoDenyDiagnosticFilePath({
+		configPath,
+		diagnostic,
+		manifestPath,
+	});
+	const { column, line } = resolveCargoDenyDiagnosticRegion({
+		configPath,
+		filePath,
+		label,
+		parseInteger,
+	});
+
+	return createResult({
+		column,
+		defaultLevel: resolveCargoDenyDiagnosticLevel({
+			defaultLevel,
+			fields,
+			toSarifLevel,
+		}),
+		filePath,
+		line,
+		linterName,
+		message: resolveCargoDenySarifMessage(fields, diagnostic),
+		ruleId: resolveCargoDenyRuleId(fields, linterName),
+	});
+}
+
+function filterCargoDenyDiagnostics(diagnostics, skipAdvisories) {
+	if (!skipAdvisories) {
+		return diagnostics;
+	}
+
+	return diagnostics.filter(
+		(diagnostic) => !isCargoDenyAdvisoryLikeDiagnostic(diagnostic),
+	);
 }
 
 function parseCargoDenyJsonDiagnostics({
@@ -160,66 +309,28 @@ function parseCargoDenyJsonDiagnostics({
 	targetPaths,
 	toSarifLevel,
 }) {
-	const results = [];
-	const diagnostics = Array.isArray(run?.diagnostics) ? run.diagnostics : [];
-	const manifestPath = normalizeCargoDenyStructuredPath(
+	const diagnostics = normalizeCargoDenyDiagnostics(run);
+	const { configPath, manifestPath } = resolveCargoDenyRunPaths({
 		normalizeReportedPath,
-		sourceRepositoryPath,
-		run?.manifest_path,
-		targetPaths,
 		reportedPathRoots,
-	);
-	const configPath = normalizeCargoDenyStructuredPath(
-		normalizeReportedPath,
+		run,
 		sourceRepositoryPath,
-		run?.config_path,
 		targetPaths,
-		reportedPathRoots,
-	);
+	});
 
-	for (const diagnostic of diagnostics) {
-		if (skipAdvisories && isCargoDenyAdvisoryLikeDiagnostic(diagnostic)) {
-			continue;
-		}
-
-		const fields = diagnostic?.fields || {};
-		const label = Array.isArray(fields.labels) ? fields.labels[0] : null;
-		const filePath =
-			configPath && isCargoDenyConfigLikeDiagnostic(diagnostic)
-				? configPath
-				: manifestPath || configPath;
-		const useLabelRegion = filePath === configPath && label;
-		const line = filePath
-			? useLabelRegion
-				? parseInteger(label?.line)
-				: 1
-			: null;
-		const column = filePath
-			? useLabelRegion
-				? parseInteger(label?.column)
-				: 1
-			: null;
-
-		results.push(
-			createResult({
-				column,
-				defaultLevel:
-					typeof fields.severity === "string"
-						? toSarifLevel(fields.severity, defaultLevel)
-						: defaultLevel,
-				filePath,
-				line,
+	return filterCargoDenyDiagnostics(diagnostics, skipAdvisories).map(
+		(diagnostic) =>
+			createCargoDenyDiagnosticResult({
+				configPath,
+				createResult,
+				defaultLevel,
+				diagnostic,
 				linterName,
-				message:
-					typeof fields.message === "string" && fields.message.length > 0
-						? fields.message
-						: summarizeCargoDenyDiagnostic(diagnostic),
-				ruleId: resolveCargoDenyRuleId(fields, linterName),
+				manifestPath,
+				parseInteger,
+				toSarifLevel,
 			}),
-		);
-	}
-
-	return results;
+	);
 }
 
 function normalizeCargoDenyStructuredPath(

@@ -409,6 +409,75 @@ test("selectLinters rejects invalid config trigger patterns", () => {
 	);
 });
 
+test("selectLinters rejects non-boolean default_disabled values", () => {
+	assert.throws(
+		() =>
+			selectLinters({
+				candidatePaths: ["README.md"],
+				definitions: [
+					{
+						default_disabled: "yes",
+						name: "textlint",
+						patterns: ["\\.(?:md|markdown|txt)$"],
+					},
+				],
+				serviceConfig: {
+					global: {
+						exclude_paths: [],
+					},
+					linters: {},
+				},
+			}),
+		/default_disabled must be a boolean when present/u,
+	);
+});
+
+test("selectLinters rejects invalid required root files", () => {
+	assert.throws(
+		() =>
+			selectLinters({
+				candidatePaths: ["README.md"],
+				definitions: [
+					{
+						name: "textlint",
+						patterns: ["\\.(?:md|markdown|txt)$"],
+						required_root_files: [".textlintrc", ""],
+					},
+				],
+				serviceConfig: {
+					global: {
+						exclude_paths: [],
+					},
+					linters: {},
+				},
+			}),
+		/required_root_files must be an array of non-empty strings/u,
+	);
+});
+
+test("selectLinters rejects non-boolean isolated values", () => {
+	assert.throws(
+		() =>
+			selectLinters({
+				candidatePaths: ["README.md"],
+				definitions: [
+					{
+						isolated: "yes",
+						name: "textlint",
+						patterns: ["\\.(?:md|markdown|txt)$"],
+					},
+				],
+				serviceConfig: {
+					global: {
+						exclude_paths: [],
+					},
+					linters: {},
+				},
+			}),
+		/isolated must be a boolean when present/u,
+	);
+});
+
 test("readPatterns trims blank lines", () => {
 	const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "linter-targeting-"));
 	const patternPath = path.join(tempDir, "patterns.txt");

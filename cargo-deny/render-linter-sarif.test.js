@@ -161,6 +161,101 @@ test("emits SARIF for cargo-deny audit-compatible advisories", () => {
 	}
 });
 
+test("emits SARIF for cargo-deny audit-compatible warnings in sorted kind order", () => {
+	const context = makeTempRepo("render-linter-sarif-cargo-deny-warning-");
+
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		'[package]\nname = "demo"\nversion = "0.1.0"\nedition = "2021"\n',
+	);
+	writeFile(path.join(context.repoDir, "Cargo.lock"), "version = 3\n");
+	writeFile(
+		path.join(context.runnerTemp, "selected-files.txt"),
+		"Cargo.lock\n",
+	);
+	writeFile(
+		path.join(context.runnerTemp, "linter-result.json"),
+		JSON.stringify({
+			cargo_deny_runs: [
+				{
+					audit_reports: [
+						{
+							lockfile: { "dependency-count": 1 },
+							settings: {},
+							vulnerabilities: [],
+							warnings: {
+								unsound: [
+									{
+										advisory: {
+											title: "crate is unsound",
+										},
+										package: {
+											name: "demo",
+											version: "0.1.0",
+										},
+									},
+								],
+								notice: [
+									{
+										advisory: {
+											title: "crate needs attention",
+										},
+										package: {
+											name: "demo",
+											version: "0.1.0",
+										},
+									},
+								],
+							},
+						},
+					],
+					command:
+						"cargo-deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output",
+					config_path: null,
+					diagnostics: [],
+					exit_code: 1,
+					manifest_path: "Cargo.toml",
+				},
+			],
+			details: "",
+			exit_code: 1,
+		}),
+	);
+
+	try {
+		const report = runFromEnv({
+			INSTALL_TOOL_OUTCOME: "success",
+			LINTER_CONFIG_PATH: configPath,
+			LINTER_NAME: "cargo-deny",
+			OUTPUT_PATH: path.join(context.runnerTemp, "cargo-deny.sarif"),
+			RESULT_PATH: path.join(context.runnerTemp, "linter-result.json"),
+			RUNNER_TEMP: context.runnerTemp,
+			RUN_LINTER_OUTCOME: "success",
+			SELECTED_FILES_PATH: path.join(context.runnerTemp, "selected-files.txt"),
+			SELECT_FILES_OUTCOME: "success",
+			SOURCE_REPOSITORY_PATH: context.repoDir,
+		});
+
+		assert.equal(report.produced, true);
+		assert.deepEqual(
+			report.sarif.runs[0].results.map((result) => result.ruleId),
+			["cargo-deny/notice", "cargo-deny/unsound"],
+		);
+		assert.equal(
+			report.sarif.runs[0].results[0].locations[0].physicalLocation
+				.artifactLocation.uri,
+			"Cargo.toml",
+		);
+		assert.equal(
+			report.sarif.runs[0].results[0].locations[0].physicalLocation.region
+				.startLine,
+			1,
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
 test("emits SARIF for cargo-deny structured config diagnostics", () => {
 	const context = makeTempRepo("render-linter-sarif-cargo-deny-config-");
 

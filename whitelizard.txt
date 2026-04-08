@@ -1,7 +1,0 @@
-# Existing baseline complexity exceptions for repository opt-in.
-.github/scripts/linter-targeting.js:validateDefinition
-cargo-deny/cargo-deny-result.js:formatCargoDenyAuditReport
-cargo-deny/cargo-deny-result.js:formatCargoDenyDiagnostic
-cargo-deny/render-linter-sarif.js:parseCargoDenyAuditReportResults
-cargo-deny/render-linter-sarif.js:parseCargoDenyJsonDiagnostics
-helmlint/filter-selected-files.js:findHelmChartRoot
