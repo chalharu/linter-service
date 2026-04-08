@@ -43,12 +43,14 @@ jobs:
       - name: Run shared Node tests
         run: |
           node --test \
+            .github/scripts/aggregate-sarif.test.js \
             .github/scripts/validate-linters-config.test.js \
             .github/scripts/validate-linter-service-config.test.js \
             .github/scripts/linter-service-config.test.js \
             .github/scripts/linter-targeting.test.js \
             .github/scripts/select-lint-targets.test.js \
-            .github/scripts/installer-version-pins.test.js
+            .github/scripts/installer-version-pins.test.js \
+            .github/scripts/upload-sarif.test.js
       - name: Collect fixture test matrix
         id: collect
         run: |

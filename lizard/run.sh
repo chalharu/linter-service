@@ -10,6 +10,7 @@ source "$script_dir/common.sh"
 output_file="$RUNNER_TEMP/linter-output.txt"
 
 run_lizard() {
+  # shellcheck disable=SC2016
   lizard -w "$@" | node -e '
 const fs = require("node:fs");
 

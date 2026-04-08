@@ -4,7 +4,11 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 
-const { aggregateSarif } = require("./aggregate-sarif.js");
+const {
+	aggregateSarif,
+	buildChunkOutputPath,
+	chunkRuns,
+} = require("./aggregate-sarif.js");
 
 test("aggregates per-linter SARIF files into one linter-service document", () => {
 	const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "aggregate-sarif-"));
@@ -110,4 +114,52 @@ test("aggregates per-linter SARIF files into one linter-service document", () =>
 	} finally {
 		fs.rmSync(tempDir, { force: true, recursive: true });
 	}
+});
+
+test("splits aggregated SARIF into multiple files when run count exceeds the upload limit", () => {
+	const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "aggregate-sarif-"));
+	const inputRoot = path.join(tempDir, "input");
+	const outputPath = path.join(tempDir, "output", "linter-service.sarif");
+
+	fs.mkdirSync(inputRoot, { recursive: true });
+
+	for (let index = 0; index < 21; index += 1) {
+		fs.writeFileSync(
+			path.join(inputRoot, `linter-sarif-example-${index}.sarif`),
+			JSON.stringify({
+				version: "2.1.0",
+				runs: [
+					{
+						automationDetails: { id: `linter-service/example-${index}` },
+						results: [],
+						tool: { driver: { name: `linter-service/example-${index}` } },
+					},
+				],
+			}),
+			"utf8",
+		);
+	}
+
+	try {
+		const report = aggregateSarif({ inputRoot, outputPath });
+		const firstOutputPath = buildChunkOutputPath(outputPath, 1, 2);
+		const secondOutputPath = buildChunkOutputPath(outputPath, 2, 2);
+		const firstSarif = JSON.parse(fs.readFileSync(firstOutputPath, "utf8"));
+		const secondSarif = JSON.parse(fs.readFileSync(secondOutputPath, "utf8"));
+
+		assert.deepEqual(report, {
+			fileCount: 21,
+			outputPath,
+			runCount: 21,
+		});
+		assert.equal(firstSarif.runs.length, 20);
+		assert.equal(secondSarif.runs.length, 1);
+	} finally {
+		fs.rmSync(tempDir, { force: true, recursive: true });
+	}
+});
+
+test("chunks runs into upload-sized groups", () => {
+	assert.deepEqual(chunkRuns([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
+	assert.deepEqual(chunkRuns([], 20), [[]]);
 });

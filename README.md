@@ -148,7 +148,19 @@ linters:
 | `linters.textlint.preset_packages` | `textlint` | exact version 付き npm package spec の配列。`.textlintrc` と併せて `textlint` 自動選択時の必須項目。 |
 
 - `lizard` は `default_disabled` であるため、`linters.lizard.disabled: false` を明示した場合だけ選択対象になる。
-- `linters.lizard.languages` で指定できる値は `cpp`, `csharp`, `erlang`, `fortran`, `gdscript`, `go`, `java`, `javascript`, `kotlin`, `lua`, `objectivec`, `perl`, `php`, `plsql`, `python`, `r`, `ruby`, `rust`, `scala`, `solidity`, `st`, `swift`, `ttcn`, `typescript`, `vue`, `zig` である。
+- `linters.lizard.languages` で指定できる値は次のとおりである。
+
+|  |  |  |
+| --- | --- | --- |
+| `cpp` | `csharp` | `erlang` |
+| `fortran` | `gdscript` | `go` |
+| `java` | `javascript` | `kotlin` |
+| `lua` | `objectivec` | `perl` |
+| `php` | `plsql` | `python` |
+| `r` | `ruby` | `rust` |
+| `scala` | `solidity` | `st` |
+| `swift` | `ttcn` | `typescript` |
+| `vue` | `zig` |  |
 
 ## 共有 linter の追加方法
 
