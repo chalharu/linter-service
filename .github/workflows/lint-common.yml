@@ -8,6 +8,10 @@ on:
       linter-names-json:
         required: true
         type: string
+      push-container-images:
+        default: false
+        required: false
+        type: boolean
     secrets:
       CHECKER_APP_ID:
         required: true
@@ -18,12 +22,14 @@ jobs:
   run-linter:
     permissions:
       contents: read
+      packages: write
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       LINTER_CONFIG_PATH: ${{ github.workspace }}/linter-service/linters.json
       LINTER_NAMES_JSON: ${{ inputs.linter-names-json }}
       LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
+      RENOVATE_PUSH_IMAGE: ${{ inputs.push-container-images && 'true' || 'false' }}
       SOURCE_REPOSITORY_PATH: ${{ github.workspace }}/source-repo
     steps:
       - name: Download dispatch context artifact
@@ -43,6 +49,13 @@ jobs:
           cache: npm
           cache-dependency-path: linter-service/package-lock.json
           node-version: 24
+      - name: Log in to GHCR for Renovate image cache
+        if: ${{ env.RENOVATE_PUSH_IMAGE == 'true' }}
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USERNAME: ${{ github.actor }}
+        run: |
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
       - name: Install shared Node dependencies
         working-directory: linter-service
         run: npm ci

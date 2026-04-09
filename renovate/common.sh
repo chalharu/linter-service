@@ -6,12 +6,75 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../.github/scripts/linter-library.sh
 source "$script_dir/../.github/scripts/linter-library.sh"
 
+renovate::read_dockerfile_arg() {
+  local arg_name=${1:?}
+  local value
+
+  value=$(sed -n "s/^ARG ${arg_name}=//p" "$script_dir/Dockerfile")
+  if [ -z "$value" ]; then
+    echo "Failed to read ${arg_name} from $script_dir/Dockerfile" >&2
+    return 1
+  fi
+
+  printf '%s\n' "$value"
+}
+
+renovate::read_install_assignment() {
+  local variable_name=${1:?}
+  local value
+
+  value=$(sed -n "s/^${variable_name}=\"\\([^\"]*\\)\"$/\\1/p" "$script_dir/install.sh")
+  if [ -z "$value" ]; then
+    echo "Failed to read ${variable_name} from $script_dir/install.sh" >&2
+    return 1
+  fi
+
+  printf '%s\n' "$value"
+}
+
 renovate_base_image() {
-  printf '%s\n' "${RENOVATE_BASE_IMAGE:-docker.io/library/node:24-bookworm}"
+  printf '%s\n' "${RENOVATE_BASE_IMAGE:-$(renovate::read_dockerfile_arg RENOVATE_BASE_IMAGE)}"
+}
+
+renovate_version() {
+  printf '%s\n' "${RENOVATE_VERSION:-$(renovate::read_install_assignment renovate_version)}"
+}
+
+renovate_image_repository() {
+  local repository owner repo_name
+
+  repository="${GITHUB_REPOSITORY:-chalharu/linter-service}"
+  owner="${GITHUB_REPOSITORY_OWNER:-${repository%%/*}}"
+  repo_name="${repository#*/}"
+
+  printf '%s\n' "${RENOVATE_IMAGE_REPOSITORY:-ghcr.io/${owner}/${repo_name}-renovate}"
+}
+
+renovate_image_tag() {
+  local base_image renovate_version_value base_hash
+
+  base_image="${1:-$(renovate_base_image)}"
+  renovate_version_value="${2:-$(renovate_version)}"
+
+  if command -v sha256sum >/dev/null 2>&1; then
+    base_hash=$(printf '%s' "$base_image" | sha256sum | awk '{print substr($1, 1, 12)}')
+  elif command -v shasum >/dev/null 2>&1; then
+    base_hash=$(printf '%s' "$base_image" | shasum -a 256 | awk '{print substr($1, 1, 12)}')
+  else
+    echo "sha256sum or shasum is required to derive the Renovate image tag" >&2
+    return 1
+  fi
+
+  printf 'renovate-%s-base-%s\n' "$renovate_version_value" "$base_hash"
 }
 
 renovate_image_ref() {
-  printf '%s\n' "${RENOVATE_IMAGE_REF:-localhost/linter-service-renovate:node-24-bookworm}"
+  if [ -n "${RENOVATE_IMAGE_REF:-}" ]; then
+    printf '%s\n' "$RENOVATE_IMAGE_REF"
+    return 0
+  fi
+
+  printf '%s:%s\n' "${1:-$(renovate_image_repository)}" "${2:-$(renovate_image_tag)}"
 }
 
 renovate_container_bin() {
@@ -55,6 +118,16 @@ renovate_npm_min_release_age_days() {
   fi
 
   printf '%s\n' "$days"
+}
+
+renovate_should_push_image() {
+  case "${RENOVATE_PUSH_IMAGE:-false}" in
+    1|true|TRUE|yes|YES)
+      return 0
+      ;;
+  esac
+
+  return 1
 }
 
 renovate_require_container_runtime() {

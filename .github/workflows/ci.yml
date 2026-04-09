@@ -87,8 +87,11 @@ jobs:
     if: ${{ needs.validate-worker.result == 'success' && needs.validate-worker.outputs.fixture-assignments-json != '[]' }}
     permissions:
       contents: read
+      packages: write
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      RENOVATE_PUSH_IMAGE: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'true' || 'false' }}
     strategy:
       fail-fast: false
       matrix:
@@ -98,6 +101,13 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
+      - name: Log in to GHCR for Renovate image cache
+        if: ${{ env.RENOVATE_PUSH_IMAGE == 'true' }}
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USERNAME: ${{ github.actor }}
+        run: |
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
       - name: Set up Node.js
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:

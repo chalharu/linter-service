@@ -9,37 +9,35 @@ source "$script_dir/common.sh"
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
 renovate_require_container_runtime
 
-container_bin=$(renovate_container_bin)
-image_ref=$(renovate_image_ref)
-base_image=$(renovate_base_image)
-min_release_age_days=$(renovate_npm_min_release_age_days)
-build_context="$RUNNER_TEMP/renovate-image"
 # renovate: datasource=npm depName=renovate
 renovate_version="43.104.4"
+container_bin=$(renovate_container_bin)
+base_image=$(renovate_base_image)
+image_repository=$(renovate_image_repository)
+image_tag=$(renovate_image_tag "$base_image" "$renovate_version")
+image_ref=$(renovate_image_ref "$image_repository" "$image_tag")
+min_release_age_days=$(renovate_npm_min_release_age_days)
+dockerfile_path="$script_dir/Dockerfile"
 
 if "$container_bin" image inspect "$image_ref" >/dev/null 2>&1; then
   exit 0
 fi
 
-rm -rf "$build_context"
-mkdir -p "$build_context"
-
-cat > "$build_context/Dockerfile" <<EOF
-FROM ${base_image}
-RUN apt-get update \\
-  && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends git ca-certificates \\
-  && rm -rf /var/lib/apt/lists/* \\
-  && npm install --global \\
-    --ignore-scripts \\
-    --loglevel=error \\
-    --no-audit \\
-    --no-fund \\
-    --update-notifier=false \\
-    --min-release-age=${min_release_age_days} \\
-    renovate@$renovate_version
-EOF
+if "$container_bin" pull "$image_ref" >/dev/null 2>&1; then
+  exit 0
+fi
 
 "$container_bin" build \
   --pull \
+  --build-arg "RENOVATE_BASE_IMAGE=$base_image" \
+  --build-arg "RENOVATE_NPM_MIN_RELEASE_AGE_DAYS=$min_release_age_days" \
+  --build-arg "RENOVATE_VERSION=$renovate_version" \
+  --file "$dockerfile_path" \
   --tag "$image_ref" \
-  "$build_context"
+  "$script_dir"
+
+if renovate_should_push_image; then
+  if ! "$container_bin" push "$image_ref" >/dev/null; then
+    echo "Failed to push cached Renovate image: $image_ref" >&2
+  fi
+fi

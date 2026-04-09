@@ -98,7 +98,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | `biome` | native `--reporter=sarif --reporter-file=...` を前提に実行する。 |
 | `lizard` | default disabled。repo 側の `linters.lizard.languages` で選んだ言語だけを対象にし、repo root の `whitelizard.txt` をそのまま利用する。 |
 | `markdownlint-cli2` | 静的 config のみ対応、`.cjs`, `.mjs` 非対応、`globs` 不使用。 |
-| `renovate` | selected static config ごとに isolated container 内で `RENOVATE_CONFIG_FILE` を固定した上で `--platform=local --dry-run=extract` 実行する。`package.json` の `renovate` field は対象外。 |
+| `renovate` | selected static config ごとに isolated container 内で `RENOVATE_CONFIG_FILE` を固定した上で `--platform=local --dry-run=extract` 実行する。container image は pin した `node:24-bookworm-slim` base から build し、GHCR cache を優先利用する。`package.json` の `renovate` field は対象外。 |
 | `ruff` | `--force-exclude` 付与。 |
 | `rustfmt` | selected Rust file path の直接 `rustfmt --check` 実行。 |
 | `spectral` | `.spectral.js` 非対応、未配置時は `spectral:oas`、unknown format は無視。 |
