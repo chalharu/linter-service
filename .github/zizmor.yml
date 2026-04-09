@@ -3,9 +3,9 @@ rules:
     # Latest stable zizmor does not yet support per-secret allowlists for this
     # audit, so keep ignores aligned to the specific secret-brokering sites.
     ignore:
-      - lint-common.yml:51
-      - lint-common.yml:90
-      - lint-common.yml:93
+      - lint-common.yml:64
+      - lint-common.yml:103
+      - lint-common.yml:106
       - repository-dispatch.yml:107
       - repository-dispatch.yml:190
       - repository-dispatch.yml:194
@@ -14,10 +14,10 @@ rules:
       - repository-dispatch.yml:563
       - repository-dispatch.yml:594
       - repository-dispatch.yml:597
-      - repository-dispatch.yml:648
-      - repository-dispatch.yml:649
-      - repository-dispatch.yml:682
-      - repository-dispatch.yml:751
-      - repository-dispatch.yml:755
-      - repository-dispatch.yml:762
-      - repository-dispatch.yml:765
+      - repository-dispatch.yml:650
+      - repository-dispatch.yml:651
+      - repository-dispatch.yml:684
+      - repository-dispatch.yml:753
+      - repository-dispatch.yml:757
+      - repository-dispatch.yml:764
+      - repository-dispatch.yml:767
