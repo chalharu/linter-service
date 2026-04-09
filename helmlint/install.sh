@@ -13,7 +13,7 @@ if command -v helm >/dev/null 2>&1 && helm version --short >/dev/null 2>&1; then
 fi
 
 # renovate: datasource=github-releases depName=helm/helm
-helm_version="v3.20.1"
+helm_version="v4.1.3"
 asset="helm-${helm_version}-linux-amd64.tar.gz"
 archive_path="$RUNNER_TEMP/$asset"
 extract_dir="$RUNNER_TEMP/helmlint-extract"
