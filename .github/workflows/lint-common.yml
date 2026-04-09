@@ -8,6 +8,18 @@ on:
       linter-names-json:
         required: true
         type: string
+      cache-branch-name:
+        default: ""
+        required: false
+        type: string
+      cache-head-sha:
+        default: ""
+        required: false
+        type: string
+      cache-pr-number:
+        default: ""
+        required: false
+        type: string
       push-container-images:
         default: false
         required: false
@@ -23,12 +35,16 @@ jobs:
     permissions:
       contents: read
       packages: write
+      pull-requests: read
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       LINTER_CONFIG_PATH: ${{ github.workspace }}/linter-service/linters.json
       LINTER_NAMES_JSON: ${{ inputs.linter-names-json }}
       LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
+      RENOVATE_CACHE_BRANCH_NAME: ${{ inputs.cache-branch-name }}
+      RENOVATE_CACHE_PR_NUMBER: ${{ inputs.cache-pr-number }}
+      RENOVATE_CACHE_SOURCE_HEAD_SHA: ${{ inputs.cache-head-sha }}
       RENOVATE_PUSH_IMAGE: ${{ inputs.push-container-images && 'true' || 'false' }}
       SOURCE_REPOSITORY_PATH: ${{ github.workspace }}/source-repo
     steps:
@@ -118,6 +134,7 @@ jobs:
         if: ${{ always() }}
         env:
           CONTEXT_PATH: ${{ runner.temp }}/detect-targets-context/detect-targets-context.json
+          GH_TOKEN: ${{ github.token }}
         run: |
           node "$LINTER_SERVICE_PATH/.github/scripts/run-linter-batch.js"
       - name: Encrypt linter summary artifacts

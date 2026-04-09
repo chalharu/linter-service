@@ -123,7 +123,7 @@ const installerExpectations = [
 		required: [
 			/# renovate: datasource=npm depName=renovate/u,
 			/renovate_version="[^"\n]+"/u,
-			/renovate_image_tag "\$base_image" "\$renovate_version"/u,
+			/renovate_image_tags "\$base_image" "\$renovate_version"/u,
 			/RENOVATE_VERSION=\$renovate_version/u,
 		],
 	},

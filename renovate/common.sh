@@ -6,6 +6,23 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=../.github/scripts/linter-library.sh
 source "$script_dir/../.github/scripts/linter-library.sh"
 
+renovate::sha256_prefix() {
+  local input=${1-}
+  local prefix_length=${2:?}
+  local digest
+
+  if command -v sha256sum >/dev/null 2>&1; then
+    digest=$(printf '%s' "$input" | sha256sum | awk '{print $1}')
+  elif command -v shasum >/dev/null 2>&1; then
+    digest=$(printf '%s' "$input" | shasum -a 256 | awk '{print $1}')
+  else
+    echo "sha256sum or shasum is required to derive Renovate cache identifiers" >&2
+    return 1
+  fi
+
+  printf '%s\n' "${digest:0:$prefix_length}"
+}
+
 renovate::read_dockerfile_arg() {
   local arg_name=${1:?}
   local value
@@ -50,22 +67,119 @@ renovate_image_repository() {
   printf '%s\n' "${RENOVATE_IMAGE_REPOSITORY:-ghcr.io/${owner}/${repo_name}-renovate}"
 }
 
+renovate_cache_repository_path() {
+  printf '%s\n' "${RENOVATE_CACHE_REPOSITORY_PATH:-$(cd "$script_dir/.." && pwd)}"
+}
+
+renovate_cache_source_head_sha() {
+  local value repository_path
+
+  value="${RENOVATE_CACHE_SOURCE_HEAD_SHA:-}"
+  if [ -n "$value" ]; then
+    if [[ ! "$value" =~ ^[0-9a-fA-F]{7,40}$ ]]; then
+      echo "RENOVATE_CACHE_SOURCE_HEAD_SHA must be a hexadecimal git commit SHA" >&2
+      return 1
+    fi
+
+    printf '%s\n' "${value,,}"
+    return 0
+  fi
+
+  repository_path=$(renovate_cache_repository_path)
+  git -C "$repository_path" rev-parse HEAD
+}
+
+renovate_cache_branch_name() {
+  local value repository_path
+
+  value="${RENOVATE_CACHE_BRANCH_NAME:-}"
+  if [ -n "$value" ]; then
+    printf '%s\n' "$value"
+    return 0
+  fi
+
+  repository_path=$(renovate_cache_repository_path)
+  value=$(git -C "$repository_path" branch --show-current 2>/dev/null || true)
+  if [ -z "$value" ]; then
+    return 1
+  fi
+
+  printf '%s\n' "$value"
+}
+
+renovate_cache_pr_number() {
+  local value="${RENOVATE_CACHE_PR_NUMBER:-}"
+
+  if [ -z "$value" ]; then
+    return 1
+  fi
+
+  if [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
+    echo "RENOVATE_CACHE_PR_NUMBER must be a positive integer" >&2
+    return 1
+  fi
+
+  printf '%s\n' "$value"
+}
+
+renovate::sanitize_cache_key_component() {
+  local value=${1:?}
+  local normalized component_hash
+
+  normalized=$(
+    printf '%s' "$value" |
+      tr '[:upper:]' '[:lower:]' |
+      sed -e 's/[^a-z0-9._-]/-/g' -e 's/-\{2,\}/-/g' -e 's/^[.-]*//' -e 's/[.-]*$//'
+  )
+
+  if [ -z "$normalized" ]; then
+    normalized="ref"
+  fi
+
+  if [ "${#normalized}" -gt 48 ]; then
+    component_hash=$(renovate::sha256_prefix "$value" 8)
+    normalized="${normalized:0:39}-${component_hash}"
+  fi
+
+  printf '%s\n' "$normalized"
+}
+
+renovate_image_tags() {
+  local base_image renovate_version_value base_hash branch_name pr_number head_sha
+  local -a tags=()
+
+  base_image="${1:-$(renovate_base_image)}"
+  renovate_version_value="${2:-$(renovate_version)}"
+  base_hash=$(renovate::sha256_prefix "$base_image" 12)
+
+  if [ -n "${RENOVATE_IMAGE_TAG:-}" ]; then
+    printf '%s\n' "$RENOVATE_IMAGE_TAG"
+    return 0
+  fi
+
+  if pr_number=$(renovate_cache_pr_number 2>/dev/null); then
+    tags+=("cache-pr-${pr_number}-renovate-${renovate_version_value}-base-${base_hash}")
+  fi
+
+  if branch_name=$(renovate_cache_branch_name 2>/dev/null); then
+    tags+=("cache-branch-$(renovate::sanitize_cache_key_component "$branch_name")-renovate-${renovate_version_value}-base-${base_hash}")
+  fi
+
+  if [ "${#tags[@]}" -eq 0 ]; then
+    head_sha=$(renovate_cache_source_head_sha)
+    tags+=("cache-head-${head_sha:0:12}-renovate-${renovate_version_value}-base-${base_hash}")
+  fi
+
+  printf '%s\n' "${tags[@]}" | awk '!seen[$0]++'
+}
+
 renovate_image_tag() {
-  local base_image renovate_version_value base_hash
+  local base_image renovate_version_value
 
   base_image="${1:-$(renovate_base_image)}"
   renovate_version_value="${2:-$(renovate_version)}"
 
-  if command -v sha256sum >/dev/null 2>&1; then
-    base_hash=$(printf '%s' "$base_image" | sha256sum | awk '{print substr($1, 1, 12)}')
-  elif command -v shasum >/dev/null 2>&1; then
-    base_hash=$(printf '%s' "$base_image" | shasum -a 256 | awk '{print substr($1, 1, 12)}')
-  else
-    echo "sha256sum or shasum is required to derive the Renovate image tag" >&2
-    return 1
-  fi
-
-  printf 'renovate-%s-base-%s\n' "$renovate_version_value" "$base_hash"
+  renovate_image_tags "$base_image" "$renovate_version_value" | sed -n '1p'
 }
 
 renovate_image_ref() {
