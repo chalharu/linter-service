@@ -92,7 +92,7 @@ test("prunes package versions that are not kept by active branch or PR cache tag
 		[
 			"# renovate: datasource=docker depName=library/node versioning=docker",
 			`ARG RENOVATE_BASE_IMAGE=${baseImage}`,
-			"FROM ${RENOVATE_BASE_IMAGE}",
+			["FROM ${", "RENOVATE_BASE_IMAGE}"].join(""),
 			"",
 		].join("\n"),
 	);
