@@ -1,0 +1,12 @@
+{
+  "name": "renovate-fixture-package-json-only",
+  "private": true,
+  "dependencies": {
+    "left-pad": "1.3.0"
+  },
+  "renovate": {
+    "enabledManagers": [
+      "npm"
+    ]
+  }
+}

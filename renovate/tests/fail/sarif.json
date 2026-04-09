@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/renovate"
+      },
+      "results": [
+        {
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": ".github/renovate.json5"
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "FATAL: Could not parse config file"
+          },
+          "properties": {
+            "linter_name": "renovate"
+          },
+          "ruleId": "JSON5"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/chalharu/linter-service",
+          "name": "linter-service/renovate",
+          "rules": [
+            {
+              "id": "JSON5",
+              "name": "JSON5",
+              "shortDescription": {
+                "text": "JSON5"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

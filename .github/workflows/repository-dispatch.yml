@@ -636,6 +636,8 @@ jobs:
     if: ${{ needs.detect-targets.outputs.selected-linter-jobs-json != '[]' }}
     permissions:
       contents: read
+      packages: write
+      pull-requests: read
     strategy:
       fail-fast: false
       matrix:
@@ -643,7 +645,11 @@ jobs:
     uses: ./.github/workflows/lint-common.yml
     with:
       artifact-name: ${{ matrix.assignment.artifact_name }}
+      cache-branch-name: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
+      cache-head-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      cache-pr-number: ${{ github.event_name == 'pull_request' && github.event.pull_request.number || '' }}
       linter-names-json: ${{ toJSON(matrix.assignment.linter_names) }}
+      push-container-images: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     secrets:
       CHECKER_APP_ID: ${{ secrets.CHECKER_APP_ID }}
       CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}

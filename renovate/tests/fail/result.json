@@ -1,0 +1,10 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "FATAL: Could not parse config file\n       \"error\": \"SyntaxError: JSON5: invalid end of input at 4:1\nconfig: .github/renovate.json5",
+    "exit_code": 1
+  },
+  "selected_files": [
+    ".github/renovate.json5"
+  ]
+}

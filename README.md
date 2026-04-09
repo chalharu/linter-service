@@ -74,6 +74,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | `helmlint` | `Chart.yaml`, `Chart.lock`, `values*.yaml`, `values*.yml`, `values.schema.json`, `templates/**`, `crds/**`, `charts/**` | なし | ✅ |
 | `lizard` | `linters.lizard.languages` で選んだ言語に対応する source file | `.github/linter-service.yaml`, `.github/linter-service.yml`, `.github/linter-service.json`, repo root の `whitelizard.txt` | ❌ |
 | `markdownlint-cli2` | `*.md`, `*.markdown` | 左から順に `.markdownlint-cli2.jsonc`, `.markdownlint-cli2.yaml`, `.markdownlint.jsonc`, `.markdownlint.json`, `.markdownlint.yaml`, `.markdownlint.yml` | ✅ |
+| `renovate` | `renovate.json`, `renovate.json5`, `.github/renovate.json`, `.github/renovate.json5`, `.gitlab/renovate.json`, `.gitlab/renovate.json5`, `.renovaterc`, `.renovaterc.json`, `.renovaterc.json5` | 対象 file 自体 | ✅ |
 | `ruff` | `*.py`, `*.pyi` | 同一 directory では左から順に `.ruff.toml`, `ruff.toml`, `pyproject.toml` の `[tool.ruff]` | ✅ |
 | `rustfmt` | `*.rs` | `rustfmt.toml`, `.rustfmt.toml`, `rust-toolchain.toml`, `rust-toolchain` | ✅ |
 | `shellcheck` | `*.bash`, `*.ksh`, `*.sh` | 対象 script の親方向の `.shellcheckrc`, `shellcheckrc` | ✅ |
@@ -97,6 +98,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | `biome` | native `--reporter=sarif --reporter-file=...` を前提に実行する。 |
 | `lizard` | default disabled。repo 側の `linters.lizard.languages` で選んだ言語だけを対象にし、repo root の `whitelizard.txt` をそのまま利用する。 |
 | `markdownlint-cli2` | 静的 config のみ対応、`.cjs`, `.mjs` 非対応、`globs` 不使用。 |
+| `renovate` | selected static config ごとに isolated container 内で `RENOVATE_CONFIG_FILE` を固定した上で `--platform=local --dry-run=extract` 実行する。container image は pin した `node:24-bookworm-slim` base から build し、`cache-` prefix の GHCR cache tag を優先利用する。cache image は open PR と branch HEAD に対応する tag だけを残す。`package.json` の `renovate` field は対象外。 |
 | `ruff` | `--force-exclude` 付与。 |
 | `rustfmt` | selected Rust file path の直接 `rustfmt --check` 実行。 |
 | `spectral` | `.spectral.js` 非対応、未配置時は `spectral:oas`、unknown format は無視。 |

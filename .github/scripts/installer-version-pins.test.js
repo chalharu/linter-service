@@ -119,6 +119,15 @@ const installerExpectations = [
 		],
 	},
 	{
+		path: "renovate/install.sh",
+		required: [
+			/# renovate: datasource=npm depName=renovate/u,
+			/renovate_version="[^"\n]+"/u,
+			/renovate_image_tags "\$base_image" "\$renovate_version"/u,
+			/RENOVATE_VERSION=\$renovate_version/u,
+		],
+	},
+	{
 		path: "spectral/install.sh",
 		required: [
 			/# renovate: datasource=npm depName=@stoplight\/spectral-cli/u,
@@ -203,7 +212,8 @@ test("renovate manages installer pins with a three day hold", () => {
 			(manager) =>
 				manager.customType === "regex" &&
 				Array.isArray(manager.managerFilePatterns) &&
-				manager.managerFilePatterns.includes("/(^|/)[^/]+/install\\.sh$/"),
+				manager.managerFilePatterns.includes("/(^|/)[^/]+/install\\.sh$/") &&
+				manager.managerFilePatterns.includes("/(^|/)renovate/Dockerfile$/"),
 		),
 	);
 	assert.ok(
@@ -214,6 +224,23 @@ test("renovate manages installer pins with a three day hold", () => {
 				rule.minimumReleaseAge === "3 days",
 		),
 	);
+});
+
+test("renovate Dockerfile uses a renovate-managed pinned slim base image", () => {
+	const dockerfile = fs.readFileSync(
+		path.join(repoRoot, "renovate", "Dockerfile"),
+		"utf8",
+	);
+
+	assert.match(
+		dockerfile,
+		/# renovate: datasource=docker depName=library\/node versioning=docker/u,
+	);
+	assert.match(
+		dockerfile,
+		/ARG RENOVATE_BASE_IMAGE=docker\.io\/library\/node:24-bookworm-slim@sha256:[a-f0-9]{64}/u,
+	);
+	assert.match(dockerfile, /FROM \$\{RENOVATE_BASE_IMAGE\}/u);
 });
 
 test("renovate enables npm package manifest updates", () => {
@@ -325,6 +352,46 @@ test("renovate textlint preset regex matches all YAML preset packages", () => {
 	assert.deepEqual(matches, [
 		"textlint-rule-preset-ja-technical-writing@12.0.2",
 		"@textlint-ja/textlint-rule-preset-ai-writing@1.6.1",
+	]);
+});
+
+test("renovate installer regex matches both Renovate and the pinned base image", () => {
+	const config = JSON.parse(
+		fs.readFileSync(path.join(repoRoot, "renovate.json"), "utf8"),
+	);
+	const manager = config.customManagers.find(
+		(candidate) =>
+			candidate.customType === "regex" &&
+			Array.isArray(candidate.managerFilePatterns) &&
+			candidate.managerFilePatterns.includes("/(^|/)[^/]+/install\\.sh$/") &&
+			candidate.managerFilePatterns.includes("/(^|/)renovate/Dockerfile$/"),
+	);
+
+	assert.ok(manager, "expected installer regex custom manager");
+	assert.ok(Array.isArray(manager.matchStrings), "expected regex matchStrings");
+
+	const installScript = fs.readFileSync(
+		path.join(repoRoot, "renovate", "install.sh"),
+		"utf8",
+	);
+	const dockerfile = fs.readFileSync(
+		path.join(repoRoot, "renovate", "Dockerfile"),
+		"utf8",
+	);
+	const matches = manager.matchStrings
+		.flatMap((pattern) => [
+			...installScript.matchAll(
+				createJavaScriptRegExpFromRenovatePattern(pattern),
+			),
+			...dockerfile.matchAll(
+				createJavaScriptRegExpFromRenovatePattern(pattern),
+			),
+		])
+		.map(({ groups }) => `${groups.depName}@${groups.currentValue}`);
+
+	assert.deepEqual(matches, [
+		"renovate@43.104.4",
+		"library/node@docker.io/library/node:24-bookworm-slim@sha256:b506e7321f176aae77317f99d67a24b272c1f09f1d10f1761f2773447d8da26c",
 	]);
 });
 

@@ -9,10 +9,14 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Update pinned linter installer versions",
-      "managerFilePatterns": ["/(^|/)[^/]+/install\\.sh$/"],
+      "description": "Update pinned linter installer versions and Renovate base image pins",
+      "managerFilePatterns": [
+        "/(^|/)[^/]+/install\\.sh$/",
+        "/(^|/)renovate/Dockerfile$/"
+      ],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)(?: versioning=(?<versioning>[^\\s]+))?\\s+[A-Za-z0-9_]+_version=\"(?<currentValue>[^\"]+)\""
+        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)(?: versioning=(?<versioning>[^\\s]+))?\\s+[A-Za-z0-9_]+_version=\"(?<currentValue>[^\"]+)\"",
+        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)(?: versioning=(?<versioning>[^\\s]+))?\\s+ARG [A-Z0-9_]+=(?<currentValue>[^\\s]+)"
       ]
     },
     {
