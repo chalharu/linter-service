@@ -1,0 +1,11 @@
+linters:
+  lizard:
+    disabled: false
+    languages:
+      - javascript
+      - python
+    thresholds:
+      javascript:
+        cyclomatic_complexity: 2
+      python:
+        cyclomatic_complexity: 4
