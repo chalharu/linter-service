@@ -1,0 +1,11 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "src/tool.py:1: configure_python exceeds configured lizard thresholds with 2 NLOC, 1 CCN, 30 token, 5 PARAM, 2 length, 0 ND",
+    "exit_code": 1
+  },
+  "selected_files": [
+    "src/app.js",
+    "src/tool.py"
+  ]
+}

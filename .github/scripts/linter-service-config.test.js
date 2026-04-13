@@ -12,6 +12,10 @@ const {
 	loadLinterServiceConfig,
 	normalizeGlobPattern,
 } = require("./linter-service-config.js");
+const {
+	buildThresholdArguments,
+	normalizeLizardOutput,
+} = require("../../lizard/run-lizard.js");
 
 function makeTempRepo() {
 	const tempDir = fs.mkdtempSync(
@@ -76,6 +80,10 @@ function isYamlCollection(value) {
 function serializeSimpleYamlScalar(value) {
 	if (typeof value === "string") {
 		return JSON.stringify(value);
+	}
+
+	if (typeof value === "number" && Number.isFinite(value)) {
+		return String(value);
 	}
 
 	if (typeof value === "boolean") {
@@ -382,6 +390,158 @@ test("rejects unknown lizard languages", () => {
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}
+});
+
+test("supports lizard per-language thresholds when lizard is explicitly enabled", () => {
+	const context = makeTempRepo();
+
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			lizard: {
+				disabled: false,
+				languages: ["javascript", "python"],
+				thresholds: {
+					javascript: {
+						nloc: 20,
+						cyclomatic_complexity: 10,
+						token_count: 150,
+						parameter_count: 6,
+						length: 30,
+					},
+					python: {
+						parameter_count: 4,
+					},
+				},
+			},
+		},
+	});
+
+	try {
+		const config = loadLinterServiceConfig({
+			repositoryPath: context.repoDir,
+		});
+
+		assert.deepEqual(getLinterConfig(config, "lizard").thresholds, {
+			javascript: {
+				nloc: 20,
+				cyclomatic_complexity: 10,
+				token_count: 150,
+				parameter_count: 6,
+				length: 30,
+			},
+			python: {
+				parameter_count: 4,
+			},
+		});
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("rejects invalid lizard threshold values", () => {
+	const context = makeTempRepo();
+
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			lizard: {
+				disabled: false,
+				languages: ["javascript"],
+				thresholds: {
+					javascript: {
+						parameter_count: -1,
+					},
+				},
+			},
+		},
+	});
+
+	try {
+		assert.throws(
+			() =>
+				loadLinterServiceConfig({
+					repositoryPath: context.repoDir,
+				}),
+			/non-negative integer/u,
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("rejects lizard thresholds for languages outside the lizard language list", () => {
+	const context = makeTempRepo();
+
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			lizard: {
+				disabled: false,
+				languages: ["javascript"],
+				thresholds: {
+					python: {
+						parameter_count: 4,
+					},
+				},
+			},
+		},
+	});
+
+	try {
+		assert.throws(
+			() =>
+				loadLinterServiceConfig({
+					repositoryPath: context.repoDir,
+				}),
+			/languages must include every language configured in .*thresholds/u,
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("maps lizard thresholds to CLI arguments", () => {
+	assert.deepEqual(
+		buildThresholdArguments({
+			nloc: 12,
+			cyclomatic_complexity: 8,
+			token_count: 120,
+			parameter_count: 5,
+			length: 30,
+		}),
+		[
+			"-T",
+			"nloc=12",
+			"-C",
+			"8",
+			"-T",
+			"token_count=120",
+			"-a",
+			"5",
+			"-L",
+			"30",
+		],
+	);
+});
+
+test("normalizes lizard warning output for default and custom thresholds", () => {
+	assert.equal(
+		normalizeLizardOutput(
+			"./src/app.js:1: warning: complex has 17 NLOC, 16 CCN, 120 token, 1 PARAM, 18 length, 0 ND",
+		),
+		"src/app.js:1: complex exceeds the CCN limit with 16 CCN",
+	);
+	assert.equal(
+		normalizeLizardOutput(
+			"./src/tool.py:1: warning: configure_python has 2 NLOC, 1 CCN, 24 token, 5 PARAM, 3 length, 0 ND",
+			{ usesCustomThresholds: true },
+		),
+		"src/tool.py:1: configure_python exceeds configured lizard thresholds with 2 NLOC, 1 CCN, 24 token, 5 PARAM, 3 length, 0 ND",
+	);
+	assert.equal(
+		normalizeLizardOutput(
+			"./src/tool.py:1: warning: configure_python has 2 NLOC, 24 token, 5 PARAM, 3 length, 0 ND",
+		),
+		"src/tool.py:1: warning: configure_python has 2 NLOC, 24 token, 5 PARAM, 3 length, 0 ND",
+	);
 });
 
 test("supports textlint preset_packages when textlint is enabled", () => {

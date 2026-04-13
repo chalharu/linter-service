@@ -220,6 +220,186 @@ test("rejects unsupported lizard languages", () => {
 	}
 });
 
+test("accepts per-language lizard thresholds", () => {
+	const tempDir = fs.mkdtempSync(
+		path.join(os.tmpdir(), "linter-service-schema-"),
+	);
+	const configPath = path.join(tempDir, "linter-service.yaml");
+
+	writeConfig(configPath, {
+		linters: {
+			lizard: {
+				disabled: false,
+				languages: ["javascript", "python"],
+				thresholds: {
+					javascript: {
+						parameter_count: 6,
+						length: 30,
+					},
+					python: {
+						nloc: 10,
+					},
+				},
+			},
+		},
+	});
+
+	try {
+		const report = validateLinterServiceConfig({
+			configPath,
+			schemaPath: rootSchemaPath,
+		});
+
+		assert.deepEqual(report.normalizedConfig.linters.lizard.thresholds, {
+			javascript: {
+				parameter_count: 6,
+				length: 30,
+			},
+			python: {
+				nloc: 10,
+			},
+		});
+	} finally {
+		fs.rmSync(tempDir, { force: true, recursive: true });
+	}
+});
+
+test("rejects unsupported lizard threshold languages", () => {
+	const tempDir = fs.mkdtempSync(
+		path.join(os.tmpdir(), "linter-service-schema-"),
+	);
+	const configPath = path.join(tempDir, "linter-service.yaml");
+
+	writeConfig(configPath, {
+		linters: {
+			lizard: {
+				disabled: false,
+				languages: ["javascript"],
+				thresholds: {
+					brainfuck: {
+						parameter_count: 4,
+					},
+				},
+			},
+		},
+	});
+
+	try {
+		assert.throws(
+			() =>
+				validateLinterServiceConfig({
+					configPath,
+					schemaPath: rootSchemaPath,
+				}),
+			/allowed values|must be one of/u,
+		);
+	} finally {
+		fs.rmSync(tempDir, { force: true, recursive: true });
+	}
+});
+
+test("rejects unsupported lizard threshold metrics", () => {
+	const tempDir = fs.mkdtempSync(
+		path.join(os.tmpdir(), "linter-service-schema-"),
+	);
+	const configPath = path.join(tempDir, "linter-service.yaml");
+
+	writeConfig(configPath, {
+		linters: {
+			lizard: {
+				disabled: false,
+				languages: ["javascript"],
+				thresholds: {
+					javascript: {
+						foo: 1,
+					},
+				},
+			},
+		},
+	});
+
+	try {
+		assert.throws(
+			() =>
+				validateLinterServiceConfig({
+					configPath,
+					schemaPath: rootSchemaPath,
+				}),
+			/unexpected property|additional properties/u,
+		);
+	} finally {
+		fs.rmSync(tempDir, { force: true, recursive: true });
+	}
+});
+
+test("rejects lizard thresholds for languages outside linters.lizard.languages", () => {
+	const tempDir = fs.mkdtempSync(
+		path.join(os.tmpdir(), "linter-service-schema-"),
+	);
+	const configPath = path.join(tempDir, "linter-service.yaml");
+
+	writeConfig(configPath, {
+		linters: {
+			lizard: {
+				disabled: false,
+				languages: ["javascript"],
+				thresholds: {
+					python: {
+						parameter_count: 4,
+					},
+				},
+			},
+		},
+	});
+
+	try {
+		assert.throws(
+			() =>
+				validateLinterServiceConfig({
+					configPath,
+					schemaPath: rootSchemaPath,
+				}),
+			/languages must include every language configured in .*thresholds/u,
+		);
+	} finally {
+		fs.rmSync(tempDir, { force: true, recursive: true });
+	}
+});
+
+test("rejects negative lizard threshold values", () => {
+	const tempDir = fs.mkdtempSync(
+		path.join(os.tmpdir(), "linter-service-schema-"),
+	);
+	const configPath = path.join(tempDir, "linter-service.yaml");
+
+	writeConfig(configPath, {
+		linters: {
+			lizard: {
+				disabled: false,
+				languages: ["javascript"],
+				thresholds: {
+					javascript: {
+						parameter_count: -1,
+					},
+				},
+			},
+		},
+	});
+
+	try {
+		assert.throws(
+			() =>
+				validateLinterServiceConfig({
+					configPath,
+					schemaPath: rootSchemaPath,
+				}),
+			/must be >= 0|minimum/u,
+		);
+	} finally {
+		fs.rmSync(tempDir, { force: true, recursive: true });
+	}
+});
+
 test("rejects explicitly enabled textlint without preset_packages", () => {
 	const tempDir = fs.mkdtempSync(
 		path.join(os.tmpdir(), "linter-service-schema-"),

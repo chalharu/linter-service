@@ -33,6 +33,13 @@ const LANGUAGE_PATTERNS = Object.freeze({
 });
 
 const SUPPORTED_LANGUAGES = Object.freeze(Object.keys(LANGUAGE_PATTERNS));
+const SUPPORTED_THRESHOLD_KEYS = Object.freeze([
+	"nloc",
+	"cyclomatic_complexity",
+	"token_count",
+	"parameter_count",
+	"length",
+]);
 
 function normalizeLanguages({ label, languages }) {
 	if (languages === undefined) {
@@ -76,6 +83,72 @@ function normalizeLanguage(value, label) {
 	return value;
 }
 
+function normalizeThresholds({ label, thresholds }) {
+	if (thresholds === undefined) {
+		return {};
+	}
+
+	if (
+		!thresholds ||
+		typeof thresholds !== "object" ||
+		Array.isArray(thresholds)
+	) {
+		throw new Error(`${label} must be an object`);
+	}
+
+	const entries = Object.entries(thresholds);
+	if (entries.length === 0) {
+		throw new Error(`${label} must not be empty`);
+	}
+
+	return Object.fromEntries(
+		entries.map(([language, value]) => [
+			normalizeLanguage(language, `${label}.${language}`),
+			normalizeThresholdConfig({
+				label: `${label}.${language}`,
+				thresholdConfig: value,
+			}),
+		]),
+	);
+}
+
+function normalizeThresholdConfig({ label, thresholdConfig }) {
+	if (
+		!thresholdConfig ||
+		typeof thresholdConfig !== "object" ||
+		Array.isArray(thresholdConfig)
+	) {
+		throw new Error(`${label} must be an object`);
+	}
+
+	const entries = Object.entries(thresholdConfig);
+	if (entries.length === 0) {
+		throw new Error(`${label} must define at least one threshold`);
+	}
+
+	const normalized = {};
+
+	for (const [metric, value] of entries) {
+		if (!SUPPORTED_THRESHOLD_KEYS.includes(metric)) {
+			throw new Error(
+				`${label}.${metric} must be one of: ${SUPPORTED_THRESHOLD_KEYS.join(", ")}`,
+			);
+		}
+
+		normalized[metric] = normalizeThresholdValue(value, `${label}.${metric}`);
+	}
+
+	return normalized;
+}
+
+function normalizeThresholdValue(value, label) {
+	if (!Number.isInteger(value) || value < 0) {
+		throw new Error(`${label} must be a non-negative integer`);
+	}
+
+	return value;
+}
+
 function filterFilesByLanguages(filePaths, languages) {
 	const normalizedLanguages = Array.isArray(languages) ? languages : [];
 	const compiledPatterns = normalizedLanguages.flatMap((language) =>
@@ -94,6 +167,22 @@ function filterFilesByLanguages(filePaths, languages) {
 	});
 }
 
+function detectLanguage(filePath, languages = SUPPORTED_LANGUAGES) {
+	const normalizedPath = normalizePath(filePath);
+	const candidateLanguages =
+		Array.isArray(languages) && languages.length > 0
+			? languages
+			: SUPPORTED_LANGUAGES;
+
+	for (const language of candidateLanguages) {
+		if (matchesLanguage(normalizedPath, language)) {
+			return language;
+		}
+	}
+
+	return null;
+}
+
 function getAllPatternStrings() {
 	return [...new Set(Object.values(LANGUAGE_PATTERNS).flat())];
 }
@@ -108,6 +197,14 @@ function getPatternStringsForLanguage(language) {
 	return patterns;
 }
 
+function matchesLanguage(filePath, language) {
+	const normalizedPath = normalizePath(filePath);
+
+	return getPatternStringsForLanguage(language).some((patternString) =>
+		new RegExp(patternString, "iu").test(normalizedPath),
+	);
+}
+
 function isConfigTriggerPath(filePath) {
 	const normalizedPath = normalizePath(filePath);
 	return CONFIG_TRIGGER_PATTERNS.some((pattern) =>
@@ -120,9 +217,12 @@ function normalizePath(filePath) {
 }
 
 module.exports = {
+	detectLanguage,
 	filterFilesByLanguages,
 	getAllPatternStrings,
 	isConfigTriggerPath,
 	normalizeLanguages,
+	normalizeThresholds,
 	SUPPORTED_LANGUAGES,
+	SUPPORTED_THRESHOLD_KEYS,
 };

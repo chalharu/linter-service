@@ -120,6 +120,42 @@
         "$ref": "#/$defs/lizardLanguage"
       }
     },
+    "lizardThresholdValue": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "lizardThresholdConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "nloc": {
+          "$ref": "#/$defs/lizardThresholdValue"
+        },
+        "cyclomatic_complexity": {
+          "$ref": "#/$defs/lizardThresholdValue"
+        },
+        "token_count": {
+          "$ref": "#/$defs/lizardThresholdValue"
+        },
+        "parameter_count": {
+          "$ref": "#/$defs/lizardThresholdValue"
+        },
+        "length": {
+          "$ref": "#/$defs/lizardThresholdValue"
+        }
+      }
+    },
+    "lizardLanguageThresholds": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/lizardThresholdConfig"
+      },
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/lizardLanguage"
+      }
+    },
     "lizardLinterConfig": {
       "type": "object",
       "additionalProperties": false,
@@ -132,6 +168,9 @@
         },
         "languages": {
           "$ref": "#/$defs/lizardLanguageArray"
+        },
+        "thresholds": {
+          "$ref": "#/$defs/lizardLanguageThresholds"
         }
       },
       "allOf": [
