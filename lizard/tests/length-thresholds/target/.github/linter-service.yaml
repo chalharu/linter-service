@@ -1,0 +1,11 @@
+linters:
+  lizard:
+    disabled: false
+    languages:
+      - javascript
+      - python
+    thresholds:
+      javascript:
+        length: 7
+      python:
+        length: 10

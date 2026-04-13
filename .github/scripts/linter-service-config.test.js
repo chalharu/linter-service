@@ -15,6 +15,7 @@ const {
 const {
 	buildThresholdArguments,
 	normalizeLizardOutput,
+	runConfiguredLizard,
 } = require("../../lizard/run-lizard.js");
 
 function makeTempRepo() {
@@ -519,6 +520,91 @@ test("maps lizard thresholds to CLI arguments", () => {
 			"-L",
 			"30",
 		],
+	);
+});
+
+test("runConfiguredLizard applies metric-specific thresholds per language group", () => {
+	const calls = [];
+	const result = runConfiguredLizard({
+		filePaths: ["src/app.js", "src/tool.py"],
+		repositoryPath: "/tmp/lizard-metric-thresholds",
+		serviceConfig: {
+			global: {
+				exclude_paths: [],
+			},
+			linters: {
+				lizard: {
+					disabled: false,
+					disabled_explicit: true,
+					exclude_paths: [],
+					languages: ["javascript", "python"],
+					thresholds: {
+						javascript: {
+							token_count: 20,
+							length: 7,
+						},
+						python: {
+							nloc: 3,
+							cyclomatic_complexity: 2,
+							parameter_count: 1,
+						},
+					},
+				},
+			},
+		},
+		spawnSyncImpl: (command, args, options) => {
+			calls.push({
+				args,
+				command,
+				cwd: options.cwd,
+			});
+
+			const hasJavascript = args.includes("src/app.js");
+			const hasPython = args.includes("src/tool.py");
+
+			if (hasJavascript === hasPython) {
+				throw new Error(
+					`unexpected mock invocation arguments: ${JSON.stringify(args)}`,
+				);
+			}
+
+			if (hasJavascript) {
+				return {
+					status: 1,
+					stderr: "",
+					stdout:
+						"src/app.js:1: warning: renderNames has 8 NLOC, 2 CCN, 35 token, 1 PARAM, 9 length, 0 ND",
+				};
+			}
+
+			return {
+				status: 1,
+				stderr: "",
+				stdout:
+					"src/tool.py:1: warning: describe_value has 5 NLOC, 3 CCN, 19 token, 2 PARAM, 6 length, 0 ND",
+			};
+		},
+	});
+
+	assert.deepEqual(calls, [
+		{
+			args: ["-w", "-T", "token_count=20", "-L", "7", "src/app.js"],
+			command: "lizard",
+			cwd: "/tmp/lizard-metric-thresholds",
+		},
+		{
+			args: ["-w", "-T", "nloc=3", "-C", "2", "-a", "1", "src/tool.py"],
+			command: "lizard",
+			cwd: "/tmp/lizard-metric-thresholds",
+		},
+	]);
+	assert.equal(result.exitCode, 1);
+	assert.equal(
+		result.details,
+		[
+			"src/app.js:1: renderNames exceeds configured lizard thresholds with 8 NLOC, 2 CCN, 35 token, 1 PARAM, 9 length, 0 ND",
+			"src/tool.py:1: describe_value exceeds configured lizard thresholds with 5 NLOC, 3 CCN, 19 token, 2 PARAM, 6 length, 0 ND",
+		].join("\n"),
 	);
 });
 

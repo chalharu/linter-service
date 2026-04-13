@@ -1,0 +1,11 @@
+{
+  "checked_projects": [],
+  "result": {
+    "details": "src/app.js:1: renderNames exceeds configured lizard thresholds with 10 NLOC, 3 CCN, 58 token, 1 PARAM, 10 length, 0 ND",
+    "exit_code": 1
+  },
+  "selected_files": [
+    "src/app.js",
+    "src/tool.py"
+  ]
+}

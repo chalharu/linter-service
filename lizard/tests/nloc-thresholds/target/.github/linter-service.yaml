@@ -1,0 +1,11 @@
+linters:
+  lizard:
+    disabled: false
+    languages:
+      - javascript
+      - python
+    thresholds:
+      javascript:
+        nloc: 4
+      python:
+        nloc: 3

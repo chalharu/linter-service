@@ -1,0 +1,11 @@
+linters:
+  lizard:
+    disabled: false
+    languages:
+      - javascript
+      - python
+    thresholds:
+      javascript:
+        token_count: 20
+      python:
+        token_count: 30

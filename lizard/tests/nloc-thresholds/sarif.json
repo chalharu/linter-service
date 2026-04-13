@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/lizard"
+      },
+      "results": [
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/tool.py"
+                },
+                "region": {
+                  "startColumn": 1,
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "describe_value exceeds configured lizard thresholds with 6 NLOC, 3 CCN, 22 token, 1 PARAM, 6 length, 0 ND"
+          },
+          "properties": {
+            "linter_name": "lizard"
+          },
+          "ruleId": "lizard/diagnostic"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/chalharu/linter-service",
+          "name": "linter-service/lizard",
+          "rules": [
+            {
+              "id": "lizard/diagnostic",
+              "name": "lizard/diagnostic",
+              "shortDescription": {
+                "text": "lizard/diagnostic"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}
