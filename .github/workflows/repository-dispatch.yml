@@ -892,6 +892,7 @@ jobs:
         if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
         env:
           OVERALL_CONCLUSION: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_conclusion || 'failure' }}
+          OVERALL_STATUS: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_status || 'failure' }}
           OVERALL_SUMMARY: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_summary || 'The linter-service workflow failed to generate a combined report.' }}
           UPLOAD_SARIF_OUTCOME: ${{ steps.upload_sarif.outcome }}
         run: |
@@ -900,16 +901,20 @@ jobs:
           from pathlib import Path
 
           overall_conclusion = os.environ["OVERALL_CONCLUSION"]
+          overall_status = os.environ["OVERALL_STATUS"]
           overall_summary = os.environ["OVERALL_SUMMARY"]
           upload_sarif_outcome = os.environ.get("UPLOAD_SARIF_OUTCOME", "")
 
           conclusion = overall_conclusion
           summary = overall_summary
-          title = (
-              "linter-service completed"
-              if conclusion == "success"
-              else "linter-service found issues"
-          )
+          if conclusion == "success" and overall_status == "warning":
+              title = "linter-service completed with warnings"
+          else:
+              title = (
+                  "linter-service completed"
+                  if conclusion == "success"
+                  else "linter-service found issues"
+              )
 
           if upload_sarif_outcome == "failure":
               summary = f"{overall_summary} Warning: SARIF upload failed; see the workflow logs."

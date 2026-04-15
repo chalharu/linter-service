@@ -76,7 +76,10 @@ function normalizeCargoDenyVulnerabilities(report) {
 }
 
 function normalizeCargoDenyDiagnostics(run) {
-	return Array.isArray(run?.diagnostics) ? run.diagnostics : [];
+	return [
+		...(Array.isArray(run?.diagnostics) ? run.diagnostics : []),
+		...(Array.isArray(run?.warning_diagnostics) ? run.warning_diagnostics : []),
+	];
 }
 
 function resolveCargoDenyAuditMessage({

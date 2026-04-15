@@ -280,6 +280,62 @@ printf '{"details":"beta ok","exit_code":0}\\n'
 	}
 });
 
+test("runLinterBatch preserves warning-only summaries as successful conclusions", () => {
+	const workspace = createTempWorkspace();
+	writeFile(path.join(workspace.sourceRepositoryPath, "alpha.txt"), "alpha\n");
+	writeLinterConfig(workspace.linterConfigPath, {
+		alpha: {
+			sarif: {
+				enabled: true,
+			},
+		},
+	});
+	writeFakeLinter(workspace.linterServicePath, {
+		name: "alpha",
+		installScript: `#!/usr/bin/env bash
+set -euo pipefail
+:`,
+		pattern: "^alpha\\.txt$",
+		runScript: `#!/usr/bin/env bash
+set -euo pipefail
+printf '{"details":"warning[ALPHA1]: alpha warning","exit_code":0,"warning_count":1}\\n'
+`,
+	});
+
+	try {
+		const result = runLinterBatch({
+			baseEnv: {
+				...process.env,
+				PATH: process.env.PATH || "",
+			},
+			contextPath: workspace.contextPath,
+			linterConfigPath: workspace.linterConfigPath,
+			linterNames: ["alpha"],
+			linterServicePath: workspace.linterServicePath,
+			runnerTemp: workspace.runnerTemp,
+			sourceRepositoryPath: workspace.sourceRepositoryPath,
+		});
+
+		assert.equal(result.infrastructureFailures, 0);
+		assert.equal(result.linters[0].conclusion, "success");
+
+		const alphaSummary = JSON.parse(
+			fs.readFileSync(
+				path.join(workspace.runnerTemp, "linter-summary-alpha.json"),
+				"utf8",
+			),
+		);
+		assert.equal(alphaSummary.conclusion, "success");
+		assert.equal(alphaSummary.status, "warning");
+		assert.match(
+			alphaSummary.comment_body,
+			/⚠️ Checked 1 file; 1 file reported warnings\./u,
+		);
+	} finally {
+		cleanupTempWorkspace(workspace.tempDir);
+	}
+});
+
 test("formatExecError suppresses raw stdout and stderr contents", () => {
 	const formatted = formatExecError({
 		message: "Command failed: bash run.sh\nsecret stderr",

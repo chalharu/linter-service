@@ -102,7 +102,7 @@ function renderSarif({
 
 	const details = resolveDiagnosticDetails(
 		result,
-		buildDetailsFallback(linterName),
+		buildDetailsFallback(linterName, result),
 	);
 	const reportedPathRoots = buildReportedPathRoots({
 		linterName,
@@ -110,7 +110,7 @@ function renderSarif({
 		sourceRepositoryPath,
 	});
 	const results =
-		result.exit_code === 0
+		result.exit_code === 0 && !hasNonBlockingFindings(result)
 			? []
 			: buildSarifResults({
 					configPath,
@@ -179,7 +179,25 @@ function resolveDiagnosticDetails(result, fallback) {
 	return exitCode === 0 ? "" : fallback;
 }
 
-function buildDetailsFallback(linterName) {
+function countNonBlockingFindings(result) {
+	return Number.isInteger(result?.warning_count) && result.warning_count > 0
+		? result.warning_count
+		: 0;
+}
+
+function hasNonBlockingFindings(result) {
+	return countNonBlockingFindings(result) > 0;
+}
+
+function buildDetailsFallback(linterName, result) {
+	if (
+		hasNonBlockingFindings(result) &&
+		Number.isInteger(result?.exit_code) &&
+		result.exit_code === 0
+	) {
+		return `The \`${linterName}\` run completed with warnings but did not produce diagnostic output.`;
+	}
+
 	return `The \`${linterName}\` run exited with issues but did not produce diagnostic output.`;
 }
 

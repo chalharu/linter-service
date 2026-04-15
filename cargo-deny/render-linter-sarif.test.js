@@ -256,6 +256,104 @@ test("emits SARIF for cargo-deny audit-compatible warnings in sorted kind order"
 	}
 });
 
+test("emits SARIF for non-blocking cargo-deny duplicate warnings", () => {
+	const context = makeTempRepo("render-linter-sarif-cargo-deny-duplicate-");
+
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		'[package]\nname = "demo"\nversion = "0.1.0"\nedition = "2021"\n',
+	);
+	writeFile(path.join(context.repoDir, "Cargo.lock"), "version = 3\n");
+	writeFile(
+		path.join(context.runnerTemp, "selected-files.txt"),
+		"Cargo.lock\n",
+	);
+	writeFile(
+		path.join(context.runnerTemp, "linter-result.json"),
+		JSON.stringify({
+			cargo_deny_runs: [
+				{
+					audit_reports: [
+						{
+							lockfile: { "dependency-count": 1 },
+							settings: {},
+							vulnerabilities: {
+								count: 0,
+								found: false,
+								list: [],
+							},
+							warnings: {},
+						},
+					],
+					command:
+						"cargo-deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output",
+					config_path: null,
+					diagnostics: [],
+					warning_diagnostics: [
+						{
+							fields: {
+								code: "duplicate",
+								labels: [
+									{
+										column: 1,
+										line: 10,
+										message: "lock entries",
+										span: [
+											"block-buffer 0.10.4 registry+https://github.com/rust-lang/crates.io-index",
+											"block-buffer 0.12.0 registry+https://github.com/rust-lang/crates.io-index",
+										].join("\n"),
+									},
+								],
+								message: "found 2 duplicate entries for crate 'block-buffer'",
+								notes: [],
+								severity: "warning",
+							},
+							type: "diagnostic",
+						},
+					],
+					exit_code: 1,
+					manifest_path: "Cargo.toml",
+				},
+			],
+			details:
+				"warning[duplicate]: found 2 duplicate entries for crate 'block-buffer'",
+			exit_code: 0,
+			warning_count: 1,
+		}),
+	);
+
+	try {
+		const report = runFromEnv({
+			INSTALL_TOOL_OUTCOME: "success",
+			LINTER_CONFIG_PATH: configPath,
+			LINTER_NAME: "cargo-deny",
+			OUTPUT_PATH: path.join(context.runnerTemp, "cargo-deny.sarif"),
+			RESULT_PATH: path.join(context.runnerTemp, "linter-result.json"),
+			RUNNER_TEMP: context.runnerTemp,
+			RUN_LINTER_OUTCOME: "success",
+			SELECTED_FILES_PATH: path.join(context.runnerTemp, "selected-files.txt"),
+			SELECT_FILES_OUTCOME: "success",
+			SOURCE_REPOSITORY_PATH: context.repoDir,
+		});
+
+		assert.equal(report.produced, true);
+		assert.equal(report.targetStats.issue_target_count, 1);
+		assert.equal(report.sarif.runs[0].results.length, 1);
+		assert.equal(
+			report.sarif.runs[0].results[0].ruleId,
+			"cargo-deny/duplicate",
+		);
+		assert.equal(report.sarif.runs[0].results[0].level, "warning");
+		assert.equal(
+			report.sarif.runs[0].results[0].locations[0].physicalLocation
+				.artifactLocation.uri,
+			"Cargo.toml",
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
 test("emits SARIF for cargo-deny structured config diagnostics", () => {
 	const context = makeTempRepo("render-linter-sarif-cargo-deny-config-");
 

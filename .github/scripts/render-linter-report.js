@@ -67,21 +67,28 @@ function renderReport({
 	const hasStepFailure = [selectOutcome, installOutcome, runOutcome].includes(
 		"failure",
 	);
-	const success =
-		!hasStepFailure && (selectedFiles.length === 0 || exitCodeRaw === "0");
-	const conclusion = success ? "success" : "failure";
 	let detailsText = "";
 	const status =
 		hasStepFailure && result === null
 			? "infra_failure"
 			: selectedFiles.length === 0 && exitCodeRaw === ""
 				? "no_targets"
-				: success
-					? "success"
-					: "failure";
+				: !hasStepFailure &&
+						exitCodeRaw === "0" &&
+						hasNonBlockingFindings(result)
+					? "warning"
+					: !hasStepFailure &&
+							(selectedFiles.length === 0 || exitCodeRaw === "0")
+						? "success"
+						: "failure";
+	const conclusion =
+		status === "failure" || status === "infra_failure" ? "failure" : "success";
 
-	if (status === "failure") {
-		detailsText = resolveDetails(result, buildDetailsFallback(linterName));
+	if (status === "failure" || status === "warning") {
+		detailsText = resolveDetails(
+			result,
+			buildDetailsFallback(linterName, status),
+		);
 	}
 
 	const normalizedTargetStats = normalizeTargetStats({
@@ -102,7 +109,7 @@ function renderReport({
 		appendTargetLines(lines, targetLines);
 	}
 
-	if (status === "failure") {
+	if (status === "failure" || status === "warning") {
 		lines.push(
 			"",
 			"<details><summary>Details</summary>",
@@ -142,37 +149,97 @@ function resolveDetails(result, fallback) {
 	return details;
 }
 
-function buildDetailsFallback(linterName) {
+function buildDetailsFallback(linterName, status = "failure") {
+	if (status === "warning") {
+		return `The \`${linterName}\` run completed with warnings but did not produce diagnostic output.`;
+	}
+
 	return `The \`${linterName}\` run exited with issues but did not produce diagnostic output.`;
 }
 
-function buildSummaryText({ linterName, status, targetStats }) {
-	switch (status) {
-		case "success":
-			return `✅ ${formatRatio(targetStats.passedTargetCount, targetStats.targetCount)} ${formatTargetLabel(targetStats.targetKind, targetStats.targetCount)} passed.`;
-		case "no_targets":
-			return `⚪ 0 ${formatTargetLabel(targetStats.targetKind, 0)} checked.`;
-		case "infra_failure":
-			return targetStats.targetCount === null
-				? `❌ The \`${linterName}\` workflow failed before diagnostics were produced. See the workflow logs.`
-				: `❌ Matched ${formatTargetQuantity(targetStats.targetCount, targetStats.targetKind)}, but the workflow failed before diagnostics were produced.`;
-		case "failure":
-			if (
-				targetStats.countsKnown &&
-				targetStats.passedTargetCount !== null &&
-				targetStats.issueTargetCount !== null &&
-				targetStats.targetCount !== null
-			) {
-				return `❌ ${formatRatio(targetStats.passedTargetCount, targetStats.targetCount)} ${formatTargetLabel(targetStats.targetKind, targetStats.targetCount)} passed; ${formatTargetQuantity(targetStats.issueTargetCount, targetStats.targetKind)} reported issues.`;
-			}
-
-			return targetStats.targetCount === null
-				? `❌ The \`${linterName}\` run reported issues. See the workflow logs.`
-				: `❌ Checked ${formatTargetQuantity(targetStats.targetCount, targetStats.targetKind)}; issue counts are unavailable.`;
-		default:
-			return `❌ The \`${linterName}\` workflow failed before producing a detailed report. See the workflow logs.`;
-	}
+function countNonBlockingFindings(result) {
+	return Number.isInteger(result?.warning_count) && result.warning_count > 0
+		? result.warning_count
+		: 0;
 }
+
+function hasNonBlockingFindings(result) {
+	return countNonBlockingFindings(result) > 0;
+}
+
+function buildSummaryText({ linterName, status, targetStats }) {
+	const builder = SUMMARY_TEXT_BUILDERS[status] ?? buildUnknownSummaryText;
+	return builder({ linterName, targetStats });
+}
+
+function buildSuccessSummaryText({ targetStats }) {
+	return `✅ ${formatRatio(targetStats.passedTargetCount, targetStats.targetCount)} ${formatTargetLabel(targetStats.targetKind, targetStats.targetCount)} passed.`;
+}
+
+function buildNoTargetsSummaryText({ targetStats }) {
+	return `⚪ 0 ${formatTargetLabel(targetStats.targetKind, 0)} checked.`;
+}
+
+function buildWarningSummaryText({ linterName, targetStats }) {
+	if (hasKnownWarningCounts(targetStats)) {
+		return `⚠️ Checked ${formatTargetQuantity(targetStats.targetCount, targetStats.targetKind)}; ${formatTargetQuantity(targetStats.issueTargetCount, targetStats.targetKind)} reported warnings.`;
+	}
+
+	if (targetStats.targetCount === null) {
+		return `⚠️ The \`${linterName}\` run completed with warnings.`;
+	}
+
+	return `⚠️ Checked ${formatTargetQuantity(targetStats.targetCount, targetStats.targetKind)}; warning counts are unavailable.`;
+}
+
+function buildInfraFailureSummaryText({ linterName, targetStats }) {
+	if (targetStats.targetCount === null) {
+		return `❌ The \`${linterName}\` workflow failed before diagnostics were produced. See the workflow logs.`;
+	}
+
+	return `❌ Matched ${formatTargetQuantity(targetStats.targetCount, targetStats.targetKind)}, but the workflow failed before diagnostics were produced.`;
+}
+
+function buildFailureSummaryText({ linterName, targetStats }) {
+	if (hasKnownFailureCounts(targetStats)) {
+		return `❌ ${formatRatio(targetStats.passedTargetCount, targetStats.targetCount)} ${formatTargetLabel(targetStats.targetKind, targetStats.targetCount)} passed; ${formatTargetQuantity(targetStats.issueTargetCount, targetStats.targetKind)} reported issues.`;
+	}
+
+	if (targetStats.targetCount === null) {
+		return `❌ The \`${linterName}\` run reported issues. See the workflow logs.`;
+	}
+
+	return `❌ Checked ${formatTargetQuantity(targetStats.targetCount, targetStats.targetKind)}; issue counts are unavailable.`;
+}
+
+function buildUnknownSummaryText({ linterName }) {
+	return `❌ The \`${linterName}\` workflow failed before producing a detailed report. See the workflow logs.`;
+}
+
+function hasKnownWarningCounts(targetStats) {
+	return (
+		targetStats.countsKnown &&
+		targetStats.issueTargetCount !== null &&
+		targetStats.targetCount !== null
+	);
+}
+
+function hasKnownFailureCounts(targetStats) {
+	return (
+		targetStats.countsKnown &&
+		targetStats.passedTargetCount !== null &&
+		targetStats.issueTargetCount !== null &&
+		targetStats.targetCount !== null
+	);
+}
+
+const SUMMARY_TEXT_BUILDERS = Object.freeze({
+	failure: buildFailureSummaryText,
+	infra_failure: buildInfraFailureSummaryText,
+	no_targets: buildNoTargetsSummaryText,
+	success: buildSuccessSummaryText,
+	warning: buildWarningSummaryText,
+});
 
 function normalizeTargetStats({
 	checkedProjects,
