@@ -10,6 +10,7 @@ const {
 
 const ADVISORY_WARNING_KINDS = new Set(["notice", "unmaintained", "unsound"]);
 const DEFAULT_CARGO_DENY_MESSAGE = "cargo-deny reported an issue";
+const IGNORED_WARNING_CODES = new Set(["duplicate"]);
 
 function parseJsonLines(text) {
 	const items = [];
@@ -52,6 +53,37 @@ function isCargoDenyConfigLikeDiagnostic(diagnostic) {
 	const haystack = [fields?.message, code, ...notes].join("\n");
 
 	return /config|deny\.toml|failed to parse/i.test(haystack);
+}
+
+function isCargoDenyStructuredDiagnostic(item) {
+	return item && item.type === "diagnostic" && item.fields;
+}
+
+function normalizeCargoDenySeverityName(fields) {
+	return typeof fields?.severity === "string"
+		? fields.severity.toLowerCase()
+		: "";
+}
+
+function normalizeCargoDenyDiagnosticCodeName(fields) {
+	return typeof fields?.code === "string" ? fields.code.toLowerCase() : "";
+}
+
+function isIgnorableCargoDenyDiagnostic(diagnostic) {
+	const fields = diagnostic?.fields || {};
+
+	return (
+		normalizeCargoDenySeverityName(fields) === "warning" &&
+		IGNORED_WARNING_CODES.has(normalizeCargoDenyDiagnosticCodeName(fields))
+	);
+}
+
+function normalizeCargoDenyVulnerabilities(vulnerabilities) {
+	if (Array.isArray(vulnerabilities)) {
+		return vulnerabilities;
+	}
+
+	return Array.isArray(vulnerabilities?.list) ? vulnerabilities.list : [];
 }
 
 function guessCargoDenyDisplayPath(run, diagnostic) {
@@ -109,9 +141,9 @@ function formatCargoDenyWarningLine(kind, entry) {
 }
 
 function formatCargoDenyAuditReport(report) {
-	const vulnerabilities = Array.isArray(report?.vulnerabilities)
-		? report.vulnerabilities
-		: [];
+	const vulnerabilities = normalizeCargoDenyVulnerabilities(
+		report?.vulnerabilities,
+	);
 	const warnings = normalizeCargoDenyWarnings(report?.warnings);
 
 	return [
@@ -210,6 +242,9 @@ function normalizeCargoDenyRun(run) {
 	const stderrText = String(run?.stderr || "");
 	const stdoutParsed = parseJsonLines(stdoutText);
 	const stderrParsed = parseJsonLines(stderrText);
+	const diagnostics = stderrParsed.items
+		.filter(isCargoDenyStructuredDiagnostic)
+		.filter((diagnostic) => !isIgnorableCargoDenyDiagnostic(diagnostic));
 
 	return {
 		command: String(run?.command || "").trim(),
@@ -221,12 +256,38 @@ function normalizeCargoDenyRun(run) {
 		audit_reports: stdoutParsed.items.filter(
 			(item) => item && typeof item === "object",
 		),
-		diagnostics: stderrParsed.items.filter(
-			(item) => item && item.type === "diagnostic" && item.fields,
+		diagnostics,
+		stderr_other_items: stderrParsed.items.filter(
+			(item) =>
+				item &&
+				typeof item === "object" &&
+				!isCargoDenyStructuredDiagnostic(item),
 		),
 		stdout_raw_lines: stdoutParsed.rawLines,
 		stderr_raw_lines: stderrParsed.rawLines,
 	};
+}
+
+function hasCargoDenyAuditFindings(report) {
+	const warnings = normalizeCargoDenyWarnings(report?.warnings);
+
+	return (
+		normalizeCargoDenyVulnerabilities(report?.vulnerabilities).length > 0 ||
+		listCargoDenyWarningKinds(warnings).some(
+			(kind) => normalizeCargoDenyWarningEntries(warnings[kind]).length > 0,
+		)
+	);
+}
+
+function hasCargoDenyActionableRun(run) {
+	return (
+		run.audit_reports.some(hasCargoDenyAuditFindings) ||
+		run.diagnostics.length > 0 ||
+		run.stderr_other_items.some((item) => item?.type !== "summary") ||
+		[...run.stdout_raw_lines, ...run.stderr_raw_lines].some(
+			(line) => String(line).trim().length > 0,
+		)
+	);
 }
 
 function renderCargoDenyRunDetails(run) {
@@ -294,6 +355,7 @@ function buildCargoDenyResult({ entriesDir, exitCode, runs = null }) {
 	const normalizedRuns = (runs || readCargoDenyRunEntries(entriesDir)).map(
 		normalizeCargoDenyRun,
 	);
+	const requestedExitCode = Number.parseInt(String(exitCode), 10) || 0;
 	const details = normalizedRuns
 		.flatMap((run) => [...renderCargoDenyRunDetails(run), ""])
 		.join("\n")
@@ -318,7 +380,10 @@ function buildCargoDenyResult({ entriesDir, exitCode, runs = null }) {
 			}),
 		),
 		details,
-		exit_code: Number.parseInt(String(exitCode), 10) || 0,
+		exit_code:
+			requestedExitCode === 0 || normalizedRuns.some(hasCargoDenyActionableRun)
+				? requestedExitCode
+				: 0,
 	};
 }
 
@@ -341,5 +406,6 @@ module.exports = {
 	guessCargoDenyDisplayPath,
 	isCargoDenyAdvisoryLikeDiagnostic,
 	isCargoDenyConfigLikeDiagnostic,
+	isIgnorableCargoDenyDiagnostic,
 	parseJsonLines,
 };

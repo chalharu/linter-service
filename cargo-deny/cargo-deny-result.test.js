@@ -133,3 +133,65 @@ test("buildCargoDenyResult renders warning advisories and diagnostic fallbacks",
 	);
 	assert.match(result.details, /note: fix deny\.toml/);
 });
+
+test("buildCargoDenyResult ignores warning-only duplicate diagnostics", () => {
+	const result = buildCargoDenyResult({
+		exitCode: 1,
+		runs: [
+			{
+				command:
+					"cargo-deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output",
+				config_path: "",
+				exit_code: 1,
+				manifest_path: "Cargo.toml",
+				stderr: [
+					JSON.stringify({
+						type: "diagnostic",
+						fields: {
+							code: "duplicate",
+							labels: [
+								{
+									column: 1,
+									line: 10,
+									message: "lock entries",
+									span: [
+										"block-buffer 0.10.4 registry+https://github.com/rust-lang/crates.io-index",
+										"block-buffer 0.12.0 registry+https://github.com/rust-lang/crates.io-index",
+									].join("\n"),
+								},
+							],
+							message: "found 2 duplicate entries for crate 'block-buffer'",
+							notes: [],
+							severity: "warning",
+						},
+					}),
+					JSON.stringify({
+						type: "summary",
+						fields: {
+							advisories: { errors: 0, helps: 0, notes: 0, warnings: 0 },
+							bans: { errors: 0, helps: 0, notes: 0, warnings: 1 },
+							licenses: { errors: 0, helps: 0, notes: 0, warnings: 0 },
+							sources: { errors: 0, helps: 0, notes: 0, warnings: 0 },
+						},
+					}),
+				].join("\n"),
+				stdout: JSON.stringify({
+					lockfile: { "dependency-count": 1 },
+					settings: {},
+					vulnerabilities: {
+						count: 0,
+						found: false,
+						list: [],
+					},
+					warnings: {},
+				}),
+			},
+		],
+	});
+
+	assert.equal(result.exit_code, 0);
+	assert.equal(result.cargo_deny_runs.length, 1);
+	assert.equal(result.cargo_deny_runs[0].exit_code, 1);
+	assert.equal(result.cargo_deny_runs[0].diagnostics.length, 0);
+	assert.doesNotMatch(result.details, /warning\[duplicate\]/);
+});

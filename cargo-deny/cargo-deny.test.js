@@ -242,6 +242,61 @@ process.stdout.write(
 process.stdout.write("\\n");
 NODE
 fi
+if [ -n "\${DUPLICATE_WARNING_MANIFEST:-}" ] && [ "$manifest" = "$DUPLICATE_WARNING_MANIFEST" ]; then
+  if [ "$audit_mode" -eq 1 ]; then
+    node <<'NODE'
+process.stdout.write(
+  JSON.stringify({
+    settings: {},
+    lockfile: { "dependency-count": 1 },
+    vulnerabilities: {
+      count: 0,
+      found: false,
+      list: [],
+    },
+    warnings: {},
+  }),
+);
+process.stdout.write("\\n");
+process.stderr.write(
+  JSON.stringify({
+    type: "diagnostic",
+    fields: {
+      code: "duplicate",
+      labels: [
+        {
+          column: 1,
+          line: 1,
+          message: "lock entries",
+          span: [
+            "demo 0.1.0 registry+https://github.com/rust-lang/crates.io-index",
+            "demo 0.2.0 registry+https://github.com/rust-lang/crates.io-index",
+          ].join("\\n"),
+        },
+      ],
+      message: "found 2 duplicate entries for crate 'demo'",
+      notes: [],
+      severity: "warning",
+    },
+  }),
+);
+process.stderr.write("\\n");
+process.stderr.write(
+  JSON.stringify({
+    type: "summary",
+    fields: {
+      advisories: { errors: 0, helps: 0, notes: 0, warnings: 0 },
+      bans: { errors: 0, helps: 0, notes: 0, warnings: 1 },
+      licenses: { errors: 0, helps: 0, notes: 0, warnings: 0 },
+      sources: { errors: 0, helps: 0, notes: 0, warnings: 0 },
+    },
+  }),
+);
+process.stderr.write("\\n");
+NODE
+  fi
+  exit 1
+fi
 if [ -n "\${FAIL_MANIFEST:-}" ] && [ "$manifest" = "$FAIL_MANIFEST" ]; then
   if [ "$audit_mode" -eq 1 ]; then
     node - "$manifest" "$config" <<'NODE'
@@ -666,6 +721,49 @@ test("cargo-deny.sh reports selected files outside Cargo packages", () => {
 		assert.match(result.details, /No Cargo\.toml found for:/);
 		assert.match(result.details, /policies\/deny\.toml/);
 		assert.equal(fs.existsSync(argsLog), false);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("cargo-deny.sh ignores warning-only duplicate diagnostics", () => {
+	const context = makeTempRepo("cargo-deny-duplicate-warning-");
+	const argsLog = path.join(context.tempDir, "cargo-deny-args.log");
+
+	createCargoDenyStub(context.binDir);
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		`[package]
+name = "root"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+	writeFile(path.join(context.repoDir, "Cargo.lock"), "version = 3\n");
+	writeFile(
+		path.join(context.repoDir, "deny.toml"),
+		"[graph]\nall-features = true\n",
+	);
+
+	try {
+		const output = execFileSync("bash", [runPath, "Cargo.lock"], {
+			cwd: context.repoDir,
+			encoding: "utf8",
+			env: createEnv(context, {
+				CARGO_DENY_ARGS_LOG: argsLog,
+				DUPLICATE_WARNING_MANIFEST: "Cargo.toml",
+			}),
+		});
+		const result = JSON.parse(output);
+
+		assert.equal(result.exit_code, 0);
+		assert.equal(result.cargo_deny_runs.length, 1);
+		assert.equal(result.cargo_deny_runs[0].exit_code, 1);
+		assert.equal(result.cargo_deny_runs[0].diagnostics.length, 0);
+		assert.doesNotMatch(result.details, /warning\[duplicate\]/);
+		assert.deepEqual(fs.readFileSync(argsLog, "utf8").trim().split("\n"), [
+			"--format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output --config deny.toml",
+		]);
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}
