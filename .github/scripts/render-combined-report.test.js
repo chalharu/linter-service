@@ -129,7 +129,7 @@ test("writes comment and check-run reports from detailed linter summaries", () =
 				"",
 				"</details>",
 				"",
-				"<details><summary>Show details for 1 failing linter(s)</summary>",
+				"<details><summary>Show details for 1 linter(s) with warnings or failures</summary>",
 				"",
 				"### rustfmt",
 				"",
@@ -173,7 +173,7 @@ test("writes comment and check-run reports from detailed linter summaries", () =
 				"",
 				"</details>",
 				"",
-				"<details><summary>Show details for 1 failing linter(s)</summary>",
+				"<details><summary>Show details for 1 linter(s) with warnings or failures</summary>",
 				"",
 				"### rustfmt",
 				"",
@@ -186,9 +186,127 @@ test("writes comment and check-run reports from detailed linter summaries", () =
 			].join("\n"),
 		);
 		assert.match(githubOutput, /^overall_conclusion=failure$/m);
+		assert.match(githubOutput, /^overall_status=failure$/m);
 		assert.match(
 			githubOutput,
 			/^overall_summary=1 of 2 selected linter\(s\) reported issues or failed\.$/m,
+		);
+	} finally {
+		fs.rmSync(tempDir, { force: true, recursive: true });
+	}
+});
+
+test("treats warning summaries as non-blocking findings in combined output", () => {
+	const tempDir = fs.mkdtempSync(
+		path.join(os.tmpdir(), "render-combined-report-warning-"),
+	);
+	const runnerTemp = path.join(tempDir, "runner-temp");
+	const summaryRoot = path.join(tempDir, "summaries");
+	const githubOutputPath = path.join(tempDir, "github-output.txt");
+
+	fs.mkdirSync(runnerTemp, { recursive: true });
+	fs.mkdirSync(summaryRoot, { recursive: true });
+	fs.writeFileSync(
+		path.join(summaryRoot, "linter-summary-actionlint.json"),
+		JSON.stringify(
+			{
+				comment_body: "### actionlint\n\n✅ 1 / 1 file passed.\n",
+				checked_project_count: 0,
+				checked_projects: [],
+				conclusion: "success",
+				counts_known: true,
+				details_text: "",
+				issue_count: 0,
+				issue_target_count: 0,
+				linter_name: "actionlint",
+				passed_target_count: 1,
+				selected_files: [".github/workflows/ci.yml"],
+				selected_file_count: 1,
+				status: "success",
+				summary_text: "✅ 1 / 1 file passed.",
+				target_count: 1,
+				target_kind: "file",
+			},
+			null,
+			2,
+		),
+		"utf8",
+	);
+	fs.writeFileSync(
+		path.join(summaryRoot, "linter-summary-cargo-deny.json"),
+		JSON.stringify(
+			{
+				comment_body:
+					"### cargo-deny\n\n⚠️ Checked 1 Cargo project; 1 Cargo project reported warnings.\n\n<details><summary>Details</summary>\n\n```text\nwarning[duplicate]: found 2 duplicate entries for crate 'block-buffer'\n```\n</details>\n",
+				checked_project_count: 1,
+				checked_projects: ["Cargo.toml"],
+				conclusion: "success",
+				counts_known: true,
+				details_text:
+					"warning[duplicate]: found 2 duplicate entries for crate 'block-buffer'",
+				issue_count: 1,
+				issue_target_count: 1,
+				linter_name: "cargo-deny",
+				passed_target_count: 0,
+				selected_files: ["Cargo.lock"],
+				selected_file_count: 1,
+				status: "warning",
+				summary_text:
+					"⚠️ Checked 1 Cargo project; 1 Cargo project reported warnings.",
+				target_count: 1,
+				target_kind: "cargo-project",
+			},
+			null,
+			2,
+		),
+		"utf8",
+	);
+
+	try {
+		const report = runFromEnv({
+			DECRYPT_SUMMARIES_OUTCOME: "success",
+			GITHUB_OUTPUT: githubOutputPath,
+			LINTER_SUMMARY_PATH: summaryRoot,
+			RUNNER_TEMP: runnerTemp,
+			SELECTED_LINTERS_JSON: JSON.stringify(["actionlint", "cargo-deny"]),
+		});
+		const commentBody = fs.readFileSync(
+			path.join(runnerTemp, "combined-linter-comment.md"),
+			"utf8",
+		);
+		const checkRunText = fs.readFileSync(
+			path.join(runnerTemp, "combined-linter-check-run.md"),
+			"utf8",
+		);
+		const githubOutput = fs.readFileSync(githubOutputPath, "utf8");
+
+		assert.equal(report.overallConclusion, "success");
+		assert.equal(report.overallStatus, "warning");
+		assert.equal(
+			report.overallSummary,
+			"All 2 selected linter(s) completed successfully; 1 reported warnings.",
+		);
+		assert.match(
+			commentBody,
+			/\| `cargo-deny` \| ⚠️ Warning \| 1 Cargo project \| 0 \| 1 \|/,
+		);
+		assert.match(
+			commentBody,
+			/<details><summary>Show details for 1 linter\(s\) with warnings or failures<\/summary>/,
+		);
+		assert.match(
+			commentBody,
+			/### cargo-deny\n\n```text\nwarning\[duplicate\]: found 2 duplicate entries for crate 'block-buffer'\n```/,
+		);
+		assert.match(
+			checkRunText,
+			/\| `cargo-deny` \| ⚠️ Warning \| 1 Cargo project \| 0 \| 1 \|/,
+		);
+		assert.match(githubOutput, /^overall_conclusion=success$/m);
+		assert.match(githubOutput, /^overall_status=warning$/m);
+		assert.match(
+			githubOutput,
+			/^overall_summary=All 2 selected linter\(s\) completed successfully; 1 reported warnings\.$/m,
 		);
 	} finally {
 		fs.rmSync(tempDir, { force: true, recursive: true });

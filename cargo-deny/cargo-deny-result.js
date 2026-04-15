@@ -242,9 +242,15 @@ function normalizeCargoDenyRun(run) {
 	const stderrText = String(run?.stderr || "");
 	const stdoutParsed = parseJsonLines(stdoutText);
 	const stderrParsed = parseJsonLines(stderrText);
-	const diagnostics = stderrParsed.items
-		.filter(isCargoDenyStructuredDiagnostic)
-		.filter((diagnostic) => !isIgnorableCargoDenyDiagnostic(diagnostic));
+	const structuredDiagnostics = stderrParsed.items.filter(
+		isCargoDenyStructuredDiagnostic,
+	);
+	const diagnostics = structuredDiagnostics.filter(
+		(diagnostic) => !isIgnorableCargoDenyDiagnostic(diagnostic),
+	);
+	const warning_diagnostics = structuredDiagnostics.filter(
+		isIgnorableCargoDenyDiagnostic,
+	);
 
 	return {
 		command: String(run?.command || "").trim(),
@@ -257,6 +263,7 @@ function normalizeCargoDenyRun(run) {
 			(item) => item && typeof item === "object",
 		),
 		diagnostics,
+		warning_diagnostics,
 		stderr_other_items: stderrParsed.items.filter(
 			(item) =>
 				item &&
@@ -304,12 +311,22 @@ function renderCargoDenyRunDetails(run) {
 					(diagnostic) => !isCargoDenyAdvisoryLikeDiagnostic(diagnostic),
 				)
 			: run.diagnostics;
+	const filteredWarningDiagnostics =
+		run.audit_reports.length > 0
+			? run.warning_diagnostics.filter(
+					(diagnostic) => !isCargoDenyAdvisoryLikeDiagnostic(diagnostic),
+				)
+			: run.warning_diagnostics;
 
 	for (const line of auditLines) {
 		lines.push(line);
 	}
 
 	for (const diagnostic of filteredDiagnostics) {
+		lines.push(...formatCargoDenyDiagnostic(run, diagnostic));
+	}
+
+	for (const diagnostic of filteredWarningDiagnostics) {
 		lines.push(...formatCargoDenyDiagnostic(run, diagnostic));
 	}
 
@@ -356,6 +373,10 @@ function buildCargoDenyResult({ entriesDir, exitCode, runs = null }) {
 		normalizeCargoDenyRun,
 	);
 	const requestedExitCode = Number.parseInt(String(exitCode), 10) || 0;
+	const warningCount = normalizedRuns.reduce(
+		(count, run) => count + run.warning_diagnostics.length,
+		0,
+	);
 	const details = normalizedRuns
 		.flatMap((run) => [...renderCargoDenyRunDetails(run), ""])
 		.join("\n")
@@ -370,6 +391,7 @@ function buildCargoDenyResult({ entriesDir, exitCode, runs = null }) {
 				exit_code: runExitCode,
 				audit_reports,
 				diagnostics,
+				warning_diagnostics,
 			}) => ({
 				command,
 				manifest_path,
@@ -377,6 +399,7 @@ function buildCargoDenyResult({ entriesDir, exitCode, runs = null }) {
 				exit_code: runExitCode,
 				audit_reports,
 				diagnostics,
+				...(warning_diagnostics.length > 0 ? { warning_diagnostics } : {}),
 			}),
 		),
 		details,
@@ -384,6 +407,7 @@ function buildCargoDenyResult({ entriesDir, exitCode, runs = null }) {
 			requestedExitCode === 0 || normalizedRuns.some(hasCargoDenyActionableRun)
 				? requestedExitCode
 				: 0,
+		...(warningCount > 0 ? { warning_count: warningCount } : {}),
 	};
 }
 

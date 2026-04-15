@@ -116,6 +116,67 @@ test("emits empty SARIF when an enabled linter succeeds", () => {
 	}
 });
 
+test("emits SARIF when a successful run reports non-blocking warnings", () => {
+	const context = makeTempRepo("render-linter-sarif-warning-success-");
+	const configPath = path.join(context.tempDir, "config.json");
+
+	writeFile(path.join(context.repoDir, "src/app.js"), "console.log('ok');\n");
+	writeFile(
+		configPath,
+		JSON.stringify(
+			{
+				linters: {
+					example: {
+						sarif: {
+							enabled: true,
+						},
+					},
+				},
+			},
+			null,
+			2,
+		),
+	);
+	writeFile(
+		path.join(context.runnerTemp, "selected-files.txt"),
+		"src/app.js\n",
+	);
+	writeFile(
+		path.join(context.runnerTemp, "linter-result.json"),
+		JSON.stringify({
+			details: "warning[EX123]: unexpected thing",
+			exit_code: 0,
+			warning_count: 1,
+		}),
+	);
+
+	try {
+		const report = renderSarif({
+			configPath,
+			installOutcome: "success",
+			linterName: "example",
+			outputPath: path.join(context.runnerTemp, "example.sarif"),
+			resultPath: path.join(context.runnerTemp, "linter-result.json"),
+			runOutcome: "success",
+			selectedFilesPath: path.join(context.runnerTemp, "selected-files.txt"),
+			selectOutcome: "success",
+			sourceRepositoryPath: context.repoDir,
+		});
+
+		assert.equal(report.produced, true);
+		assert.equal(report.sarif.runs[0].results.length, 1);
+		assert.equal(report.sarif.runs[0].results[0].level, "warning");
+		assert.equal(report.sarif.runs[0].results[0].ruleId, "EX123");
+		assert.equal(
+			report.sarif.runs[0].results[0].locations[0].physicalLocation
+				.artifactLocation.uri,
+			"src/app.js",
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
 test("does not emit SARIF when the linter run failed before producing a result", () => {
 	const context = makeTempRepo("render-linter-sarif-run-failed-");
 	const configPath = path.join(context.tempDir, "config.json");

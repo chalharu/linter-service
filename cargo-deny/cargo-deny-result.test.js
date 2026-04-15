@@ -190,8 +190,13 @@ test("buildCargoDenyResult ignores warning-only duplicate diagnostics", () => {
 	});
 
 	assert.equal(result.exit_code, 0);
+	assert.equal(result.warning_count, 1);
 	assert.equal(result.cargo_deny_runs.length, 1);
 	assert.equal(result.cargo_deny_runs[0].exit_code, 1);
 	assert.equal(result.cargo_deny_runs[0].diagnostics.length, 0);
-	assert.doesNotMatch(result.details, /warning\[duplicate\]/);
+	assert.equal(result.cargo_deny_runs[0].warning_diagnostics.length, 1);
+	assert.match(
+		result.details,
+		/warning\[duplicate\]: found 2 duplicate entries/,
+	);
 });

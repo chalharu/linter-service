@@ -33,6 +33,7 @@ function runFromEnv(env = process.env) {
 			env.GITHUB_OUTPUT,
 			[
 				`overall_conclusion=${report.overallConclusion}`,
+				`overall_status=${report.overallStatus}`,
 				`overall_summary=${report.overallSummary}`,
 				"",
 			].join("\n"),
@@ -52,6 +53,7 @@ function renderCombinedReport({
 	const rows = [];
 	const detailSections = [];
 	let failed = 0;
+	let warned = 0;
 
 	for (const linterName of selectedLinters) {
 		const summary = normalizeSummary(
@@ -65,6 +67,8 @@ function renderCombinedReport({
 
 		if (summary.conclusion !== "success") {
 			failed += 1;
+		} else if (summary.status === "warning") {
+			warned += 1;
 		}
 
 		rows.push(summary);
@@ -78,15 +82,25 @@ function renderCombinedReport({
 	const total = selectedLinters.length;
 	const overallConclusion =
 		failed === 0 && decryptOutcome !== "failure" ? "success" : "failure";
+	const overallStatus =
+		decryptOutcome === "failure" || failed > 0
+			? "failure"
+			: warned > 0
+				? "warning"
+				: "success";
 	let overallSummary;
 
 	if (decryptOutcome === "failure") {
 		overallSummary =
 			"One or more encrypted linter summaries could not be read. See the workflow logs.";
-	} else if (overallConclusion === "success") {
+	} else if (failed === 0 && warned === 0) {
 		overallSummary = `All ${total} selected linter(s) completed successfully.`;
-	} else {
+	} else if (failed === 0) {
+		overallSummary = `All ${total} selected linter(s) completed successfully; ${warned} reported warnings.`;
+	} else if (warned === 0) {
 		overallSummary = `${failed} of ${total} selected linter(s) reported issues or failed.`;
+	} else {
+		overallSummary = `${failed} of ${total} selected linter(s) reported issues or failed; ${warned} additional linter(s) reported warnings.`;
 	}
 
 	const commentLines = [
@@ -102,13 +116,14 @@ function renderCombinedReport({
 	appendSummaryTable(checkRunLines, rows);
 	appendTargetDetails(commentLines, rows);
 	appendTargetDetails(checkRunLines, rows);
-	appendFailureDetails(commentLines, detailSections);
-	appendFailureDetails(checkRunLines, detailSections);
+	appendDetailSections(commentLines, detailSections);
+	appendDetailSections(checkRunLines, detailSections);
 
 	return {
 		checkRunText: `${checkRunLines.join("\n")}\n`,
 		commentBody: `${commentLines.join("\n")}\n`,
 		overallConclusion,
+		overallStatus,
 		overallSummary,
 	};
 }
@@ -174,14 +189,14 @@ function appendTargetDetails(lines, rows) {
 	}
 }
 
-function appendFailureDetails(lines, detailSections) {
+function appendDetailSections(lines, detailSections) {
 	if (detailSections.length === 0) {
 		return;
 	}
 
 	lines.push(
 		"",
-		`<details><summary>Show details for ${detailSections.length} failing linter(s)</summary>`,
+		`<details><summary>Show details for ${detailSections.length} linter(s) with warnings or failures</summary>`,
 		"",
 	);
 
@@ -196,13 +211,16 @@ function appendFailureDetails(lines, detailSections) {
 }
 
 function buildDetailSection(summary) {
-	if (!isFailureLikeStatus(summary.status)) {
+	if (!isProblemLikeStatus(summary.status)) {
 		return "";
 	}
 
 	const lines = [`### ${summary.linterName}`, ""];
 
-	if (summary.status === "failure" && summary.detailsText.length > 0) {
+	if (
+		(summary.status === "warning" || summary.status === "failure") &&
+		summary.detailsText.length > 0
+	) {
 		lines.push("```text", summary.detailsText, "```");
 		return lines.join("\n");
 	}
@@ -282,6 +300,8 @@ function buildResultLabel(status) {
 	switch (status) {
 		case "success":
 			return "✅ Pass";
+		case "warning":
+			return "⚠️ Warning";
 		case "no_targets":
 			return "⚪ No targets";
 		case "infra_failure":
@@ -364,8 +384,10 @@ function extractSummaryText(commentBody) {
 	return "";
 }
 
-function isFailureLikeStatus(status) {
-	return ["failure", "infra_failure", "missing_summary"].includes(status);
+function isProblemLikeStatus(status) {
+	return ["warning", "failure", "infra_failure", "missing_summary"].includes(
+		status,
+	);
 }
 
 function readLinterSummaries(summaryRoot) {

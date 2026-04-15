@@ -67,21 +67,28 @@ function renderReport({
 	const hasStepFailure = [selectOutcome, installOutcome, runOutcome].includes(
 		"failure",
 	);
-	const success =
-		!hasStepFailure && (selectedFiles.length === 0 || exitCodeRaw === "0");
-	const conclusion = success ? "success" : "failure";
 	let detailsText = "";
 	const status =
 		hasStepFailure && result === null
 			? "infra_failure"
 			: selectedFiles.length === 0 && exitCodeRaw === ""
 				? "no_targets"
-				: success
-					? "success"
-					: "failure";
+				: !hasStepFailure &&
+						exitCodeRaw === "0" &&
+						hasNonBlockingFindings(result)
+					? "warning"
+					: !hasStepFailure &&
+							(selectedFiles.length === 0 || exitCodeRaw === "0")
+						? "success"
+						: "failure";
+	const conclusion =
+		status === "failure" || status === "infra_failure" ? "failure" : "success";
 
-	if (status === "failure") {
-		detailsText = resolveDetails(result, buildDetailsFallback(linterName));
+	if (status === "failure" || status === "warning") {
+		detailsText = resolveDetails(
+			result,
+			buildDetailsFallback(linterName, status),
+		);
 	}
 
 	const normalizedTargetStats = normalizeTargetStats({
@@ -102,7 +109,7 @@ function renderReport({
 		appendTargetLines(lines, targetLines);
 	}
 
-	if (status === "failure") {
+	if (status === "failure" || status === "warning") {
 		lines.push(
 			"",
 			"<details><summary>Details</summary>",
@@ -142,8 +149,22 @@ function resolveDetails(result, fallback) {
 	return details;
 }
 
-function buildDetailsFallback(linterName) {
+function buildDetailsFallback(linterName, status = "failure") {
+	if (status === "warning") {
+		return `The \`${linterName}\` run completed with warnings but did not produce diagnostic output.`;
+	}
+
 	return `The \`${linterName}\` run exited with issues but did not produce diagnostic output.`;
+}
+
+function countNonBlockingFindings(result) {
+	return Number.isInteger(result?.warning_count) && result.warning_count > 0
+		? result.warning_count
+		: 0;
+}
+
+function hasNonBlockingFindings(result) {
+	return countNonBlockingFindings(result) > 0;
 }
 
 function buildSummaryText({ linterName, status, targetStats }) {
@@ -152,6 +173,18 @@ function buildSummaryText({ linterName, status, targetStats }) {
 			return `✅ ${formatRatio(targetStats.passedTargetCount, targetStats.targetCount)} ${formatTargetLabel(targetStats.targetKind, targetStats.targetCount)} passed.`;
 		case "no_targets":
 			return `⚪ 0 ${formatTargetLabel(targetStats.targetKind, 0)} checked.`;
+		case "warning":
+			if (
+				targetStats.countsKnown &&
+				targetStats.issueTargetCount !== null &&
+				targetStats.targetCount !== null
+			) {
+				return `⚠️ Checked ${formatTargetQuantity(targetStats.targetCount, targetStats.targetKind)}; ${formatTargetQuantity(targetStats.issueTargetCount, targetStats.targetKind)} reported warnings.`;
+			}
+
+			return targetStats.targetCount === null
+				? `⚠️ The \`${linterName}\` run completed with warnings.`
+				: `⚠️ Checked ${formatTargetQuantity(targetStats.targetCount, targetStats.targetKind)}; warning counts are unavailable.`;
 		case "infra_failure":
 			return targetStats.targetCount === null
 				? `❌ The \`${linterName}\` workflow failed before diagnostics were produced. See the workflow logs.`

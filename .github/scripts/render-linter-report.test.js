@@ -307,6 +307,59 @@ test("includes checked targets before diagnostic details on failure", () => {
 	}
 });
 
+test("renders warning summaries and details without failing the report", () => {
+	const context = makeTempRepo("render-linter-report-warning-");
+
+	try {
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "selected-files.txt"),
+			`${["src/app.js"].join("\n")}\n`,
+			"utf8",
+		);
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "linter-result.json"),
+			JSON.stringify({
+				details: "warning[EX123]: unexpected thing",
+				exit_code: 0,
+				warning_count: 1,
+			}),
+			"utf8",
+		);
+
+		const report = renderReport({
+			configPath,
+			exitCodeRaw: "0",
+			installOutcome: "success",
+			linterName: "actionlint",
+			resultPath: path.join(context.runnerTemp, "linter-result.json"),
+			runOutcome: "success",
+			selectedFilesPath: path.join(context.runnerTemp, "selected-files.txt"),
+			selectOutcome: "success",
+			sourceRepositoryPath: context.repoDir,
+			targetStats: {
+				counts_known: true,
+				issue_count: 1,
+				issue_target_count: 1,
+				passed_target_count: 0,
+				target_count: 1,
+				target_kind: "file",
+			},
+		});
+
+		assert.equal(report.conclusion, "success");
+		assert.equal(report.status, "warning");
+		assert.equal(
+			report.summaryText,
+			"⚠️ Checked 1 file; 1 file reported warnings.",
+		);
+		assert.match(report.body, /⚠️ Checked 1 file; 1 file reported warnings\./);
+		assert.match(report.body, /<details><summary>Details<\/summary>/);
+		assert.match(report.body, /warning\[EX123\]: unexpected thing/);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
 test("renders rustfmt failure summaries from issue target counts instead of echoed checks", () => {
 	const context = makeTempRepo("render-linter-report-rustfmt-failure-");
 	const selectedFiles = [
