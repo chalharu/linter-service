@@ -291,6 +291,69 @@ test("parses file line and column diagnostics into SARIF results", () => {
 	}
 });
 
+test("keeps failing-file counts unknown when fallback diagnostics have no file path", () => {
+	const context = makeTempRepo("render-linter-sarif-pathless-fallback-");
+	const configPath = path.join(context.tempDir, "config.json");
+
+	writeFile(path.join(context.repoDir, "src/app.js"), "console.log('bad');\n");
+	writeFile(
+		path.join(context.repoDir, "src/worker.js"),
+		"console.log('ok');\n",
+	);
+	writeFile(
+		configPath,
+		JSON.stringify(
+			{
+				linters: {
+					example: {
+						sarif: {
+							enabled: true,
+						},
+					},
+				},
+			},
+			null,
+			2,
+		),
+	);
+	writeFile(
+		path.join(context.runnerTemp, "selected-files.txt"),
+		"src/app.js\nsrc/worker.js\n",
+	);
+	writeFile(
+		path.join(context.runnerTemp, "linter-result.json"),
+		JSON.stringify({
+			details: "configuration file is invalid",
+			exit_code: 1,
+		}),
+	);
+
+	try {
+		const report = renderSarif({
+			configPath,
+			installOutcome: "success",
+			linterName: "example",
+			outputPath: path.join(context.runnerTemp, "example.sarif"),
+			resultPath: path.join(context.runnerTemp, "linter-result.json"),
+			runOutcome: "success",
+			selectedFilesPath: path.join(context.runnerTemp, "selected-files.txt"),
+			selectOutcome: "success",
+			sourceRepositoryPath: context.repoDir,
+		});
+
+		assert.equal(report.produced, true);
+		assert.equal(report.targetStats.counts_known, false);
+		assert.equal(report.targetStats.issue_count, 1);
+		assert.equal(report.targetStats.issue_target_count, null);
+		assert.equal(report.targetStats.passed_target_count, null);
+		assert.equal(report.targetStats.target_count, 2);
+		assert.equal(report.sarif.runs[0].results.length, 1);
+		assert.equal(report.sarif.runs[0].results[0].locations, undefined);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
 test("does not remap temp-worktree absolute paths for generated files missing from the repository", () => {
 	const context = makeTempRepo("render-linter-sarif-temp-worktree-path-");
 

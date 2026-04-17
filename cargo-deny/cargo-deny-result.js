@@ -1,5 +1,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const {
+	parseJsonLines,
+} = require("../.github/scripts/lib/parse-json-lines.js");
 
 const {
 	buildCargoDenyPackageLabel,
@@ -11,27 +14,6 @@ const {
 const ADVISORY_WARNING_KINDS = new Set(["notice", "unmaintained", "unsound"]);
 const DEFAULT_CARGO_DENY_MESSAGE = "cargo-deny reported an issue";
 const IGNORED_WARNING_CODES = new Set(["duplicate"]);
-
-function parseJsonLines(text) {
-	const items = [];
-	const rawLines = [];
-
-	for (const rawLine of String(text || "").split(/\r?\n/u)) {
-		const line = rawLine.trim();
-
-		if (line.length === 0) {
-			continue;
-		}
-
-		try {
-			items.push(JSON.parse(line));
-		} catch {
-			rawLines.push(rawLine);
-		}
-	}
-
-	return { items, rawLines };
-}
 
 function isCargoDenyAdvisoryLikeDiagnostic(diagnostic) {
 	const fields = diagnostic?.fields;

@@ -7,7 +7,7 @@
       },
       "results": [
         {
-          "level": "warning",
+          "level": "error",
           "locations": [
             {
               "physicalLocation": {
@@ -27,7 +27,7 @@
           "properties": {
             "linter_name": "cargo-clippy"
           },
-          "ruleId": "cargo-clippy/diagnostic"
+          "ruleId": "clippy::ptr_arg"
         }
       ],
       "tool": {
@@ -36,10 +36,10 @@
           "name": "linter-service/cargo-clippy",
           "rules": [
             {
-              "id": "cargo-clippy/diagnostic",
-              "name": "cargo-clippy/diagnostic",
+              "id": "clippy::ptr_arg",
+              "name": "clippy::ptr_arg",
               "shortDescription": {
-                "text": "cargo-clippy/diagnostic"
+                "text": "clippy::ptr_arg"
               }
             }
           ]

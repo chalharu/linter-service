@@ -7,8 +7,13 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$script_dir/common.sh"
 
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
-cargo_clippy_require_docker
 output_file="$RUNNER_TEMP/linter-output.txt"
+result_json_file="$RUNNER_TEMP/cargo-clippy-result.json"
+structured_runs_file="$RUNNER_TEMP/cargo-clippy-structured-runs.json"
+run_entries_dir="$RUNNER_TEMP/cargo-clippy-runs"
+rm -f "$result_json_file" "$structured_runs_file"
+rm -rf "$run_entries_dir"
+cargo_clippy_require_docker
 manifests=()
 normalized_manifests=()
 relevant_dirs=()
@@ -37,7 +42,8 @@ user_id=$(id -u)
 group_id=$(id -g)
 
 rm -rf "$workspace_root"
-mkdir -p "$cargo_home" "$rustup_root" "$target_root"
+rm -rf "$run_entries_dir"
+mkdir -p "$cargo_home" "$rustup_root" "$target_root" "$run_entries_dir"
 linter_lib::copy_worktree_without_git "$source_root"
 
 cleanup_workspace() {
@@ -77,6 +83,7 @@ docker_run_common=(
   --mount "type=bind,src=$cargo_home,dst=/cargo-home"
   --mount "type=bind,src=$rustup_root,dst=/usr/local/rustup"
   --mount "type=bind,src=$target_root,dst=/cargo-target"
+  --mount "type=bind,src=$run_entries_dir,dst=/run-entries"
   --env CARGO_HOME=/cargo-home
   --env CARGO_TARGET_DIR=/cargo-target
   --env CARGO_TERM_COLOR=never
@@ -129,6 +136,8 @@ run_cargo_clippy() {
     return 1
   fi
 
+  rm -rf "$run_entries_dir"
+  mkdir -p "$run_entries_dir"
   rm -f "$fetch_failures_path"
 
   if ! docker run \
@@ -177,12 +186,26 @@ run_cargo_clippy() {
     "$image_ref" \
     sh -ceu '
       failure=0
+      run_index=0
       for manifest_path in "$@"; do
-        printf "==> docker run cargo clippy --manifest-path %s --all-targets -- -D warnings\n" "$manifest_path"
-        if ! cargo clippy --manifest-path "$manifest_path" --all-targets -- -D warnings; then
+        run_index=$((run_index + 1))
+        run_dir=$(printf "/run-entries/%04d" "$run_index")
+        mkdir -p "$run_dir"
+        printf "%s\n" "docker run cargo clippy --manifest-path $manifest_path --all-targets -- -D warnings" > "$run_dir/command.txt"
+        printf "%s\n" "$manifest_path" > "$run_dir/manifest_path.txt"
+        set +e
+        cargo clippy \
+          --message-format=json \
+          --manifest-path "$manifest_path" \
+          --all-targets \
+          -- \
+          -D warnings >"$run_dir/stdout.txt" 2>"$run_dir/stderr.txt"
+        run_exit=$?
+        set -e
+        printf "%s\n" "$run_exit" > "$run_dir/exit_code.txt"
+        if [ "$run_exit" -ne 0 ]; then
           failure=1
         fi
-        echo
       done
       exit "$failure"
     ' sh "${clippy_manifests[@]}"; then
@@ -192,4 +215,14 @@ run_cargo_clippy() {
   return "$failure"
 }
 
-linter_lib::run_and_emit_json "$output_file" run_cargo_clippy
+set +e
+run_cargo_clippy >"$output_file" 2>&1
+exit_code=$?
+set -e
+
+node "$script_dir/cargo-clippy-result.js" \
+  "$run_entries_dir" \
+  "$output_file" \
+  "$exit_code" \
+  "$structured_runs_file" > "$result_json_file"
+cat "$result_json_file"
