@@ -224,15 +224,16 @@ function collectSarifTargetPaths({
 function buildTargetStats({ results, targetKind, targetPaths }) {
 	const targetCount = targetPaths.length;
 	const issueTargetCount = countIssueTargets(results, targetPaths);
+	const countsKnown = results.length === 0 || issueTargetCount !== null;
 
 	return {
-		counts_known: true,
+		counts_known: countsKnown,
 		issue_count: results.length,
 		issue_target_count: issueTargetCount,
 		passed_target_count:
-			issueTargetCount === null
-				? null
-				: Math.max(targetCount - issueTargetCount, 0),
+			countsKnown && issueTargetCount !== null
+				? Math.max(targetCount - issueTargetCount, 0)
+				: null,
 		target_count: targetCount,
 		target_kind: targetKind,
 	};
@@ -267,10 +268,6 @@ function countIssueTargets(results, targetPaths) {
 		return targetPaths.length > 0
 			? Math.min(locations.size, targetPaths.length)
 			: locations.size;
-	}
-
-	if (targetPaths.length > 0) {
-		return 1;
 	}
 
 	return null;
@@ -739,7 +736,7 @@ function buildFallbackResults({
 	const fallbackPaths =
 		collectedFallbackPaths.length > 0
 			? collectedFallbackPaths
-			: targetPaths.length > 0
+			: targetPaths.length === 1
 				? targetPaths
 				: [null];
 	const results = [];

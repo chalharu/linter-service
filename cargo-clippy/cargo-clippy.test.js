@@ -52,6 +52,7 @@ case "$command" in
     is_rustup_seed=0
     has_rustup_runtime_mount=0
     option_with_value=""
+    run_entries_mount_src=""
     work_mount_src=""
     batch_mode=""
     for arg in "$@"; do
@@ -69,6 +70,10 @@ case "$command" in
                 ;;
               *"dst=/usr/local/rustup"*|*"target=/usr/local/rustup"*)
                 has_rustup_runtime_mount=1
+                ;;
+              *"dst=/run-entries"*|*"target=/run-entries"*)
+                run_entries_mount_src="\${arg#*src=}"
+                run_entries_mount_src="\${run_entries_mount_src%%,*}"
                 ;;
             esac
             ;;
@@ -191,15 +196,44 @@ NODE
         exit 0
       fi
       failure=0
+      run_index=0
       for manifest in "\${batch_manifests[@]}"; do
+        run_index=$((run_index + 1))
+        run_dir=""
+        if [ -n "$run_entries_mount_src" ]; then
+          run_dir=$(printf '%s/%04d' "$run_entries_mount_src" "$run_index")
+          mkdir -p "$run_dir"
+          printf 'docker run cargo clippy --manifest-path %s --all-targets -- -D warnings\\n' "$manifest" > "$run_dir/command.txt"
+          printf '%s\\n' "$manifest" > "$run_dir/manifest_path.txt"
+        fi
         printf '%s\\n' "$manifest" >> "$DOCKER_MANIFEST_LOG"
-        printf '==> docker run cargo clippy --manifest-path %s --all-targets -- -D warnings\\n' "$manifest"
-        printf 'checked %s\\n' "$manifest"
+        stdout_text=""
+        stderr_text="checked $manifest"
+        run_exit=0
         if [ -n "\${FAIL_MANIFEST:-}" ] && [ "$manifest" = "$FAIL_MANIFEST" ]; then
-          printf 'clippy failure %s\\n' "$manifest" >&2
+          case "$manifest" in
+            crates/member/Cargo.toml)
+              diagnostic_path="crates/member/src/lib.rs"
+              crate_name="member"
+              ;;
+            *)
+              diagnostic_path="src/lib.rs"
+              crate_name="fixture"
+              ;;
+          esac
+          stdout_text=$(cat <<EOF
+{"reason":"compiler-message","manifest_path":"/work/$manifest","package_id":"path+file:///work#$crate_name","target":{"kind":["lib"],"name":"$crate_name","src_path":"/work/$diagnostic_path"},"message":{"code":{"code":"clippy::ptr_arg","explanation":null},"level":"error","message":"clippy failure","rendered":"error: clippy failure\\n --> /work/$diagnostic_path:1:24\\n","spans":[{"file_name":"/work/$diagnostic_path","line_start":1,"column_start":24,"is_primary":true}],"children":[]}}
+EOF
+)
+          stderr_text="error: could not compile $crate_name (lib) due to 1 previous error"
+          run_exit=1
           failure=1
         fi
-        echo
+        if [ -n "$run_dir" ]; then
+          printf '%s' "$stdout_text" > "$run_dir/stdout.txt"
+          printf '%s\\n' "$stderr_text" > "$run_dir/stderr.txt"
+          printf '%s\\n' "$run_exit" > "$run_dir/exit_code.txt"
+        fi
       done
       exit "$failure"
     fi
@@ -334,6 +368,7 @@ defineCommonCargoManifestTests({
 			runArgs,
 			/--env LINTER_SERVICE_BATCH_MODE=clippy --network=none localhost\/linter-service-cargo-clippy:rust-1-bookworm sh -ceu/,
 		);
+		assert.match(runArgs, /--message-format=json/);
 		assert.match(
 			runArgs,
 			/--cap-drop ALL --security-opt no-new-privileges --read-only --tmpfs \/tmp/,
@@ -370,11 +405,8 @@ defineCommonCargoManifestTests({
 	},
 	assertContinueAfterFailureResult({ result, tooling }) {
 		assert.equal(result.exit_code, 1);
-		assert.deepEqual(
-			fs.readFileSync(tooling.dockerManifestLog, "utf8").trim().split("\n"),
-			["Cargo.toml", "crates/member/Cargo.toml"],
-		);
-		assert.match(result.details, /clippy failure Cargo\.toml/);
+		assert.match(result.details, /error: clippy failure/);
+		assert.match(result.details, /could not compile fixture \(lib\)/);
 		assert.match(
 			result.details,
 			/docker run cargo clippy --manifest-path crates\/member\/Cargo\.toml --all-targets -- -D warnings/,
@@ -449,6 +481,10 @@ edition = "2021"
 index = "sparse+https://example.invalid/index/"
 `,
 	);
+	writeFile(
+		path.join(context.runnerTemp, "cargo-clippy-structured-runs.json"),
+		'[{"stale":true}]\n',
+	);
 
 	try {
 		const output = execFileSync("bash", [runPath, "src/lib.rs"], {
@@ -467,6 +503,12 @@ index = "sparse+https://example.invalid/index/"
 		assert.match(
 			result.details,
 			/Repository-supplied `\.cargo\/config\.toml` is not supported/,
+		);
+		assert.equal(
+			fs.existsSync(
+				path.join(context.runnerTemp, "cargo-clippy-structured-runs.json"),
+			),
+			false,
 		);
 		assert.equal(fs.existsSync(tooling.dockerRunArgsLog), false);
 		assert.equal(fs.existsSync(tooling.dockerManifestLog), false);
