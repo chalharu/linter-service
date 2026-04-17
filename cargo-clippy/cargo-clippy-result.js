@@ -133,6 +133,42 @@ function isCargoClippyActionableDiagnostic(diagnostic) {
 	return !["failure-note", "help", "note"].includes(diagnostic.message.level);
 }
 
+function buildCargoClippyDiagnosticKey(diagnostic) {
+	const message =
+		diagnostic?.message && typeof diagnostic.message === "object"
+			? diagnostic.message
+			: {};
+	const span = resolveCargoClippyPrimarySpan(message);
+
+	return [
+		typeof diagnostic?.manifest_path === "string"
+			? diagnostic.manifest_path
+			: "",
+		typeof message.level === "string" ? message.level : "",
+		typeof message?.code?.code === "string" ? message.code.code : "",
+		typeof message.message === "string" ? message.message : "",
+		typeof message.rendered === "string" ? message.rendered : "",
+		typeof span?.file_name === "string" ? span.file_name : "",
+		String(span?.line_start || 0),
+		String(span?.column_start || 0),
+	].join("\u0000");
+}
+
+function dedupeCargoClippyDiagnostics(diagnostics) {
+	const seen = new Set();
+
+	return diagnostics.filter((diagnostic) => {
+		const key = buildCargoClippyDiagnosticKey(diagnostic);
+
+		if (seen.has(key)) {
+			return false;
+		}
+
+		seen.add(key);
+		return true;
+	});
+}
+
 function normalizeCargoClippyRun(run) {
 	const stdoutParsed = parseJsonLines(String(run?.stdout || ""));
 	const stderrParsed = parseJsonLines(String(run?.stderr || ""));
@@ -162,10 +198,12 @@ function normalizeCargoClippyRun(run) {
 					: null,
 		}))
 		.filter(isCargoClippyActionableDiagnostic);
-	const diagnostics = structuredMessages.filter(
+	const dedupedStructuredMessages =
+		dedupeCargoClippyDiagnostics(structuredMessages);
+	const diagnostics = dedupedStructuredMessages.filter(
 		(diagnostic) => !isCargoClippyWarningDiagnostic(diagnostic),
 	);
-	const warning_diagnostics = structuredMessages.filter(
+	const warning_diagnostics = dedupedStructuredMessages.filter(
 		isCargoClippyWarningDiagnostic,
 	);
 
@@ -259,7 +297,7 @@ function renderCargoClippyRunDetails(run) {
 		blocks.push(trailingLines.join("\n"));
 	}
 
-	return blocks;
+	return blocks.join("\n");
 }
 
 function buildCargoClippyResult({
@@ -284,7 +322,7 @@ function buildCargoClippyResult({
 				? readTextFile(detailsPath).trim()
 				: "";
 	const details = [preludeDetails]
-		.concat(normalizedRuns.flatMap(renderCargoClippyRunDetails))
+		.concat(normalizedRuns.map(renderCargoClippyRunDetails))
 		.filter((block) => typeof block === "string" && block.trim().length > 0)
 		.join("\n\n")
 		.trim();

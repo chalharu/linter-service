@@ -103,3 +103,63 @@ test("buildCargoClippyResult omits structured runs when no compiler diagnostics 
 	);
 	assert.match(result.details, /Finished `dev` profile/);
 });
+
+test("buildCargoClippyResult dedupes repeated compiler diagnostics", () => {
+	const rendered =
+		"error: writing `&Vec` instead of `&[_]` involves a new object where a slice will do\n --> /work/src/lib.rs:1:24\n";
+	const compilerMessage = {
+		reason: "compiler-message",
+		manifest_path: "/work/Cargo.toml",
+		package_id: "path+file:///work#demo",
+		target: {
+			kind: ["lib"],
+			name: "demo",
+			src_path: "/work/src/lib.rs",
+		},
+		message: {
+			code: {
+				code: "clippy::ptr_arg",
+				explanation: null,
+			},
+			children: [],
+			level: "error",
+			message:
+				"writing `&Vec` instead of `&[_]` involves a new object where a slice will do",
+			rendered,
+			spans: [
+				{
+					column_start: 24,
+					file_name: "/work/src/lib.rs",
+					is_primary: true,
+					line_start: 1,
+				},
+			],
+		},
+	};
+	const result = buildCargoClippyResult({
+		detailsText: "",
+		entriesDir: "/unused",
+		exitCode: 1,
+		runs: [
+			{
+				command:
+					"docker run cargo clippy --manifest-path Cargo.toml --all-targets -- -D warnings",
+				exit_code: 1,
+				manifest_path: "Cargo.toml",
+				stderr:
+					"error: could not compile `demo` (lib) due to 1 previous error\n",
+				stdout: `${JSON.stringify(compilerMessage)}\n${JSON.stringify(
+					compilerMessage,
+				)}`,
+			},
+		],
+	});
+
+	assert.equal(result.cargo_clippy_runs[0].diagnostics.length, 1);
+	assert.equal(
+		result.details.match(
+			/error: writing `&Vec` instead of `&\[_\]` involves a new object where a slice will do/g,
+		)?.length,
+		1,
+	);
+});
