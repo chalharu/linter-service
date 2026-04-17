@@ -403,7 +403,7 @@ defineCommonCargoManifestTests({
 	continueFailureEnv: {
 		FAIL_MANIFEST: "Cargo.toml",
 	},
-	assertContinueAfterFailureResult({ result, tooling }) {
+	assertContinueAfterFailureResult({ result }) {
 		assert.equal(result.exit_code, 1);
 		assert.match(result.details, /error: clippy failure/);
 		assert.match(result.details, /could not compile fixture \(lib\)/);
