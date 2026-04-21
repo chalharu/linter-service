@@ -1,4 +1,8 @@
-function collectFallbackPaths({ details, targetPaths }) {
+function collectFallbackPaths({
+	details,
+	normalizeReportedPath: normalizePath = (reportedPath) => reportedPath,
+	targetPaths,
+}) {
 	const targetSet = new Set(targetPaths);
 	const fallbackPaths = [];
 
@@ -6,15 +10,16 @@ function collectFallbackPaths({ details, targetPaths }) {
 		/^Diff in (?<filePath>.+?)(?::\d+| at line \d+):\s*$/gmu,
 	)) {
 		const filePath = match.groups?.filePath;
+		const normalizedPath = filePath ? normalizePath(filePath) : null;
 		if (
-			!filePath ||
-			!targetSet.has(filePath) ||
-			fallbackPaths.includes(filePath)
+			!normalizedPath ||
+			!targetSet.has(normalizedPath) ||
+			fallbackPaths.includes(normalizedPath)
 		) {
 			continue;
 		}
 
-		fallbackPaths.push(filePath);
+		fallbackPaths.push(normalizedPath);
 	}
 
 	return fallbackPaths;
