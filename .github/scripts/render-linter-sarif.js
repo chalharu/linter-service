@@ -731,6 +731,8 @@ function buildFallbackResults({
 		configPath,
 		details,
 		linterName,
+		reportedPathRoots,
+		sourceRepositoryPath,
 		targetPaths,
 	});
 	const fallbackPaths =
@@ -768,12 +770,16 @@ function collectFallbackPaths({
 	configPath,
 	details,
 	linterName,
+	reportedPathRoots,
+	sourceRepositoryPath,
 	targetPaths,
 }) {
 	const explicitPaths = extractFallbackPaths({
 		configPath,
 		details,
 		linterName,
+		reportedPathRoots,
+		sourceRepositoryPath,
 		targetPaths,
 	});
 
@@ -788,6 +794,8 @@ function extractFallbackPaths({
 	configPath,
 	details,
 	linterName,
+	reportedPathRoots,
+	sourceRepositoryPath,
 	targetPaths,
 }) {
 	const hook = loadLinterHook({
@@ -802,6 +810,13 @@ function extractFallbackPaths({
 
 	const fallbackPaths = hook.collectFallbackPaths({
 		details,
+		normalizeReportedPath: (reportedPath) =>
+			normalizeReportedPath(
+				sourceRepositoryPath,
+				reportedPath,
+				targetPaths,
+				reportedPathRoots,
+			),
 		targetPaths,
 	});
 

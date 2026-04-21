@@ -537,3 +537,53 @@ test("counts rustfmt issue targets from at-line diff lines instead of echoed che
 		cleanupTempRepo(context.tempDir);
 	}
 });
+
+test("counts rustfmt issue targets from absolute diff lines instead of echoed checked paths", () => {
+	const context = makeTempRepo("render-linter-sarif-rustfmt-absolute-");
+	const selectedFiles = ["src/lib.rs", "src/main.rs"];
+
+	for (const filePath of selectedFiles) {
+		writeFile(path.join(context.repoDir, filePath), "fn demo() {}\n");
+	}
+
+	const details = `${selectedFiles
+		.map((filePath) => `==> rustfmt --check ${filePath}`)
+		.join("\n")}\nDiff in ${path.join(context.repoDir, "src/lib.rs")}:1:\n`;
+
+	writeFile(
+		path.join(context.runnerTemp, "selected-files.txt"),
+		`${selectedFiles.join("\n")}\n`,
+	);
+	writeFile(
+		path.join(context.runnerTemp, "linter-result.json"),
+		JSON.stringify({
+			details,
+			exit_code: 1,
+		}),
+	);
+
+	try {
+		const report = renderSarif({
+			configPath: rootConfigPath,
+			installOutcome: "success",
+			linterName: "rustfmt",
+			outputPath: path.join(context.runnerTemp, "rustfmt.sarif"),
+			resultPath: path.join(context.runnerTemp, "linter-result.json"),
+			runOutcome: "success",
+			selectedFilesPath: path.join(context.runnerTemp, "selected-files.txt"),
+			selectOutcome: "success",
+			sourceRepositoryPath: context.repoDir,
+		});
+
+		assert.equal(report.targetStats.issue_target_count, 1);
+		assert.equal(report.targetStats.passed_target_count, 1);
+		assert.equal(report.sarif.runs[0].results.length, 1);
+		assert.equal(
+			report.sarif.runs[0].results[0].locations[0].physicalLocation
+				.artifactLocation.uri,
+			"src/lib.rs",
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
