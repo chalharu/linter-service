@@ -84,6 +84,16 @@ const installerExpectations = [
 		],
 	},
 	{
+		path: "cargo-coupling/install.sh",
+		required: [
+			/# renovate: datasource=github-tags depName=nwiizo\/cargo-coupling/u,
+			/cargo_coupling_version="[^"\n]+"/u,
+			/cargo_coupling_source_archive_sha256="[a-f0-9]{64}"/u,
+			/archive\/refs\/tags\/\$\{cargo_coupling_version\}\.tar\.gz/u,
+			/CARGO_COUPLING_SOURCE_ARCHIVE_SHA256:-\$cargo_coupling_source_archive_sha256/u,
+		],
+	},
+	{
 		path: "cargo-deny/install.sh",
 		required: [
 			/# renovate: datasource=rust depName=rust versioning=semver/u,
@@ -213,7 +223,10 @@ test("renovate manages installer pins with a three day hold", () => {
 				manager.customType === "regex" &&
 				Array.isArray(manager.managerFilePatterns) &&
 				manager.managerFilePatterns.includes("/(^|/)[^/]+/install\\.sh$/") &&
-				manager.managerFilePatterns.includes("/(^|/)renovate/Dockerfile$/"),
+				manager.managerFilePatterns.includes("/(^|/)renovate/Dockerfile$/") &&
+				manager.managerFilePatterns.includes(
+					"/(^|/)cargo-coupling/Dockerfile\\.full$/",
+				),
 		),
 	);
 	assert.ok(
@@ -241,6 +254,44 @@ test("renovate Dockerfile uses a renovate-managed pinned slim base image", () =>
 		/ARG RENOVATE_BASE_IMAGE=docker\.io\/library\/node:24-bookworm-slim@sha256:[a-f0-9]{64}/u,
 	);
 	assert.match(dockerfile, /FROM \$\{RENOVATE_BASE_IMAGE\}/u);
+});
+
+test("cargo-coupling Dockerfile.full uses renovate-managed pinned build inputs", () => {
+	const dockerfile = fs.readFileSync(
+		path.join(repoRoot, "cargo-coupling", "Dockerfile.full"),
+		"utf8",
+	);
+
+	assert.match(
+		dockerfile,
+		/# renovate: datasource=docker depName=library\/rust versioning=docker/u,
+	);
+	assert.match(
+		dockerfile,
+		/ARG CARGO_COUPLING_BUILD_BASE_IMAGE=docker\.io\/library\/rust:slim-bookworm@sha256:[a-f0-9]{64}/u,
+	);
+	assert.match(dockerfile, /# renovate: datasource=crate depName=cargo-chef/u);
+	assert.match(dockerfile, /ARG CARGO_CHEF_VERSION=\d+\.\d+\.\d+/u);
+	assert.match(
+		dockerfile,
+		/cargo install cargo-chef --locked --version \$\{CARGO_CHEF_VERSION\}/u,
+	);
+	assert.match(
+		dockerfile,
+		/FROM \$\{CARGO_COUPLING_BUILD_BASE_IMAGE\} AS chef/u,
+	);
+	assert.match(
+		dockerfile,
+		/# renovate: datasource=docker depName=library\/debian versioning=docker/u,
+	);
+	assert.match(
+		dockerfile,
+		/ARG CARGO_COUPLING_RUNTIME_BASE_IMAGE=docker\.io\/library\/debian:bookworm-slim@sha256:[a-f0-9]{64}/u,
+	);
+	assert.match(
+		dockerfile,
+		/FROM \$\{CARGO_COUPLING_RUNTIME_BASE_IMAGE\} AS runtime/u,
+	);
 });
 
 test("renovate enables npm package manifest updates", () => {
@@ -355,7 +406,7 @@ test("renovate textlint preset regex matches all YAML preset packages", () => {
 	]);
 });
 
-test("renovate installer regex matches both Renovate and the pinned base image", () => {
+test("renovate installer regex matches installer versions and pinned Docker base images", () => {
 	const config = JSON.parse(
 		fs.readFileSync(path.join(repoRoot, "renovate.json"), "utf8"),
 	);
@@ -364,12 +415,23 @@ test("renovate installer regex matches both Renovate and the pinned base image",
 			candidate.customType === "regex" &&
 			Array.isArray(candidate.managerFilePatterns) &&
 			candidate.managerFilePatterns.includes("/(^|/)[^/]+/install\\.sh$/") &&
-			candidate.managerFilePatterns.includes("/(^|/)renovate/Dockerfile$/"),
+			candidate.managerFilePatterns.includes("/(^|/)renovate/Dockerfile$/") &&
+			candidate.managerFilePatterns.includes(
+				"/(^|/)cargo-coupling/Dockerfile\\.full$/",
+			),
 	);
 
 	assert.ok(manager, "expected installer regex custom manager");
 	assert.ok(Array.isArray(manager.matchStrings), "expected regex matchStrings");
 
+	const cargoCouplingInstallScript = fs.readFileSync(
+		path.join(repoRoot, "cargo-coupling", "install.sh"),
+		"utf8",
+	);
+	const cargoCouplingDockerfile = fs.readFileSync(
+		path.join(repoRoot, "cargo-coupling", "Dockerfile.full"),
+		"utf8",
+	);
 	const installScript = fs.readFileSync(
 		path.join(repoRoot, "renovate", "install.sh"),
 		"utf8",
@@ -380,6 +442,12 @@ test("renovate installer regex matches both Renovate and the pinned base image",
 	);
 	const matches = manager.matchStrings
 		.flatMap((pattern) => [
+			...cargoCouplingInstallScript.matchAll(
+				createJavaScriptRegExpFromRenovatePattern(pattern),
+			),
+			...cargoCouplingDockerfile.matchAll(
+				createJavaScriptRegExpFromRenovatePattern(pattern),
+			),
 			...installScript.matchAll(
 				createJavaScriptRegExpFromRenovatePattern(pattern),
 			),
@@ -387,12 +455,20 @@ test("renovate installer regex matches both Renovate and the pinned base image",
 				createJavaScriptRegExpFromRenovatePattern(pattern),
 			),
 		])
-		.map(({ groups }) => `${groups.depName}@${groups.currentValue}`);
+		.map(({ groups }) => `${groups.depName}@${groups.currentValue}`)
+		.sort();
 
-	assert.deepEqual(matches, [
-		"renovate@43.104.4",
-		"library/node@docker.io/library/node:24-bookworm-slim@sha256:b506e7321f176aae77317f99d67a24b272c1f09f1d10f1761f2773447d8da26c",
-	]);
+	assert.deepEqual(
+		matches,
+		[
+			"cargo-chef@0.1.77",
+			"library/debian@docker.io/library/debian:bookworm-slim@sha256:f9c6a2fd2ddbc23e336b6257a5245e31f996953ef06cd13a59fa0a1df2d5c252",
+			"library/node@docker.io/library/node:24-bookworm-slim@sha256:b506e7321f176aae77317f99d67a24b272c1f09f1d10f1761f2773447d8da26c",
+			"library/rust@docker.io/library/rust:slim-bookworm@sha256:caaf9ca7acd474892186860307d6f28e51fdbc1a4eada459fcff81517cf46a36",
+			"nwiizo/cargo-coupling@v0.3.2",
+			"renovate@43.104.4",
+		].sort(),
+	);
 });
 
 test("root shared Node dependencies use exact version pins", () => {

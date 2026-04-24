@@ -1,0 +1,56 @@
+{
+  "checked_projects": [
+    "Cargo.toml"
+  ],
+  "result": {
+    "cargo_coupling_runs": [
+      {
+        "analysis_path": "src",
+        "command": "docker run cargo-coupling --json --no-git src",
+        "check_result": {
+          "circular_count": 0,
+          "critical_count": 0,
+          "failures": [],
+          "grade": "B",
+          "high_count": 0,
+          "medium_count": 0,
+          "passed": true,
+          "score": 0.91
+        },
+        "exit_code": 0,
+        "json_output": {
+          "circular_dependencies": [],
+          "hotspots": [],
+          "issues": [],
+          "modules": [
+            {
+              "balance_score": 0.91,
+              "couplings_in": 0,
+              "couplings_out": 1,
+              "file_path": "src/lib.rs",
+              "in_cycle": false,
+              "name": "fixture_pass::service"
+            }
+          ],
+          "summary": {
+            "critical_issues": 0,
+            "external_couplings": 0,
+            "health_grade": "B",
+            "health_score": 0.91,
+            "high_issues": 0,
+            "internal_couplings": 1,
+            "medium_issues": 0,
+            "total_couplings": 1,
+            "total_modules": 1
+          }
+        },
+        "manifest_path": "Cargo.toml"
+      }
+    ],
+    "details": "==> docker run cargo-coupling --json --no-git src\nGrade: B | Score: 91% | Quality gate: PASSED\nThresholds: min_grade=B, max_critical=0, max_circular=0\nModules: 1 | Couplings: 1 | Critical: 0 | High: 0 | Medium: 0 | Circular: 0",
+    "exit_code": 0
+  },
+  "selected_files": [
+    "src/lib.rs"
+  ]
+}

@@ -94,6 +94,13 @@
         "target_kind": "cargo-projects"
       }
     },
+    "cargo-coupling": {
+      "isolated": true,
+      "sarif": {
+        "enabled": true,
+        "target_kind": "cargo-projects"
+      }
+    },
     "taplo": {
       "sarif": {
         "enabled": true

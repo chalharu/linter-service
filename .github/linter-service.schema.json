@@ -24,6 +24,9 @@
         },
         "textlint": {
           "$ref": "#/$defs/textlintLinterConfig"
+        },
+        "cargo-coupling": {
+          "$ref": "#/$defs/cargoCouplingLinterConfig"
         }
       },
       "additionalProperties": {
@@ -52,6 +55,7 @@
         "rustfmt",
         "cargo-clippy",
         "cargo-deny",
+        "cargo-coupling",
         "taplo",
         "biome",
         "editorconfig-checker",
@@ -234,6 +238,42 @@
           }
         }
       ]
+    },
+    "cargoCouplingMinGrade": {
+      "type": "string",
+      "enum": [
+        "S",
+        "A",
+        "B",
+        "C",
+        "D",
+        "F"
+      ]
+    },
+    "cargoCouplingThreshold": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "cargoCouplingLinterConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "disabled": {
+          "type": "boolean"
+        },
+        "exclude_paths": {
+          "$ref": "#/$defs/nonEmptyStringArray"
+        },
+        "min_grade": {
+          "$ref": "#/$defs/cargoCouplingMinGrade"
+        },
+        "max_critical": {
+          "$ref": "#/$defs/cargoCouplingThreshold"
+        },
+        "max_circular": {
+          "$ref": "#/$defs/cargoCouplingThreshold"
+        }
+      }
     }
   }
 }

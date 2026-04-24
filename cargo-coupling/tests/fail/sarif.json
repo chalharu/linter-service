@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/cargo-coupling"
+      },
+      "results": [
+        {
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib.rs"
+                },
+                "region": {
+                  "startColumn": 1,
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "Circular dependency: fixture_fail::handler -> fixture_fail::query -> fixture_fail::handler"
+          },
+          "properties": {
+            "linter_name": "cargo-coupling"
+          },
+          "ruleId": "cargo-coupling/circular-dependency"
+        },
+        {
+          "level": "error",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib.rs"
+                },
+                "region": {
+                  "startColumn": 1,
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "fixture_fail::handler -> fixture_fail::query: Intrusive coupling across a distant module boundary Suggestion: Introduce a trait boundary between handler and query."
+          },
+          "properties": {
+            "linter_name": "cargo-coupling"
+          },
+          "ruleId": "cargo-coupling/global-complexity"
+        },
+        {
+          "level": "warning",
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib.rs"
+                },
+                "region": {
+                  "startColumn": 1,
+                  "startLine": 1
+                }
+              }
+            }
+          ],
+          "message": {
+            "text": "fixture_fail::handler: Module attracts many internal dependencies Suggestion: Split responsibilities or hide internals behind a smaller API."
+          },
+          "properties": {
+            "linter_name": "cargo-coupling"
+          },
+          "ruleId": "cargo-coupling/high-afferent-coupling"
+        }
+      ],
+      "tool": {
+        "driver": {
+          "informationUri": "https://github.com/chalharu/linter-service",
+          "name": "linter-service/cargo-coupling",
+          "rules": [
+            {
+              "id": "cargo-coupling/circular-dependency",
+              "name": "Circular Dependency",
+              "shortDescription": {
+                "text": "Circular Dependency"
+              }
+            },
+            {
+              "id": "cargo-coupling/global-complexity",
+              "name": "Global Complexity",
+              "shortDescription": {
+                "text": "Global Complexity"
+              }
+            },
+            {
+              "id": "cargo-coupling/high-afferent-coupling",
+              "name": "High Afferent Coupling",
+              "shortDescription": {
+                "text": "High Afferent Coupling"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

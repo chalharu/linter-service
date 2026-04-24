@@ -66,6 +66,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | `actionlint` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | `.github/actionlint.yaml`, `.github/actionlint.yml` | ✅ |
 | `biome` | `*.js`, `*.jsx`, `*.ts`, `*.tsx`, `*.json`, `*.jsonc`, `*.cjs`, `*.cts`, `*.mjs`, `*.mts` | `biome.json`, `biome.jsonc`, `.biome.json`, `.biome.jsonc` | ✅ |
 | `cargo-clippy` | `*.rs` | `clippy.toml`, `.clippy.toml`, `rust-toolchain.toml`, `rust-toolchain` | ✅ |
+| `cargo-coupling` | `*.rs` | 対象 `Cargo.toml` の親方向の `.coupling.toml`, `coupling.toml`、repo root の `.github/linter-service.yaml`, `.github/linter-service.yml`, `.github/linter-service.json` | ✅ |
 | `cargo-deny` | `Cargo.toml`, `Cargo.lock`, `deny.toml`, `.cargo/config`, `.cargo/config.toml` | 対象 `Cargo.toml` の親方向の `deny.toml` | ✅ |
 | `dotenv-linter` | `.env`, `.env.*` | なし | ✅ |
 | `editorconfig-checker` | upstream default exclude に含まれない file | 対象 file の親 directory ごとの `.editorconfig`, repo root の `.editorconfig-checker.json`, `.ecrc` | ✅ |
@@ -91,6 +92,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | linter | 実行メモ |
 | --- | --- |
 | `cargo-clippy` | 最寄り `Cargo.toml` 基準の package 単位実行、`.cargo/config*`, private registry, private git dependency は未対応。 |
+| `cargo-coupling` | checksum-verified な upstream source tarball と repo 同梱の `Dockerfile.full` から local image を build して `--json --no-git` 実行し、quality gate は `linters.cargo-coupling.*` で `min_grade=B`, `max_critical=0`, `max_circular=0` を上書きできる。`.cargo/config*` は未対応。 |
 | `cargo-deny` | 最寄り `Cargo.toml` 基準の package 単位実行、`.cargo/config*`, private registry, private git dependency は未対応。 |
 | `dotenv-linter` | changed `.env` file への upstream default checks 直接適用、`--schema` と ignore-checks 注入は未対応。 |
 | `editorconfig-checker` | `PassedFiles` 制限、`NoColor` 強制。 |
@@ -138,6 +140,10 @@ linters:
   textlint:
     preset_packages:
       - "textlint-rule-preset-ja-technical-writing@12.0.2"
+  cargo-coupling:
+    min_grade: B
+    max_critical: 0
+    max_circular: 0
   zizmor:
     disabled: true
 ```
@@ -147,6 +153,9 @@ linters:
 | `global.exclude_paths` | 全 linter | repo-relative glob pattern。全 linter への適用。 |
 | `linters.<name>.disabled` | 個別 linter | `true` で選択対象外。`false` は明示的な無効化解除として扱う。 |
 | `linters.<name>.exclude_paths` | 個別 linter | repo-relative glob pattern。global exclude との併用。 |
+| `linters.cargo-coupling.min_grade` | `cargo-coupling` | quality gate の最低 grade。既定値は `B`。 |
+| `linters.cargo-coupling.max_critical` | `cargo-coupling` | quality gate で許容する critical issue 数。既定値は `0`。 |
+| `linters.cargo-coupling.max_circular` | `cargo-coupling` | quality gate で許容する circular dependency 数。既定値は `0`。 |
 | `linters.lizard.languages` | `lizard` | `lizard` opt-in 時の対象言語一覧。`disabled: false` と併用する。 |
 | `linters.textlint.preset_packages` | `textlint` | exact version 付き npm package spec の配列。`.textlintrc` と併せて `textlint` 自動選択時の必須項目。 |
 

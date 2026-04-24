@@ -1,0 +1,93 @@
+{
+  "checked_projects": [
+    "Cargo.toml"
+  ],
+  "result": {
+    "cargo_coupling_runs": [
+      {
+        "analysis_path": "src",
+        "command": "docker run cargo-coupling --json --no-git src",
+        "check_result": {
+          "circular_count": 1,
+          "critical_count": 1,
+          "failures": [
+            "Grade C is below minimum B",
+            "1 critical issues (max: 0)",
+            "1 circular dependencies (max: 0)"
+          ],
+          "grade": "C",
+          "high_count": 0,
+          "medium_count": 1,
+          "passed": false,
+          "score": 0.62
+        },
+        "exit_code": 0,
+        "json_output": {
+          "circular_dependencies": [
+            [
+              "fixture_fail::handler",
+              "fixture_fail::query",
+              "fixture_fail::handler"
+            ]
+          ],
+          "hotspots": [],
+          "issues": [
+            {
+              "balance_score": 0.24,
+              "description": "Intrusive coupling across a distant module boundary",
+              "issue_type": "Global Complexity",
+              "severity": "Critical",
+              "source": "fixture_fail::handler",
+              "suggestion": "Introduce a trait boundary between handler and query.",
+              "target": "fixture_fail::query"
+            },
+            {
+              "balance_score": 0.49,
+              "description": "Module attracts many internal dependencies",
+              "issue_type": "High Afferent Coupling",
+              "severity": "Medium",
+              "source": "fixture_fail::handler",
+              "suggestion": "Split responsibilities or hide internals behind a smaller API.",
+              "target": ""
+            }
+          ],
+          "modules": [
+            {
+              "balance_score": 0.24,
+              "couplings_in": 1,
+              "couplings_out": 1,
+              "file_path": "src/lib.rs",
+              "in_cycle": true,
+              "name": "fixture_fail::handler"
+            },
+            {
+              "balance_score": 0.49,
+              "couplings_in": 1,
+              "couplings_out": 1,
+              "file_path": "src/lib.rs",
+              "in_cycle": true,
+              "name": "fixture_fail::query"
+            }
+          ],
+          "summary": {
+            "critical_issues": 1,
+            "external_couplings": 0,
+            "health_grade": "C",
+            "health_score": 0.62,
+            "high_issues": 0,
+            "internal_couplings": 2,
+            "medium_issues": 1,
+            "total_couplings": 2,
+            "total_modules": 2
+          }
+        },
+        "manifest_path": "Cargo.toml"
+      }
+    ],
+    "details": "==> docker run cargo-coupling --json --no-git src\nGrade: C | Score: 62% | Quality gate: FAILED\nThresholds: min_grade=B, max_critical=0, max_circular=0\nModules: 2 | Couplings: 2 | Critical: 1 | High: 0 | Medium: 1 | Circular: 1\nBlocking issues:\n - Grade C is below minimum B\n - 1 critical issues (max: 0)\n - 1 circular dependencies (max: 0)\nIssues:\nsrc/lib.rs: fixture_fail::handler -> fixture_fail::query: critical[Global Complexity]: Intrusive coupling across a distant module boundary\n suggestion: Introduce a trait boundary between handler and query.\nsrc/lib.rs: fixture_fail::handler: medium[High Afferent Coupling]: Module attracts many internal dependencies\n suggestion: Split responsibilities or hide internals behind a smaller API.\nCircular dependencies:\n - fixture_fail::handler -> fixture_fail::query -> fixture_fail::handler",
+    "exit_code": 1
+  },
+  "selected_files": [
+    "src/lib.rs"
+  ]
+}

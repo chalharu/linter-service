@@ -86,6 +86,11 @@ test("accepts supported linter-service config fields", () => {
 					exclude_paths: ["docs/drafts/**"],
 					preset_packages: ["textlint-rule-preset-ja-technical-writing@12.0.2"],
 				},
+				"cargo-coupling": {
+					max_circular: 1,
+					max_critical: 0,
+					min_grade: "B",
+				},
 				yamllint: {
 					disabled: true,
 					exclude_paths: ["fixtures/**"],
@@ -101,6 +106,97 @@ test("accepts supported linter-service config fields", () => {
 				configPath,
 				schemaPath: rootSchemaPath,
 			}),
+		);
+	} finally {
+		fs.rmSync(tempDir, { force: true, recursive: true });
+	}
+});
+
+test("accepts cargo-coupling quality gate thresholds", () => {
+	const tempDir = fs.mkdtempSync(
+		path.join(os.tmpdir(), "linter-service-schema-"),
+	);
+	const configPath = path.join(tempDir, "linter-service.yaml");
+
+	writeConfig(configPath, {
+		linters: {
+			"cargo-coupling": {
+				max_circular: 1,
+				max_critical: 2,
+				min_grade: "C",
+			},
+		},
+	});
+
+	try {
+		const report = validateLinterServiceConfig({
+			configPath,
+			schemaPath: rootSchemaPath,
+		});
+
+		assert.deepEqual(report.normalizedConfig.linters["cargo-coupling"], {
+			disabled: false,
+			disabled_explicit: false,
+			exclude_paths: [],
+			max_circular: 1,
+			max_critical: 2,
+			min_grade: "C",
+		});
+	} finally {
+		fs.rmSync(tempDir, { force: true, recursive: true });
+	}
+});
+
+test("rejects unsupported cargo-coupling grades", () => {
+	const tempDir = fs.mkdtempSync(
+		path.join(os.tmpdir(), "linter-service-schema-"),
+	);
+	const configPath = path.join(tempDir, "linter-service.yaml");
+
+	writeConfig(configPath, {
+		linters: {
+			"cargo-coupling": {
+				min_grade: "Z",
+			},
+		},
+	});
+
+	try {
+		assert.throws(
+			() =>
+				validateLinterServiceConfig({
+					configPath,
+					schemaPath: rootSchemaPath,
+				}),
+			/allowed values|must be one of/u,
+		);
+	} finally {
+		fs.rmSync(tempDir, { force: true, recursive: true });
+	}
+});
+
+test("rejects negative cargo-coupling thresholds", () => {
+	const tempDir = fs.mkdtempSync(
+		path.join(os.tmpdir(), "linter-service-schema-"),
+	);
+	const configPath = path.join(tempDir, "linter-service.yaml");
+
+	writeConfig(configPath, {
+		linters: {
+			"cargo-coupling": {
+				max_critical: -1,
+			},
+		},
+	});
+
+	try {
+		assert.throws(
+			() =>
+				validateLinterServiceConfig({
+					configPath,
+					schemaPath: rootSchemaPath,
+				}),
+			/must be >= 0|minimum/u,
 		);
 	} finally {
 		fs.rmSync(tempDir, { force: true, recursive: true });

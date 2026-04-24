@@ -34,6 +34,12 @@ test("accepts the repository linters.json", () => {
 	assert.equal(report.schemaPath, rootSchemaPath);
 });
 
+test("cargo-coupling is isolated in the repository linters.json", () => {
+	const config = JSON.parse(fs.readFileSync(rootConfigPath, "utf8"));
+
+	assert.equal(config.linters["cargo-coupling"].isolated, true);
+});
+
 test("accepts supported optional linter metadata", () => {
 	const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "linters-schema-"));
 	const configPath = path.join(tempDir, "linters.json");

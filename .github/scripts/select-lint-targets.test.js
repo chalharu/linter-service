@@ -388,6 +388,72 @@ test("lizard config trigger expands to repository files even when config paths a
 		cleanupTempRepo(context.tempDir);
 	}
 });
+
+test("cargo-coupling threshold config trigger expands to repository Rust files", () => {
+	const context = makeTempRepo();
+	const contextPath = path.join(context.runnerTemp, "context.json");
+	const linterServicePath = path.join(__dirname, "..", "..");
+	const outputPath = path.join(context.runnerTemp, "selected-files.txt");
+	const patternPath = path.join(context.runnerTemp, "patterns.txt");
+
+	fs.mkdirSync(path.join(context.repoDir, "src"), { recursive: true });
+	writeLinterServiceConfig(
+		context.repoDir,
+		[
+			"global:",
+			"  exclude_paths:",
+			'    - ".github/**"',
+			"",
+			"linters:",
+			'  "cargo-coupling":',
+			"    min_grade: C",
+			"",
+		].join("\n"),
+	);
+	fs.writeFileSync(
+		path.join(context.repoDir, "Cargo.toml"),
+		'[package]\nname = "fixture"\nversion = "0.1.0"\nedition = "2021"\n',
+		"utf8",
+	);
+	fs.writeFileSync(
+		path.join(context.repoDir, "src", "lib.rs"),
+		"pub fn ok() {}\n",
+		"utf8",
+	);
+	fs.writeFileSync(
+		path.join(context.repoDir, "src", "main.rs"),
+		"fn main() {}\n",
+		"utf8",
+	);
+	fs.writeFileSync(
+		contextPath,
+		JSON.stringify({
+			changed_files: [".github/linter-service.yaml"],
+		}),
+		"utf8",
+	);
+	fs.writeFileSync(patternPath, "\\.(?:rs)$\n", "utf8");
+
+	try {
+		const result = runFromEnv({
+			CONTEXT_PATH: contextPath,
+			LINTER_NAME: "cargo-coupling",
+			LINTER_SERVICE_PATH: linterServicePath,
+			OUTPUT_PATH: outputPath,
+			PATTERN_PATH: patternPath,
+			SOURCE_REPOSITORY_PATH: context.repoDir,
+		});
+
+		assert.deepEqual(result.selectedFiles, ["src/lib.rs", "src/main.rs"]);
+		assert.equal(
+			fs.readFileSync(outputPath, "utf8"),
+			"src/lib.rs\nsrc/main.rs\n",
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
 test("listRepositoryFiles skips directory symlinks in filesystem fallback mode", () => {
 	const context = makeTempRepo();
 	const realDir = path.join(context.repoDir, "docs");
