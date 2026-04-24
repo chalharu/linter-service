@@ -190,10 +190,6 @@ function normalizeRequiredCircularDependencies(jsonOutput) {
 	return jsonOutput.circular_dependencies;
 }
 
-function normalizeCount(value) {
-	return Number.isInteger(value) && value >= 0 ? value : 0;
-}
-
 function gradeRank(grade) {
 	switch (grade) {
 		case "S":

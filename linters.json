@@ -1,130 +1,128 @@
 {
-  "linters": {
-    "actionlint": {
-      "sarif": {
-        "enabled": true
-      }
-    },
-    "ghalint": {
-      "sarif": {
-        "enabled": true
-      }
-    },
-    "hadolint": {
-      "sarif": {
-        "enabled": true
-      }
-    },
-    "helmlint": {
-      "sarif": {
-        "enabled": true
-      }
-    },
-    "lizard": {
-      "default_disabled": true,
-      "sarif": {
-        "enabled": true
-      }
-    },
-    "trivy": {
-      "sarif": {
-        "enabled": true,
-        "default_level": "warning"
-      }
-    },
-    "dotenv-linter": {
-      "sarif": {
-        "enabled": true
-      }
-    },
-    "spectral": {
-      "sarif": {
-        "enabled": true
-      }
-    },
-    "yamllint": {
-      "sarif": {
-        "enabled": true
-      }
-    },
-    "yamlfmt": {
-      "sarif": {
-        "enabled": true
-      }
-    },
-    "markdownlint-cli2": {
-      "sarif": {
-        "enabled": true
-      }
-    },
-    "renovate": {
-      "isolated": true,
-      "sarif": {
-        "enabled": true
-      }
-    },
-    "textlint": {
-      "isolated": true,
-      "required_root_files": [
-        ".textlintrc"
-      ],
-      "sarif": {
-        "enabled": true
-      }
-    },
-    "ruff": {
-      "sarif": {
-        "enabled": true
-      }
-    },
-    "rustfmt": {
-      "sarif": {
-        "enabled": true
-      }
-    },
-    "cargo-clippy": {
-      "isolated": true,
-      "sarif": {
-        "enabled": true
-      }
-    },
-    "cargo-deny": {
-      "sarif": {
-        "enabled": true,
-        "target_kind": "cargo-projects"
-      }
-    },
-    "cargo-coupling": {
-      "isolated": true,
-      "sarif": {
-        "enabled": true,
-        "target_kind": "cargo-projects"
-      }
-    },
-    "taplo": {
-      "sarif": {
-        "enabled": true
-      }
-    },
-    "biome": {
-      "sarif": {
-        "enabled": true
-      }
-    },
-    "editorconfig-checker": {
-      "sarif": {
-        "enabled": true
-      }
-    },
-    "shellcheck": {
-      "sarif": {
-        "enabled": true
-      }
-    },
-    "zizmor": {
-      "sarif": {
-        "enabled": true
-      }
-    }
-  }
+	"linters": {
+		"actionlint": {
+			"sarif": {
+				"enabled": true
+			}
+		},
+		"ghalint": {
+			"sarif": {
+				"enabled": true
+			}
+		},
+		"hadolint": {
+			"sarif": {
+				"enabled": true
+			}
+		},
+		"helmlint": {
+			"sarif": {
+				"enabled": true
+			}
+		},
+		"lizard": {
+			"default_disabled": true,
+			"sarif": {
+				"enabled": true
+			}
+		},
+		"trivy": {
+			"sarif": {
+				"enabled": true,
+				"default_level": "warning"
+			}
+		},
+		"dotenv-linter": {
+			"sarif": {
+				"enabled": true
+			}
+		},
+		"spectral": {
+			"sarif": {
+				"enabled": true
+			}
+		},
+		"yamllint": {
+			"sarif": {
+				"enabled": true
+			}
+		},
+		"yamlfmt": {
+			"sarif": {
+				"enabled": true
+			}
+		},
+		"markdownlint-cli2": {
+			"sarif": {
+				"enabled": true
+			}
+		},
+		"renovate": {
+			"isolated": true,
+			"sarif": {
+				"enabled": true
+			}
+		},
+		"textlint": {
+			"isolated": true,
+			"required_root_files": [".textlintrc"],
+			"sarif": {
+				"enabled": true
+			}
+		},
+		"ruff": {
+			"sarif": {
+				"enabled": true
+			}
+		},
+		"rustfmt": {
+			"sarif": {
+				"enabled": true
+			}
+		},
+		"cargo-clippy": {
+			"isolated": true,
+			"sarif": {
+				"enabled": true
+			}
+		},
+		"cargo-deny": {
+			"sarif": {
+				"enabled": true,
+				"target_kind": "cargo-projects"
+			}
+		},
+		"cargo-coupling": {
+			"isolated": true,
+			"sarif": {
+				"enabled": true,
+				"target_kind": "cargo-projects"
+			}
+		},
+		"taplo": {
+			"sarif": {
+				"enabled": true
+			}
+		},
+		"biome": {
+			"sarif": {
+				"enabled": true
+			}
+		},
+		"editorconfig-checker": {
+			"sarif": {
+				"enabled": true
+			}
+		},
+		"shellcheck": {
+			"sarif": {
+				"enabled": true
+			}
+		},
+		"zizmor": {
+			"sarif": {
+				"enabled": true
+			}
+		}
+	}
 }

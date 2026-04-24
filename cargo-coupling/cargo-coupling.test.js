@@ -548,7 +548,7 @@ defineCommonCargoManifestTests({
 	tempPrefix: "cargo-coupling-",
 	toolName: "cargo-coupling.sh",
 	setupTooling,
-	assertGroupedResult({ context, result, tooling }) {
+	assertGroupedResult({ result, tooling }) {
 		const runArgs = fs.readFileSync(tooling.dockerRunArgsLog, "utf8");
 
 		assert.equal(result.exit_code, 0);

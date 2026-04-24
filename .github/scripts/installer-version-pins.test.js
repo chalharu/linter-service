@@ -290,15 +290,19 @@ test("cargo-coupling Dockerfile.full uses renovate-managed pinned build inputs",
 	);
 	assert.ok(
 		dockerfile.indexOf("ARG CARGO_COUPLING_BUILD_BASE_IMAGE=") <
-			dockerfile.indexOf("FROM ${CARGO_COUPLING_BUILD_BASE_IMAGE} AS chef"),
+			dockerfile.indexOf(`FROM \${CARGO_COUPLING_BUILD_BASE_IMAGE} AS chef`),
 		"build base image ARG must be declared before its FROM",
 	);
 	assert.ok(
 		dockerfile.indexOf("ARG CARGO_COUPLING_RUNTIME_BASE_IMAGE=") <
 			dockerfile.indexOf(
-				"FROM ${CARGO_COUPLING_RUNTIME_BASE_IMAGE} AS runtime",
+				`FROM \${CARGO_COUPLING_RUNTIME_BASE_IMAGE} AS runtime`,
 			),
 		"runtime base image ARG must be declared before its FROM",
+	);
+	assert.match(
+		dockerfile,
+		/HEALTHCHECK --interval=5m --timeout=3s --start-period=5s --retries=1 CMD \["\/app\/cargo-coupling", "--help"\]/u,
 	);
 	assert.match(
 		dockerfile,

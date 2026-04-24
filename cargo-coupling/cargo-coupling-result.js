@@ -474,16 +474,6 @@ function compareNumbers(left, right) {
 	return Number(left || 0) - Number(right || 0);
 }
 
-function slugifyIssueType(value) {
-	return `cargo-coupling/${
-		String(value || "diagnostic")
-			.trim()
-			.toLowerCase()
-			.replace(/[^a-z0-9]+/gu, "-")
-			.replace(/^-+|-+$/gu, "") || "diagnostic"
-	}`;
-}
-
 if (require.main === module) {
 	const [entriesDir, configPath, commandExitCode] = process.argv.slice(2);
 	if (!entriesDir || !configPath) {

@@ -63,6 +63,7 @@ COPY --from=builder /bin/server /app/cargo-coupling
 
 USER appuser
 WORKDIR /workspace
+HEALTHCHECK --interval=5m --timeout=3s --start-period=5s --retries=1 CMD ["/app/cargo-coupling", "--help"]
 EXPOSE 3000
 ENTRYPOINT ["/app/cargo-coupling"]
 CMD ["--help"]
