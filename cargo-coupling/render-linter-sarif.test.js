@@ -39,7 +39,7 @@ test("emits SARIF for cargo-coupling issues and cycles", () => {
 						passed: false,
 						score: 0.5,
 					},
-					command: "docker run cargo-coupling --json --no-git src",
+					command: "docker run cargo-coupling coupling --json --no-git src",
 					exit_code: 0,
 					json_output: {
 						circular_dependencies: [["demo::a", "demo::b", "demo::a"]],

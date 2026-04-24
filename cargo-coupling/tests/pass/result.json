@@ -6,7 +6,7 @@
     "cargo_coupling_runs": [
       {
         "analysis_path": "src",
-        "command": "docker run cargo-coupling --json --no-git src",
+        "command": "docker run cargo-coupling coupling --json --no-git src",
         "check_result": {
           "circular_count": 0,
           "critical_count": 0,
@@ -47,7 +47,7 @@
         "manifest_path": "Cargo.toml"
       }
     ],
-    "details": "==> docker run cargo-coupling --json --no-git src\nGrade: B | Score: 91% | Quality gate: PASSED\nThresholds: min_grade=B, max_critical=0, max_circular=0\nModules: 1 | Couplings: 1 | Critical: 0 | High: 0 | Medium: 0 | Circular: 0",
+    "details": "==> docker run cargo-coupling coupling --json --no-git src\nGrade: B | Score: 91% | Quality gate: PASSED\nThresholds: min_grade=B, max_critical=0, max_circular=0\nModules: 1 | Couplings: 1 | Critical: 0 | High: 0 | Medium: 0 | Circular: 0",
     "exit_code": 0
   },
   "selected_files": [

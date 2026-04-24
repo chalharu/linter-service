@@ -88,7 +88,7 @@ run_cargo_coupling() {
     analysis_path=$(cargo_coupling_analysis_path_for_manifest "$current_manifest")
     stdout_file="$run_dir/stdout.txt"
     stderr_file="$run_dir/stderr.txt"
-    command_line="docker run cargo-coupling --json --no-git $analysis_path"
+    command_line="docker run cargo-coupling coupling --json --no-git $analysis_path"
 
     set +e
     "$container_bin" run \
@@ -103,6 +103,7 @@ run_cargo_coupling() {
       --mount "type=bind,src=$source_root,dst=/work,ro" \
       --env HOME=/tmp \
       "$image_ref" \
+      coupling \
       --json \
       --no-git \
       "$analysis_path" >"$stdout_file" 2>"$stderr_file"

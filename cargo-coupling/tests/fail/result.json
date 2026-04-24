@@ -6,7 +6,7 @@
     "cargo_coupling_runs": [
       {
         "analysis_path": "src",
-        "command": "docker run cargo-coupling --json --no-git src",
+        "command": "docker run cargo-coupling coupling --json --no-git src",
         "check_result": {
           "circular_count": 1,
           "critical_count": 1,
@@ -84,7 +84,7 @@
         "manifest_path": "Cargo.toml"
       }
     ],
-    "details": "==> docker run cargo-coupling --json --no-git src\nGrade: C | Score: 62% | Quality gate: FAILED\nThresholds: min_grade=B, max_critical=0, max_circular=0\nModules: 2 | Couplings: 2 | Critical: 1 | High: 0 | Medium: 1 | Circular: 1\nBlocking issues:\n - Grade C is below minimum B\n - 1 critical issues (max: 0)\n - 1 circular dependencies (max: 0)\nIssues:\nsrc/lib.rs: fixture_fail::handler -> fixture_fail::query: critical[Global Complexity]: Intrusive coupling across a distant module boundary\n suggestion: Introduce a trait boundary between handler and query.\nsrc/lib.rs: fixture_fail::handler: medium[High Afferent Coupling]: Module attracts many internal dependencies\n suggestion: Split responsibilities or hide internals behind a smaller API.\nCircular dependencies:\n - fixture_fail::handler -> fixture_fail::query -> fixture_fail::handler",
+    "details": "==> docker run cargo-coupling coupling --json --no-git src\nGrade: C | Score: 62% | Quality gate: FAILED\nThresholds: min_grade=B, max_critical=0, max_circular=0\nModules: 2 | Couplings: 2 | Critical: 1 | High: 0 | Medium: 1 | Circular: 1\nBlocking issues:\n - Grade C is below minimum B\n - 1 critical issues (max: 0)\n - 1 circular dependencies (max: 0)\nIssues:\nsrc/lib.rs: fixture_fail::handler -> fixture_fail::query: critical[Global Complexity]: Intrusive coupling across a distant module boundary\n suggestion: Introduce a trait boundary between handler and query.\nsrc/lib.rs: fixture_fail::handler: medium[High Afferent Coupling]: Module attracts many internal dependencies\n suggestion: Split responsibilities or hide internals behind a smaller API.\nCircular dependencies:\n - fixture_fail::handler -> fixture_fail::query -> fixture_fail::handler",
     "exit_code": 1
   },
   "selected_files": [

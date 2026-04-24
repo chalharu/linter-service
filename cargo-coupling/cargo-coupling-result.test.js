@@ -11,7 +11,7 @@ test("buildCargoCouplingResult evaluates default quality gates from JSON output"
 		runs: [
 			{
 				analysis_path: "src",
-				command: "docker run cargo-coupling --json --no-git src",
+				command: "docker run cargo-coupling coupling --json --no-git src",
 				exit_code: 0,
 				manifest_path: "Cargo.toml",
 				stderr: "",
@@ -73,7 +73,7 @@ test("buildCargoCouplingResult honors repository-configured thresholds", () => {
 		runs: [
 			{
 				analysis_path: "src",
-				command: "docker run cargo-coupling --json --no-git src",
+				command: "docker run cargo-coupling coupling --json --no-git src",
 				exit_code: 0,
 				manifest_path: "Cargo.toml",
 				stderr: "",
@@ -115,7 +115,7 @@ test("buildCargoCouplingResult treats grade S as stricter than grade A", () => {
 		runs: [
 			{
 				analysis_path: "src",
-				command: "docker run cargo-coupling --json --no-git src",
+				command: "docker run cargo-coupling coupling --json --no-git src",
 				exit_code: 0,
 				manifest_path: "Cargo.toml",
 				stderr: "",
@@ -152,7 +152,7 @@ test("buildCargoCouplingResult preserves runtime failures without JSON output", 
 		runs: [
 			{
 				analysis_path: "src",
-				command: "docker run cargo-coupling --json --no-git src",
+				command: "docker run cargo-coupling coupling --json --no-git src",
 				exit_code: 1,
 				manifest_path: "Cargo.toml",
 				stderr: "cargo-coupling failed to analyze the workspace",
@@ -174,7 +174,7 @@ test("buildCargoCouplingResult fails closed for incomplete cargo-coupling JSON",
 		runs: [
 			{
 				analysis_path: "src",
-				command: "docker run cargo-coupling --json --no-git src",
+				command: "docker run cargo-coupling coupling --json --no-git src",
 				exit_code: 0,
 				manifest_path: "Cargo.toml",
 				stderr: "",
