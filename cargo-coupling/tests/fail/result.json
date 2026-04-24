@@ -9,85 +9,102 @@
         "command": "docker run cargo-coupling coupling --json --no-git src",
         "check_result": {
           "circular_count": 1,
-          "critical_count": 1,
+          "critical_count": 0,
           "failures": [
-            "Grade C is below minimum B",
-            "1 critical issues (max: 0)",
             "1 circular dependencies (max: 0)"
           ],
-          "grade": "C",
+          "grade": "B",
           "high_count": 0,
-          "medium_count": 1,
+          "medium_count": 0,
           "passed": false,
-          "score": 0.62
+          "score": 0.75
         },
         "exit_code": 0,
         "json_output": {
           "circular_dependencies": [
             [
-              "fixture_fail::handler",
-              "fixture_fail::query",
-              "fixture_fail::handler"
+              "fixture-fail::handler",
+              "fixture-fail::query"
             ]
           ],
-          "hotspots": [],
-          "issues": [
+          "hotspots": [
             {
-              "balance_score": 0.24,
-              "description": "Intrusive coupling across a distant module boundary",
-              "issue_type": "Global Complexity",
-              "severity": "Critical",
-              "source": "fixture_fail::handler",
-              "suggestion": "Introduce a trait boundary between handler and query.",
-              "target": "fixture_fail::query"
+              "file_path": null,
+              "in_cycle": true,
+              "issues": [
+                {
+                  "description": "Part of a circular dependency cycle",
+                  "issue_type": "CircularDependency",
+                  "severity": "Critical"
+                }
+              ],
+              "module": "fixture-fail::handler",
+              "score": 40,
+              "suggestion": "Break circular dependency by extracting shared types or inverting with traits"
             },
             {
-              "balance_score": 0.49,
-              "description": "Module attracts many internal dependencies",
-              "issue_type": "High Afferent Coupling",
-              "severity": "Medium",
-              "source": "fixture_fail::handler",
-              "suggestion": "Split responsibilities or hide internals behind a smaller API.",
-              "target": ""
+              "file_path": null,
+              "in_cycle": true,
+              "issues": [
+                {
+                  "description": "Part of a circular dependency cycle",
+                  "issue_type": "CircularDependency",
+                  "severity": "Critical"
+                }
+              ],
+              "module": "fixture-fail::query",
+              "score": 40,
+              "suggestion": "Break circular dependency by extracting shared types or inverting with traits"
             }
           ],
+          "issues": [],
           "modules": [
             {
-              "balance_score": 0.24,
-              "couplings_in": 1,
-              "couplings_out": 1,
-              "file_path": "src/lib.rs",
-              "in_cycle": true,
-              "name": "fixture_fail::handler"
+              "balance_score": 1,
+              "couplings_in": 0,
+              "couplings_out": 0,
+              "file_path": "src/handler.rs",
+              "in_cycle": false,
+              "name": "handler"
             },
             {
-              "balance_score": 0.49,
-              "couplings_in": 1,
-              "couplings_out": 1,
+              "balance_score": 1,
+              "couplings_in": 0,
+              "couplings_out": 0,
               "file_path": "src/lib.rs",
-              "in_cycle": true,
-              "name": "fixture_fail::query"
+              "in_cycle": false,
+              "name": "lib"
+            },
+            {
+              "balance_score": 1,
+              "couplings_in": 0,
+              "couplings_out": 0,
+              "file_path": "src/query.rs",
+              "in_cycle": false,
+              "name": "query"
             }
           ],
           "summary": {
-            "critical_issues": 1,
+            "critical_issues": 0,
             "external_couplings": 0,
-            "health_grade": "C",
-            "health_score": 0.62,
+            "health_grade": "B",
+            "health_score": 0.75,
             "high_issues": 0,
             "internal_couplings": 2,
-            "medium_issues": 1,
+            "medium_issues": 0,
             "total_couplings": 2,
-            "total_modules": 2
+            "total_modules": 3
           }
         },
         "manifest_path": "Cargo.toml"
       }
     ],
-    "details": "==> docker run cargo-coupling coupling --json --no-git src\nGrade: C | Score: 62% | Quality gate: FAILED\nThresholds: min_grade=B, max_critical=0, max_circular=0\nModules: 2 | Couplings: 2 | Critical: 1 | High: 0 | Medium: 1 | Circular: 1\nBlocking issues:\n - Grade C is below minimum B\n - 1 critical issues (max: 0)\n - 1 circular dependencies (max: 0)\nIssues:\nsrc/lib.rs: fixture_fail::handler -> fixture_fail::query: critical[Global Complexity]: Intrusive coupling across a distant module boundary\n suggestion: Introduce a trait boundary between handler and query.\nsrc/lib.rs: fixture_fail::handler: medium[High Afferent Coupling]: Module attracts many internal dependencies\n suggestion: Split responsibilities or hide internals behind a smaller API.\nCircular dependencies:\n - fixture_fail::handler -> fixture_fail::query -> fixture_fail::handler",
+    "details": "==> docker run cargo-coupling coupling --json --no-git src\nGrade: B | Score: 75% | Quality gate: FAILED\nThresholds: min_grade=B, max_critical=0, max_circular=0\nModules: 3 | Couplings: 2 | Critical: 0 | High: 0 | Medium: 0 | Circular: 1\nBlocking issues:\n - 1 circular dependencies (max: 0)\nCircular dependencies:\n - fixture-fail::handler -> fixture-fail::query\nAnalyzing project at 'src'...\nAnalysis complete: 3 files, 3 modules",
     "exit_code": 1
   },
   "selected_files": [
-    "src/lib.rs"
+    "src/handler.rs",
+    "src/lib.rs",
+    "src/query.rs"
   ]
 }

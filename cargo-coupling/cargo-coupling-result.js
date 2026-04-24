@@ -57,7 +57,7 @@ function normalizeCargoCouplingRun(run, config) {
 	const exitCode = normalizeExitCode(run?.exit_code);
 	const stdout = String(run?.stdout || "").trim();
 	const stderr = String(run?.stderr || "").trim();
-	const json_output = parseJsonOutput(stdout);
+	const json_output = normalizeCargoCouplingJsonOutput(parseJsonOutput(stdout));
 	const normalized = {
 		analysis_path: String(run?.analysis_path || "").trim(),
 		command: String(run?.command || "").trim(),
@@ -99,6 +99,85 @@ function parseJsonOutput(stdout) {
 	} catch {
 		return null;
 	}
+}
+
+function normalizeCargoCouplingJsonOutput(jsonOutput) {
+	if (
+		!jsonOutput ||
+		typeof jsonOutput !== "object" ||
+		Array.isArray(jsonOutput)
+	) {
+		return jsonOutput;
+	}
+
+	return {
+		...jsonOutput,
+		...(Array.isArray(jsonOutput.circular_dependencies)
+			? {
+					circular_dependencies: [...jsonOutput.circular_dependencies]
+						.map((cycle) => canonicalizeCargoCouplingCycle(cycle))
+						.sort(compareStringArrays),
+				}
+			: {}),
+		...(Array.isArray(jsonOutput.hotspots)
+			? {
+					hotspots: [...jsonOutput.hotspots]
+						.map((hotspot) => normalizeCargoCouplingHotspot(hotspot))
+						.sort(compareCargoCouplingHotspots),
+				}
+			: {}),
+		...(Array.isArray(jsonOutput.issues)
+			? {
+					issues: [...jsonOutput.issues].sort(compareCargoCouplingIssues),
+				}
+			: {}),
+		...(Array.isArray(jsonOutput.modules)
+			? {
+					modules: [...jsonOutput.modules].sort(compareCargoCouplingModules),
+				}
+			: {}),
+	};
+}
+
+function canonicalizeCargoCouplingCycle(cycle) {
+	const entries = Array.isArray(cycle)
+		? cycle.map((entry) => String(entry))
+		: [];
+	if (entries.length <= 1) {
+		return entries;
+	}
+
+	const normalizedEntries =
+		entries.length > 1 && entries[0] === entries.at(-1)
+			? entries.slice(0, -1)
+			: entries;
+	const candidates = [];
+
+	for (const candidate of [
+		normalizedEntries,
+		[...normalizedEntries].reverse(),
+	]) {
+		for (let index = 0; index < candidate.length; index += 1) {
+			candidates.push(candidate.slice(index).concat(candidate.slice(0, index)));
+		}
+	}
+
+	return candidates.sort(compareStringArrays)[0];
+}
+
+function normalizeCargoCouplingHotspot(hotspot) {
+	if (!hotspot || typeof hotspot !== "object" || Array.isArray(hotspot)) {
+		return hotspot;
+	}
+
+	return {
+		...hotspot,
+		...(Array.isArray(hotspot.issues)
+			? {
+					issues: [...hotspot.issues].sort(compareCargoCouplingHotspotIssues),
+				}
+			: {}),
+	};
 }
 
 function normalizeExitCode(value) {
@@ -306,6 +385,59 @@ function buildModulePathMap(modules) {
 
 function normalizeCount(value) {
 	return Number.isInteger(value) && value >= 0 ? value : 0;
+}
+
+function compareCargoCouplingModules(left, right) {
+	return (
+		compareStrings(left?.file_path, right?.file_path) ||
+		compareStrings(left?.name, right?.name)
+	);
+}
+
+function compareCargoCouplingIssues(left, right) {
+	return (
+		compareStrings(left?.source, right?.source) ||
+		compareStrings(left?.target, right?.target) ||
+		compareStrings(left?.issue_type, right?.issue_type) ||
+		compareStrings(left?.severity, right?.severity) ||
+		compareStrings(left?.description, right?.description)
+	);
+}
+
+function compareCargoCouplingHotspots(left, right) {
+	return (
+		compareStrings(left?.module, right?.module) ||
+		compareNumbers(left?.score, right?.score) ||
+		compareStrings(left?.suggestion, right?.suggestion)
+	);
+}
+
+function compareCargoCouplingHotspotIssues(left, right) {
+	return (
+		compareStrings(left?.severity, right?.severity) ||
+		compareStrings(left?.issue_type, right?.issue_type) ||
+		compareStrings(left?.description, right?.description)
+	);
+}
+
+function compareStringArrays(left, right) {
+	const length = Math.max(left.length, right.length);
+	for (let index = 0; index < length; index += 1) {
+		const comparison = compareStrings(left[index], right[index]);
+		if (comparison !== 0) {
+			return comparison;
+		}
+	}
+
+	return left.length - right.length;
+}
+
+function compareStrings(left, right) {
+	return String(left || "").localeCompare(String(right || ""));
+}
+
+function compareNumbers(left, right) {
+	return Number(left || 0) - Number(right || 0);
 }
 
 function slugifyIssueType(value) {

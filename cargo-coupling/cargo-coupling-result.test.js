@@ -189,3 +189,117 @@ test("buildCargoCouplingResult fails closed for incomplete cargo-coupling JSON",
 	assert.match(result.details, /Invalid cargo-coupling JSON:/u);
 	assert.match(result.details, /summary must be an object/u);
 });
+
+test("buildCargoCouplingResult normalizes unstable cargo-coupling ordering", () => {
+	const result = buildCargoCouplingResult({
+		commandExitCode: 0,
+		config: {},
+		entriesDir: "/unused",
+		runs: [
+			{
+				analysis_path: "src",
+				command: "docker run cargo-coupling coupling --json --no-git src",
+				exit_code: 0,
+				manifest_path: "Cargo.toml",
+				stderr:
+					"Analyzing project at 'src'...\nAnalysis complete: 3 files, 3 modules\n",
+				stdout: JSON.stringify({
+					circular_dependencies: [
+						["fixture-fail::query", "fixture-fail::handler"],
+					],
+					hotspots: [
+						{
+							file_path: null,
+							in_cycle: true,
+							issues: [
+								{
+									description: "Part of a circular dependency cycle",
+									issue_type: "CircularDependency",
+									severity: "Critical",
+								},
+							],
+							module: "fixture-fail::query",
+							score: 40,
+							suggestion:
+								"Break circular dependency by extracting shared types or inverting with traits",
+						},
+						{
+							file_path: null,
+							in_cycle: true,
+							issues: [
+								{
+									description: "Part of a circular dependency cycle",
+									issue_type: "CircularDependency",
+									severity: "Critical",
+								},
+							],
+							module: "fixture-fail::handler",
+							score: 40,
+							suggestion:
+								"Break circular dependency by extracting shared types or inverting with traits",
+						},
+					],
+					issues: [],
+					modules: [
+						{
+							balance_score: 1,
+							couplings_in: 0,
+							couplings_out: 0,
+							file_path: "src/query.rs",
+							in_cycle: false,
+							name: "query",
+						},
+						{
+							balance_score: 1,
+							couplings_in: 0,
+							couplings_out: 0,
+							file_path: "src/lib.rs",
+							in_cycle: false,
+							name: "lib",
+						},
+						{
+							balance_score: 1,
+							couplings_in: 0,
+							couplings_out: 0,
+							file_path: "src/handler.rs",
+							in_cycle: false,
+							name: "handler",
+						},
+					],
+					summary: {
+						critical_issues: 0,
+						external_couplings: 0,
+						health_grade: "B",
+						health_score: 0.75,
+						high_issues: 0,
+						internal_couplings: 2,
+						medium_issues: 0,
+						total_couplings: 2,
+						total_modules: 3,
+					},
+				}),
+			},
+		],
+	});
+
+	assert.deepEqual(
+		result.cargo_coupling_runs[0].json_output.circular_dependencies,
+		[["fixture-fail::handler", "fixture-fail::query"]],
+	);
+	assert.deepEqual(
+		result.cargo_coupling_runs[0].json_output.modules.map(
+			(entry) => entry.file_path,
+		),
+		["src/handler.rs", "src/lib.rs", "src/query.rs"],
+	);
+	assert.deepEqual(
+		result.cargo_coupling_runs[0].json_output.hotspots.map(
+			(entry) => entry.module,
+		),
+		["fixture-fail::handler", "fixture-fail::query"],
+	);
+	assert.match(
+		result.details,
+		/Circular dependencies:\n - fixture-fail::handler -> fixture-fail::query/u,
+	);
+});
