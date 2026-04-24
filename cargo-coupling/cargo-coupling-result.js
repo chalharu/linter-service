@@ -6,6 +6,8 @@ const {
 	normalizeCargoCouplingConfig,
 } = require("./cargo-coupling-config.js");
 
+const WORK_ROOT_PREFIX = "/work/";
+
 function readTextFile(filePath) {
 	if (!fs.existsSync(filePath)) {
 		return "";
@@ -133,7 +135,9 @@ function normalizeCargoCouplingJsonOutput(jsonOutput) {
 			: {}),
 		...(Array.isArray(jsonOutput.modules)
 			? {
-					modules: [...jsonOutput.modules].sort(compareCargoCouplingModules),
+					modules: [...jsonOutput.modules]
+						.map((module) => normalizeCargoCouplingModule(module))
+						.sort(compareCargoCouplingModules),
 				}
 			: {}),
 	};
@@ -172,12 +176,42 @@ function normalizeCargoCouplingHotspot(hotspot) {
 
 	return {
 		...hotspot,
+		...(Object.hasOwn(hotspot, "file_path")
+			? {
+					file_path: normalizeCargoCouplingPath(hotspot.file_path),
+				}
+			: {}),
 		...(Array.isArray(hotspot.issues)
 			? {
 					issues: [...hotspot.issues].sort(compareCargoCouplingHotspotIssues),
 				}
 			: {}),
 	};
+}
+
+function normalizeCargoCouplingModule(module) {
+	if (!module || typeof module !== "object" || Array.isArray(module)) {
+		return module;
+	}
+
+	return {
+		...module,
+		...(Object.hasOwn(module, "file_path")
+			? {
+					file_path: normalizeCargoCouplingPath(module.file_path),
+				}
+			: {}),
+	};
+}
+
+function normalizeCargoCouplingPath(value) {
+	if (typeof value !== "string") {
+		return value ?? null;
+	}
+
+	return value.startsWith(WORK_ROOT_PREFIX)
+		? value.slice(WORK_ROOT_PREFIX.length)
+		: value;
 }
 
 function normalizeExitCode(value) {

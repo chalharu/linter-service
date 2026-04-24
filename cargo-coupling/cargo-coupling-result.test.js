@@ -190,7 +190,7 @@ test("buildCargoCouplingResult fails closed for incomplete cargo-coupling JSON",
 	assert.match(result.details, /summary must be an object/u);
 });
 
-test("buildCargoCouplingResult normalizes unstable cargo-coupling ordering", () => {
+test("buildCargoCouplingResult normalizes unstable cargo-coupling ordering and /work paths", () => {
 	const result = buildCargoCouplingResult({
 		commandExitCode: 0,
 		config: {},
@@ -209,7 +209,7 @@ test("buildCargoCouplingResult normalizes unstable cargo-coupling ordering", () 
 					],
 					hotspots: [
 						{
-							file_path: null,
+							file_path: "/work/src/query.rs",
 							in_cycle: true,
 							issues: [
 								{
@@ -224,7 +224,7 @@ test("buildCargoCouplingResult normalizes unstable cargo-coupling ordering", () 
 								"Break circular dependency by extracting shared types or inverting with traits",
 						},
 						{
-							file_path: null,
+							file_path: "/work/src/handler.rs",
 							in_cycle: true,
 							issues: [
 								{
@@ -245,7 +245,7 @@ test("buildCargoCouplingResult normalizes unstable cargo-coupling ordering", () 
 							balance_score: 1,
 							couplings_in: 0,
 							couplings_out: 0,
-							file_path: "src/query.rs",
+							file_path: "/work/src/query.rs",
 							in_cycle: false,
 							name: "query",
 						},
@@ -253,7 +253,7 @@ test("buildCargoCouplingResult normalizes unstable cargo-coupling ordering", () 
 							balance_score: 1,
 							couplings_in: 0,
 							couplings_out: 0,
-							file_path: "src/lib.rs",
+							file_path: "/work/src/lib.rs",
 							in_cycle: false,
 							name: "lib",
 						},
@@ -261,7 +261,7 @@ test("buildCargoCouplingResult normalizes unstable cargo-coupling ordering", () 
 							balance_score: 1,
 							couplings_in: 0,
 							couplings_out: 0,
-							file_path: "src/handler.rs",
+							file_path: "/work/src/handler.rs",
 							in_cycle: false,
 							name: "handler",
 						},
@@ -297,6 +297,12 @@ test("buildCargoCouplingResult normalizes unstable cargo-coupling ordering", () 
 			(entry) => entry.module,
 		),
 		["fixture-fail::handler", "fixture-fail::query"],
+	);
+	assert.deepEqual(
+		result.cargo_coupling_runs[0].json_output.hotspots.map(
+			(entry) => entry.file_path,
+		),
+		["src/handler.rs", "src/query.rs"],
 	);
 	assert.match(
 		result.details,
