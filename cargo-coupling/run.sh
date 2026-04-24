@@ -100,7 +100,7 @@ run_cargo_coupling() {
       --tmpfs /tmp \
       --user "$user_id:$group_id" \
       --workdir /work \
-      --mount "type=bind,src=$source_root,dst=/work,ro" \
+      --mount "type=bind,src=$source_root,dst=/work" \
       --env HOME=/tmp \
       "$image_ref" \
       coupling \

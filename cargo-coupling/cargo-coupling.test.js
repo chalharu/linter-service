@@ -559,6 +559,7 @@ defineCommonCargoManifestTests({
 		assert.match(runArgs, /--network=none/);
 		assert.match(runArgs, /--read-only/);
 		assert.match(runArgs, /--tmpfs \/tmp/);
+		assert.doesNotMatch(runArgs, /dst=\/work,ro/);
 		assert.match(runArgs, /coupling --json --no-git src/);
 		assert.match(runArgs, /coupling --json --no-git crates\/member\/src/);
 		assert.deepEqual(
@@ -723,6 +724,7 @@ edition = "2021"
 		const runArgs = fs.readFileSync(tooling.dockerRunArgsLog, "utf8");
 
 		assert.equal(result.exit_code, 0);
+		assert.doesNotMatch(runArgs, /dst=\/work,ro/u);
 		assert.doesNotMatch(runArgs, /coupling --json --no-git src/u);
 		assert.match(runArgs, /coupling --json --no-git crates\/member\/src/u);
 		assert.deepEqual(
