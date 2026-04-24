@@ -288,6 +288,18 @@ test("cargo-coupling Dockerfile.full uses renovate-managed pinned build inputs",
 		dockerfile,
 		/ARG CARGO_COUPLING_RUNTIME_BASE_IMAGE=docker\.io\/library\/debian:bookworm-slim@sha256:[a-f0-9]{64}/u,
 	);
+	assert.ok(
+		dockerfile.indexOf("ARG CARGO_COUPLING_BUILD_BASE_IMAGE=") <
+			dockerfile.indexOf("FROM ${CARGO_COUPLING_BUILD_BASE_IMAGE} AS chef"),
+		"build base image ARG must be declared before its FROM",
+	);
+	assert.ok(
+		dockerfile.indexOf("ARG CARGO_COUPLING_RUNTIME_BASE_IMAGE=") <
+			dockerfile.indexOf(
+				"FROM ${CARGO_COUPLING_RUNTIME_BASE_IMAGE} AS runtime",
+			),
+		"runtime base image ARG must be declared before its FROM",
+	);
 	assert.match(
 		dockerfile,
 		/FROM \$\{CARGO_COUPLING_RUNTIME_BASE_IMAGE\} AS runtime/u,

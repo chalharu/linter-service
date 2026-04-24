@@ -3,9 +3,12 @@
 
 ARG APP_NAME=cargo-coupling
 
-# Build stage with a digest-pinned Rust toolchain
 # renovate: datasource=docker depName=library/rust versioning=docker
 ARG CARGO_COUPLING_BUILD_BASE_IMAGE=docker.io/library/rust:slim-bookworm@sha256:caaf9ca7acd474892186860307d6f28e51fdbc1a4eada459fcff81517cf46a36
+# renovate: datasource=docker depName=library/debian versioning=docker
+ARG CARGO_COUPLING_RUNTIME_BASE_IMAGE=docker.io/library/debian:bookworm-slim@sha256:f9c6a2fd2ddbc23e336b6257a5245e31f996953ef06cd13a59fa0a1df2d5c252
+
+# Build stage with a digest-pinned Rust toolchain
 FROM ${CARGO_COUPLING_BUILD_BASE_IMAGE} AS chef
 WORKDIR /app
 
@@ -36,8 +39,6 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     cp ./target/release/${APP_NAME} /bin/server
 
 # 本番ステージ：debian-slim (Git対応版)
-# renovate: datasource=docker depName=library/debian versioning=docker
-ARG CARGO_COUPLING_RUNTIME_BASE_IMAGE=docker.io/library/debian:bookworm-slim@sha256:f9c6a2fd2ddbc23e336b6257a5245e31f996953ef06cd13a59fa0a1df2d5c252
 FROM ${CARGO_COUPLING_RUNTIME_BASE_IMAGE} AS runtime
 
 # 非rootユーザー作成
