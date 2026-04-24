@@ -282,11 +282,11 @@ test("cargo-coupling Dockerfile.full uses renovate-managed pinned build inputs",
 	);
 	assert.match(
 		dockerfile,
-		/# renovate: datasource=docker depName=library\/debian versioning=docker/u,
+		/# renovate: datasource=docker depName=library\/rust versioning=docker/u,
 	);
 	assert.match(
 		dockerfile,
-		/ARG CARGO_COUPLING_RUNTIME_BASE_IMAGE=docker\.io\/library\/debian:bookworm-slim@sha256:[a-f0-9]{64}/u,
+		/ARG CARGO_COUPLING_RUNTIME_BASE_IMAGE=docker\.io\/library\/rust:slim-bookworm@sha256:[a-f0-9]{64}/u,
 	);
 	assert.ok(
 		dockerfile.indexOf("ARG CARGO_COUPLING_BUILD_BASE_IMAGE=") <
@@ -474,8 +474,8 @@ test("renovate installer regex matches installer versions and pinned Docker base
 		matches,
 		[
 			"cargo-chef@0.1.77",
-			"library/debian@docker.io/library/debian:bookworm-slim@sha256:f9c6a2fd2ddbc23e336b6257a5245e31f996953ef06cd13a59fa0a1df2d5c252",
 			"library/node@docker.io/library/node:24-bookworm-slim@sha256:b506e7321f176aae77317f99d67a24b272c1f09f1d10f1761f2773447d8da26c",
+			"library/rust@docker.io/library/rust:slim-bookworm@sha256:caaf9ca7acd474892186860307d6f28e51fdbc1a4eada459fcff81517cf46a36",
 			"library/rust@docker.io/library/rust:slim-bookworm@sha256:caaf9ca7acd474892186860307d6f28e51fdbc1a4eada459fcff81517cf46a36",
 			"nwiizo/cargo-coupling@v0.3.2",
 			"renovate@43.104.4",
