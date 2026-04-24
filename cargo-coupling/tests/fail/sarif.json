@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "linter-service/cargo-coupling"
+      },
+        "results": [
+          {
+            "level": "error",
+            "message": {
+              "text": "Circular dependency: fixture-fail::handler -> fixture-fail::query"
+            },
+            "properties": {
+              "linter_name": "cargo-coupling"
+            },
+            "ruleId": "cargo-coupling/circular-dependency"
+          }
+        ],
+        "tool": {
+          "driver": {
+            "informationUri": "https://github.com/chalharu/linter-service",
+            "name": "linter-service/cargo-coupling",
+            "rules": [
+              {
+                "id": "cargo-coupling/circular-dependency",
+                "name": "Circular Dependency",
+                "shortDescription": {
+                  "text": "Circular Dependency"
+                }
+              }
+            ]
+          }
+      }
+    }
+  ],
+  "version": "2.1.0"
+}

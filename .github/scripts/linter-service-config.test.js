@@ -656,6 +656,111 @@ test("supports textlint preset_packages when textlint is enabled", () => {
 	}
 });
 
+test("supports cargo-coupling quality gate thresholds", () => {
+	const context = makeTempRepo();
+
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			"cargo-coupling": {
+				max_circular: 2,
+				max_critical: 1,
+				min_grade: "C",
+			},
+		},
+	});
+
+	try {
+		const config = loadLinterServiceConfig({
+			repositoryPath: context.repoDir,
+		});
+
+		assert.deepEqual(getLinterConfig(config, "cargo-coupling"), {
+			disabled: false,
+			disabled_explicit: false,
+			exclude_paths: [],
+			max_circular: 2,
+			max_critical: 1,
+			min_grade: "C",
+		});
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("defaults cargo-coupling thresholds when omitted", () => {
+	const context = makeTempRepo();
+
+	writeLinterServiceConfig(
+		context.repoDir,
+		{
+			linters: {
+				"cargo-coupling": {},
+			},
+		},
+		"linter-service.json",
+	);
+
+	try {
+		const config = loadLinterServiceConfig({
+			repositoryPath: context.repoDir,
+		});
+
+		assert.equal(getLinterConfig(config, "cargo-coupling").min_grade, "B");
+		assert.equal(getLinterConfig(config, "cargo-coupling").max_critical, 0);
+		assert.equal(getLinterConfig(config, "cargo-coupling").max_circular, 0);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("rejects invalid cargo-coupling grade thresholds", () => {
+	const context = makeTempRepo();
+
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			"cargo-coupling": {
+				min_grade: "Z",
+			},
+		},
+	});
+
+	try {
+		assert.throws(
+			() =>
+				loadLinterServiceConfig({
+					repositoryPath: context.repoDir,
+				}),
+			/must be one of/u,
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("rejects negative cargo-coupling thresholds", () => {
+	const context = makeTempRepo();
+
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			"cargo-coupling": {
+				max_critical: -1,
+			},
+		},
+	});
+
+	try {
+		assert.throws(
+			() =>
+				loadLinterServiceConfig({
+					repositoryPath: context.repoDir,
+				}),
+			/non-negative integer/u,
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
 test("requires textlint preset_packages when textlint is enabled", () => {
 	const context = makeTempRepo();
 

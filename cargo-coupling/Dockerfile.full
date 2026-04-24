@@ -1,0 +1,69 @@
+# syntax=docker/dockerfile:1
+# Full version with Git support for volatility analysis
+
+ARG APP_NAME=cargo-coupling
+
+# renovate: datasource=docker depName=library/rust versioning=docker
+ARG CARGO_COUPLING_BUILD_BASE_IMAGE=docker.io/library/rust:slim-bookworm@sha256:caaf9ca7acd474892186860307d6f28e51fdbc1a4eada459fcff81517cf46a36
+# renovate: datasource=docker depName=library/rust versioning=docker
+ARG CARGO_COUPLING_RUNTIME_BASE_IMAGE=docker.io/library/rust:slim-bookworm@sha256:caaf9ca7acd474892186860307d6f28e51fdbc1a4eada459fcff81517cf46a36
+
+# Build stage with a digest-pinned Rust toolchain
+FROM ${CARGO_COUPLING_BUILD_BASE_IMAGE} AS chef
+WORKDIR /app
+
+# Install cargo-chef
+# renovate: datasource=crate depName=cargo-chef
+ARG CARGO_CHEF_VERSION=0.1.77
+RUN cargo install cargo-chef --locked --version ${CARGO_CHEF_VERSION}
+
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS builder
+ARG APP_NAME=cargo-coupling
+
+# 依存関係のビルド（キャッシュ可能）
+COPY --from=planner /app/recipe.json recipe.json
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    cargo chef cook --release --recipe-path recipe.json
+
+# アプリケーションのビルド
+COPY . .
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,target=/app/target,sharing=locked \
+    cargo build --release --bin ${APP_NAME} && \
+    cp ./target/release/${APP_NAME} /bin/server
+
+# 本番ステージ：cargo metadata を使える Rust runtime + Git
+FROM ${CARGO_COUPLING_RUNTIME_BASE_IMAGE} AS runtime
+
+# 非rootユーザー作成
+ARG UID=10001
+RUN adduser \
+    --disabled-password \
+    --gecos "" \
+    --home "/nonexistent" \
+    --shell "/sbin/nologin" \
+    --no-create-home \
+    --uid "${UID}" \
+    appuser
+
+# Git (volatility分析用) をインストール
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /bin/server /app/cargo-coupling
+
+USER appuser
+WORKDIR /workspace
+HEALTHCHECK --interval=5m --timeout=3s --start-period=5s --retries=1 CMD ["/app/cargo-coupling", "--help"]
+EXPOSE 3000
+ENTRYPOINT ["/app/cargo-coupling"]
+CMD ["--help"]

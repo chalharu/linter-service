@@ -1,239 +1,264 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "linter-service .github/linter-service.yaml",
-  "type": "object",
-  "additionalProperties": false,
-  "properties": {
-    "global": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "exclude_paths": {
-          "$ref": "#/$defs/nonEmptyStringArray"
-        }
-      }
-    },
-    "linters": {
-      "type": "object",
-      "propertyNames": {
-        "$ref": "#/$defs/knownLinterName"
-      },
-      "properties": {
-        "lizard": {
-          "$ref": "#/$defs/lizardLinterConfig"
-        },
-        "textlint": {
-          "$ref": "#/$defs/textlintLinterConfig"
-        }
-      },
-      "additionalProperties": {
-        "$ref": "#/$defs/linterConfig"
-      }
-    }
-  },
-  "$defs": {
-    "knownLinterName": {
-      "type": "string",
-      "enum": [
-        "actionlint",
-        "ghalint",
-        "hadolint",
-        "helmlint",
-        "lizard",
-        "trivy",
-        "dotenv-linter",
-        "spectral",
-        "yamllint",
-        "yamlfmt",
-        "markdownlint-cli2",
-        "renovate",
-        "textlint",
-        "ruff",
-        "rustfmt",
-        "cargo-clippy",
-        "cargo-deny",
-        "taplo",
-        "biome",
-        "editorconfig-checker",
-        "shellcheck",
-        "zizmor"
-      ]
-    },
-    "nonEmptyString": {
-      "type": "string",
-      "pattern": "\\S"
-    },
-    "nonEmptyStringArray": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/nonEmptyString"
-      }
-    },
-    "linterConfig": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "disabled": {
-          "type": "boolean"
-        },
-        "exclude_paths": {
-          "$ref": "#/$defs/nonEmptyStringArray"
-        }
-      }
-    },
-    "lizardLanguage": {
-      "type": "string",
-      "enum": [
-        "cpp",
-        "csharp",
-        "erlang",
-        "fortran",
-        "gdscript",
-        "go",
-        "java",
-        "javascript",
-        "kotlin",
-        "lua",
-        "objectivec",
-        "perl",
-        "php",
-        "plsql",
-        "python",
-        "r",
-        "ruby",
-        "rust",
-        "scala",
-        "solidity",
-        "st",
-        "swift",
-        "ttcn",
-        "typescript",
-        "vue",
-        "zig"
-      ]
-    },
-    "lizardLanguageArray": {
-      "type": "array",
-      "minItems": 1,
-      "uniqueItems": true,
-      "items": {
-        "$ref": "#/$defs/lizardLanguage"
-      }
-    },
-    "lizardThresholdValue": {
-      "type": "integer",
-      "minimum": 0
-    },
-    "lizardThresholdConfig": {
-      "type": "object",
-      "additionalProperties": false,
-      "minProperties": 1,
-      "properties": {
-        "nloc": {
-          "$ref": "#/$defs/lizardThresholdValue"
-        },
-        "cyclomatic_complexity": {
-          "$ref": "#/$defs/lizardThresholdValue"
-        },
-        "token_count": {
-          "$ref": "#/$defs/lizardThresholdValue"
-        },
-        "parameter_count": {
-          "$ref": "#/$defs/lizardThresholdValue"
-        },
-        "length": {
-          "$ref": "#/$defs/lizardThresholdValue"
-        }
-      }
-    },
-    "lizardLanguageThresholds": {
-      "type": "object",
-      "additionalProperties": {
-        "$ref": "#/$defs/lizardThresholdConfig"
-      },
-      "minProperties": 1,
-      "propertyNames": {
-        "$ref": "#/$defs/lizardLanguage"
-      }
-    },
-    "lizardLinterConfig": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "disabled": {
-          "type": "boolean"
-        },
-        "exclude_paths": {
-          "$ref": "#/$defs/nonEmptyStringArray"
-        },
-        "languages": {
-          "$ref": "#/$defs/lizardLanguageArray"
-        },
-        "thresholds": {
-          "$ref": "#/$defs/lizardLanguageThresholds"
-        }
-      },
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "disabled": {
-                "const": false
-              }
-            },
-            "required": [
-              "disabled"
-            ]
-          },
-          "then": {
-            "required": [
-              "languages"
-            ]
-          }
-        }
-      ]
-    },
-    "textlintPresetPackage": {
-      "type": "string",
-      "pattern": "^(?:@[a-z0-9][a-z0-9._-]*\\/)?textlint-rule-preset-[a-z0-9][a-z0-9._-]*@\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
-    },
-    "textlintLinterConfig": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "disabled": {
-          "type": "boolean"
-        },
-        "exclude_paths": {
-          "$ref": "#/$defs/nonEmptyStringArray"
-        },
-        "preset_packages": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "$ref": "#/$defs/textlintPresetPackage"
-          }
-        }
-      },
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "disabled": {
-                "const": false
-              }
-            },
-            "required": [
-              "disabled"
-            ]
-          },
-          "then": {
-            "required": [
-              "preset_packages"
-            ]
-          }
-        }
-      ]
-    }
-  }
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"title": "linter-service .github/linter-service.yaml",
+	"type": "object",
+	"additionalProperties": false,
+	"properties": {
+		"global": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"exclude_paths": {
+					"$ref": "#/$defs/nonEmptyStringArray"
+				}
+			}
+		},
+		"linters": {
+			"type": "object",
+			"propertyNames": {
+				"$ref": "#/$defs/knownLinterName"
+			},
+			"properties": {
+				"lizard": {
+					"$ref": "#/$defs/lizardLinterConfig"
+				},
+				"textlint": {
+					"$ref": "#/$defs/textlintLinterConfig"
+				},
+				"cargo-coupling": {
+					"$ref": "#/$defs/cargoCouplingLinterConfig"
+				}
+			},
+			"additionalProperties": {
+				"$ref": "#/$defs/linterConfig"
+			}
+		}
+	},
+	"$defs": {
+		"knownLinterName": {
+			"type": "string",
+			"enum": [
+				"actionlint",
+				"ghalint",
+				"hadolint",
+				"helmlint",
+				"lizard",
+				"trivy",
+				"dotenv-linter",
+				"spectral",
+				"yamllint",
+				"yamlfmt",
+				"markdownlint-cli2",
+				"renovate",
+				"textlint",
+				"ruff",
+				"rustfmt",
+				"cargo-clippy",
+				"cargo-deny",
+				"cargo-coupling",
+				"taplo",
+				"biome",
+				"editorconfig-checker",
+				"shellcheck",
+				"zizmor"
+			]
+		},
+		"nonEmptyString": {
+			"type": "string",
+			"pattern": "\\S"
+		},
+		"nonEmptyStringArray": {
+			"type": "array",
+			"items": {
+				"$ref": "#/$defs/nonEmptyString"
+			}
+		},
+		"linterConfig": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"disabled": {
+					"type": "boolean"
+				},
+				"exclude_paths": {
+					"$ref": "#/$defs/nonEmptyStringArray"
+				}
+			}
+		},
+		"lizardLanguage": {
+			"type": "string",
+			"enum": [
+				"cpp",
+				"csharp",
+				"erlang",
+				"fortran",
+				"gdscript",
+				"go",
+				"java",
+				"javascript",
+				"kotlin",
+				"lua",
+				"objectivec",
+				"perl",
+				"php",
+				"plsql",
+				"python",
+				"r",
+				"ruby",
+				"rust",
+				"scala",
+				"solidity",
+				"st",
+				"swift",
+				"ttcn",
+				"typescript",
+				"vue",
+				"zig"
+			]
+		},
+		"lizardLanguageArray": {
+			"type": "array",
+			"minItems": 1,
+			"uniqueItems": true,
+			"items": {
+				"$ref": "#/$defs/lizardLanguage"
+			}
+		},
+		"lizardThresholdValue": {
+			"type": "integer",
+			"minimum": 0
+		},
+		"lizardThresholdConfig": {
+			"type": "object",
+			"additionalProperties": false,
+			"minProperties": 1,
+			"properties": {
+				"nloc": {
+					"$ref": "#/$defs/lizardThresholdValue"
+				},
+				"cyclomatic_complexity": {
+					"$ref": "#/$defs/lizardThresholdValue"
+				},
+				"token_count": {
+					"$ref": "#/$defs/lizardThresholdValue"
+				},
+				"parameter_count": {
+					"$ref": "#/$defs/lizardThresholdValue"
+				},
+				"length": {
+					"$ref": "#/$defs/lizardThresholdValue"
+				}
+			}
+		},
+		"lizardLanguageThresholds": {
+			"type": "object",
+			"additionalProperties": {
+				"$ref": "#/$defs/lizardThresholdConfig"
+			},
+			"minProperties": 1,
+			"propertyNames": {
+				"$ref": "#/$defs/lizardLanguage"
+			}
+		},
+		"lizardLinterConfig": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"disabled": {
+					"type": "boolean"
+				},
+				"exclude_paths": {
+					"$ref": "#/$defs/nonEmptyStringArray"
+				},
+				"languages": {
+					"$ref": "#/$defs/lizardLanguageArray"
+				},
+				"thresholds": {
+					"$ref": "#/$defs/lizardLanguageThresholds"
+				}
+			},
+			"allOf": [
+				{
+					"if": {
+						"properties": {
+							"disabled": {
+								"const": false
+							}
+						},
+						"required": ["disabled"]
+					},
+					"then": {
+						"required": ["languages"]
+					}
+				}
+			]
+		},
+		"textlintPresetPackage": {
+			"type": "string",
+			"pattern": "^(?:@[a-z0-9][a-z0-9._-]*\\/)?textlint-rule-preset-[a-z0-9][a-z0-9._-]*@\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+		},
+		"textlintLinterConfig": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"disabled": {
+					"type": "boolean"
+				},
+				"exclude_paths": {
+					"$ref": "#/$defs/nonEmptyStringArray"
+				},
+				"preset_packages": {
+					"type": "array",
+					"minItems": 1,
+					"items": {
+						"$ref": "#/$defs/textlintPresetPackage"
+					}
+				}
+			},
+			"allOf": [
+				{
+					"if": {
+						"properties": {
+							"disabled": {
+								"const": false
+							}
+						},
+						"required": ["disabled"]
+					},
+					"then": {
+						"required": ["preset_packages"]
+					}
+				}
+			]
+		},
+		"cargoCouplingMinGrade": {
+			"type": "string",
+			"enum": ["S", "A", "B", "C", "D", "F"]
+		},
+		"cargoCouplingThreshold": {
+			"type": "integer",
+			"minimum": 0
+		},
+		"cargoCouplingLinterConfig": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"disabled": {
+					"type": "boolean"
+				},
+				"exclude_paths": {
+					"$ref": "#/$defs/nonEmptyStringArray"
+				},
+				"min_grade": {
+					"$ref": "#/$defs/cargoCouplingMinGrade"
+				},
+				"max_critical": {
+					"$ref": "#/$defs/cargoCouplingThreshold"
+				},
+				"max_circular": {
+					"$ref": "#/$defs/cargoCouplingThreshold"
+				}
+			}
+		}
+	}
 }
