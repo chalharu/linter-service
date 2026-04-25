@@ -7,14 +7,123 @@
       },
       "results": [
         {
+          "codeFlows": [
+            {
+              "threadFlows": [
+                {
+                  "locations": [
+                    {
+                      "importance": "essential",
+                      "location": {
+                        "logicalLocations": [
+                          {
+                            "properties": {
+                              "symbolic": {
+                                "annotation": "does not set persist-credentials: false",
+                                "feature_kind": "Normal",
+                                "key": {
+                                  "Local": {
+                                    "given_path": ".github/workflows/workflow.yml",
+                                    "prefix": null
+                                  }
+                                },
+                                "kind": "Primary",
+                                "route": {
+                                  "route": [
+                                    {
+                                      "Key": "jobs"
+                                    },
+                                    {
+                                      "Key": "test"
+                                    },
+                                    {
+                                      "Key": "steps"
+                                    },
+                                    {
+                                      "Index": 0
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        ],
+                        "message": {
+                          "text": "does not set persist-credentials: false"
+                        },
+                        "physicalLocation": {
+                          "artifactLocation": {
+                            "uri": ".github/workflows/workflow.yml"
+                          },
+                          "region": {
+                            "endColumn": 1,
+                            "endLine": 10,
+                            "snippet": {
+                              "text": "uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd\n"
+                            },
+                            "sourceLanguage": "yaml",
+                            "startColumn": 9,
+                            "startLine": 9
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "kind": "fail",
           "level": "warning",
           "locations": [
             {
+              "logicalLocations": [
+                {
+                  "properties": {
+                    "symbolic": {
+                      "annotation": "does not set persist-credentials: false",
+                      "feature_kind": "Normal",
+                      "key": {
+                        "Local": {
+                          "given_path": ".github/workflows/workflow.yml",
+                          "prefix": null
+                        }
+                      },
+                      "kind": "Primary",
+                      "route": {
+                        "route": [
+                          {
+                            "Key": "jobs"
+                          },
+                          {
+                            "Key": "test"
+                          },
+                          {
+                            "Key": "steps"
+                          },
+                          {
+                            "Index": 0
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ],
+              "message": {
+                "text": "does not set persist-credentials: false"
+              },
               "physicalLocation": {
                 "artifactLocation": {
                   "uri": ".github/workflows/workflow.yml"
                 },
                 "region": {
+                  "endColumn": 1,
+                  "endLine": 10,
+                  "snippet": {
+                    "text": "uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd\n"
+                  },
+                  "sourceLanguage": "yaml",
                   "startColumn": 9,
                   "startLine": 9
                 }
@@ -25,9 +134,12 @@
             "text": "credential persistence through GitHub Actions artifacts"
           },
           "properties": {
-            "linter_name": "zizmor"
+            "linter_name": "zizmor",
+            "zizmor/confidence": "Low",
+            "zizmor/persona": "Regular",
+            "zizmor/severity": "Medium"
           },
-          "ruleId": "artipacked"
+          "ruleId": "zizmor/artipacked"
         }
       ],
       "tool": {
@@ -36,10 +148,17 @@
           "name": "linter-service/zizmor",
           "rules": [
             {
-              "id": "artipacked",
+              "help": {
+                "markdown": "`artipacked`: credential persistence through GitHub Actions artifacts\n\nDocs: <https://docs.zizmor.sh/audits/#artipacked>",
+                "text": "credential persistence through GitHub Actions artifacts"
+              },
+              "helpUri": "https://docs.zizmor.sh/audits/#artipacked",
+              "id": "zizmor/artipacked",
               "name": "artipacked",
-              "shortDescription": {
-                "text": "artipacked"
+              "properties": {
+                "tags": [
+                  "security"
+                ]
               }
             }
           ]
