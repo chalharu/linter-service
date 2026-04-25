@@ -316,6 +316,50 @@ linter_lib::emit_json_result_with_sarif() {
   linter_lib::emit_json_result_with_json_file "$exit_code" sarif "$sarif_file"
 }
 
+linter_lib::emit_json_result_with_sarif_findings() {
+  local sarif_file=$1
+  local python_bin
+
+  if [ ! -f "$sarif_file" ]; then
+    printf 'JSON file not found: %s\n' "$sarif_file" >&2
+    return 1
+  fi
+
+  if python_bin="$(linter_lib::python_cmd 2>/dev/null)"; then
+    "$python_bin" - "$sarif_file" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+sarif_path = Path(sys.argv[1])
+payload = json.loads(sarif_path.read_text(encoding="utf-8"))
+has_results = any(len(run.get("results", [])) > 0 for run in payload.get("runs", []))
+print(json.dumps({"exit_code": 1 if has_results else 0, "sarif": payload}))
+PY
+    return 0
+  fi
+
+  if command -v node >/dev/null 2>&1; then
+    node - "$sarif_file" <<'NODE'
+const fs = require("node:fs");
+
+const sarifPath = process.argv[2];
+const payload = JSON.parse(fs.readFileSync(sarifPath, "utf8"));
+const hasResults = (payload?.runs ?? []).some((run) => (run?.results?.length ?? 0) > 0);
+process.stdout.write(
+  JSON.stringify({
+    exit_code: hasResults ? 1 : 0,
+    sarif: payload,
+  }),
+);
+NODE
+    return 0
+  fi
+
+  echo "python3, python, or node is required" >&2
+  return 1
+}
+
 linter_lib::run_and_emit_json() {
   local output_file=$1
   shift
