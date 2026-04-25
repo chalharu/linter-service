@@ -307,6 +307,86 @@ test("includes checked targets before diagnostic details on failure", () => {
 	}
 });
 
+test("uses embedded SARIF for failure details and summary output", () => {
+	const context = makeTempRepo("render-linter-report-biome-");
+	const sparseDetails =
+		"lint ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  × Some errors were emitted while running checks.";
+
+	try {
+		writeFile(path.join(context.repoDir, "src/app.ts"), "debugger;\n");
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "selected-files.txt"),
+			"src/app.ts\n",
+			"utf8",
+		);
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "linter-result.json"),
+			JSON.stringify({
+				details: sparseDetails,
+				exit_code: 1,
+				sarif: {
+					$schema: "https://json.schemastore.org/sarif-2.1.0.json",
+					runs: [
+						{
+							results: [
+								{
+									locations: [
+										{
+											physicalLocation: {
+												artifactLocation: {
+													uri: path.join(context.repoDir, "src/app.ts"),
+												},
+												region: {
+													startColumn: 3,
+													startLine: 4,
+												},
+											},
+										},
+									],
+									message: {
+										text: "debug statements are not allowed",
+									},
+									ruleId: "lint/suspicious/noDebugger",
+								},
+							],
+						},
+					],
+					version: "2.1.0",
+				},
+			}),
+			"utf8",
+		);
+
+		const report = runFromEnv(
+			createReportEnv(context, {
+				EXIT_CODE: "1",
+				LINTER_NAME: "biome",
+			}),
+		);
+		const summary = readSummary(context.runnerTemp, "biome");
+
+		assert.equal(report.conclusion, "failure");
+		assert.equal(
+			report.detailsText,
+			"src/app.ts:4:3 lint/suspicious/noDebugger debug statements are not allowed",
+		);
+		assert.match(
+			report.body,
+			/```text\nsrc\/app\.ts:4:3 lint\/suspicious\/noDebugger debug statements are not allowed\n```/,
+		);
+		assert.doesNotMatch(
+			report.body,
+			/Some errors were emitted while running checks/,
+		);
+		assert.equal(
+			summary.details_text,
+			"src/app.ts:4:3 lint/suspicious/noDebugger debug statements are not allowed",
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
 test("renders warning summaries and details without failing the report", () => {
 	const context = makeTempRepo("render-linter-report-warning-");
 

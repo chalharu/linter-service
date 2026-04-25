@@ -262,6 +262,60 @@ NODE
   return 1
 }
 
+linter_lib::emit_json_result_with_json_file() {
+  local exit_code=$1
+  local result_key=$2
+  local json_file=$3
+  local python_bin
+
+  if [ ! -f "$json_file" ]; then
+    printf 'JSON file not found: %s\n' "$json_file" >&2
+    return 1
+  fi
+
+  if python_bin="$(linter_lib::python_cmd 2>/dev/null)"; then
+    "$python_bin" - "$exit_code" "$result_key" "$json_file" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+exit_code = int(sys.argv[1])
+result_key = sys.argv[2]
+json_path = Path(sys.argv[3])
+
+payload = {"exit_code": exit_code, result_key: json.loads(json_path.read_text(encoding="utf-8"))}
+print(json.dumps(payload))
+PY
+    return 0
+  fi
+
+  if command -v node >/dev/null 2>&1; then
+    node - "$exit_code" "$result_key" "$json_file" <<'NODE'
+const fs = require("node:fs");
+
+const [exitCodeRaw, resultKey, jsonPath] = process.argv.slice(2);
+const payload = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
+process.stdout.write(
+  JSON.stringify({
+    exit_code: Number.parseInt(exitCodeRaw, 10),
+    [resultKey]: payload,
+  }),
+);
+NODE
+    return 0
+  fi
+
+  echo "python3, python, or node is required" >&2
+  return 1
+}
+
+linter_lib::emit_json_result_with_sarif() {
+  local exit_code=$1
+  local sarif_file=$2
+
+  linter_lib::emit_json_result_with_json_file "$exit_code" sarif "$sarif_file"
+}
+
 linter_lib::run_and_emit_json() {
   local output_file=$1
   shift

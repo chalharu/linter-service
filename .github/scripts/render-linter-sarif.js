@@ -3,7 +3,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 const requireEnv = require("./lib/require-env.js");
 const { loadLinterHook } = require("./lib/linter-hooks.js");
-const { buildSarifEnvelope } = require("./lib/sarif.js");
+const {
+	buildSarifEnvelope,
+	readEmbeddedSarif,
+	readSarifRun,
+} = require("./lib/sarif.js");
 const {
 	readLinterConfig,
 	readResult,
@@ -298,6 +302,20 @@ function buildSarifResults({
 	sourceRepositoryPath,
 	targetPaths,
 }) {
+	const embeddedResults = buildEmbeddedSarifResults({
+		dedupeResults,
+		linterName,
+		normalizeReportedPath,
+		reportedPathRoots,
+		result,
+		sourceRepositoryPath,
+		targetPaths,
+	});
+
+	if (embeddedResults.length > 0) {
+		return embeddedResults;
+	}
+
 	const linterSpecificResults = buildLinterSpecificSarifResults({
 		configPath,
 		createResult,
@@ -368,6 +386,113 @@ function buildSarifResults({
 	});
 }
 
+function buildEmbeddedSarifResults({
+	dedupeResults,
+	linterName,
+	normalizeReportedPath,
+	reportedPathRoots,
+	result,
+	sourceRepositoryPath,
+	targetPaths,
+}) {
+	const run = readSarifRun(readEmbeddedSarif(result));
+	if (!run || !Array.isArray(run.results)) {
+		return [];
+	}
+
+	return dedupeResults(
+		run.results.map((entry) =>
+			normalizeEmbeddedSarifResult({
+				linterName,
+				normalizeReportedPath,
+				reportedPathRoots,
+				result: entry,
+				sourceRepositoryPath,
+				targetPaths,
+			}),
+		),
+	);
+}
+
+function normalizeEmbeddedSarifResult({
+	linterName,
+	normalizeReportedPath,
+	reportedPathRoots,
+	result,
+	sourceRepositoryPath,
+	targetPaths,
+}) {
+	const normalizedResult = structuredClone(result);
+	const normalizedLocations = normalizeEmbeddedSarifLocations({
+		locations: normalizedResult.locations,
+		normalizeReportedPath,
+		reportedPathRoots,
+		sourceRepositoryPath,
+		targetPaths,
+	});
+
+	if (normalizedLocations.length > 0) {
+		normalizedResult.locations = normalizedLocations;
+	} else {
+		delete normalizedResult.locations;
+	}
+
+	normalizedResult.properties = {
+		...(normalizedResult.properties &&
+		typeof normalizedResult.properties === "object"
+			? normalizedResult.properties
+			: {}),
+		linter_name: linterName,
+	};
+
+	return normalizedResult;
+}
+
+function normalizeEmbeddedSarifLocations({
+	locations,
+	normalizeReportedPath,
+	reportedPathRoots,
+	sourceRepositoryPath,
+	targetPaths,
+}) {
+	if (!Array.isArray(locations)) {
+		return [];
+	}
+
+	return locations.flatMap((location) => {
+		const uri = location?.physicalLocation?.artifactLocation?.uri;
+		const normalizedUri = normalizeReportedPath(
+			sourceRepositoryPath,
+			uri,
+			targetPaths,
+			reportedPathRoots,
+		);
+
+		if (!normalizedUri) {
+			return [];
+		}
+
+		return [
+			{
+				...location,
+				physicalLocation: {
+					...(location.physicalLocation &&
+					typeof location.physicalLocation === "object"
+						? location.physicalLocation
+						: {}),
+					artifactLocation: {
+						...(location?.physicalLocation?.artifactLocation &&
+						typeof location.physicalLocation.artifactLocation === "object"
+							? location.physicalLocation.artifactLocation
+							: {}),
+						uri: normalizedUri,
+					},
+				},
+			},
+		];
+	});
+}
+
 function buildLinterSpecificSarifResults({
 	configPath,
 	createResult,
@@ -423,6 +548,10 @@ function buildLinterSpecificSarifRules({
 	result,
 	runnerTemp,
 }) {
+	if (hasEmbeddedSarifResults(result)) {
+		return buildEmbeddedSarifRules(result);
+	}
+
 	const hook = loadLinterHook({
 		configPath,
 		fileName: "render-linter-sarif.js",
@@ -450,6 +579,20 @@ function buildLinterSpecificSarifRules({
 	}
 
 	return rules;
+}
+
+function hasEmbeddedSarifResults(result) {
+	const run = readSarifRun(readEmbeddedSarif(result));
+	return Array.isArray(run?.results) && run.results.length > 0;
+}
+
+function buildEmbeddedSarifRules(result) {
+	const rules = readSarifRun(readEmbeddedSarif(result))?.tool?.driver?.rules;
+	if (!Array.isArray(rules)) {
+		return null;
+	}
+
+	return dedupeRules(rules.map((rule) => structuredClone(rule)));
 }
 
 function parsePathDiagnostics({
@@ -925,6 +1068,26 @@ function dedupeResults(results) {
 
 		seen.add(key);
 		deduped.push(result);
+	}
+
+	return deduped;
+}
+
+function dedupeRules(rules) {
+	const seen = new Set();
+	const deduped = [];
+
+	for (const rule of rules) {
+		const key =
+			typeof rule?.id === "string" && rule.id.length > 0
+				? rule.id
+				: JSON.stringify(rule);
+		if (seen.has(key)) {
+			continue;
+		}
+
+		seen.add(key);
+		deduped.push(rule);
 	}
 
 	return deduped;

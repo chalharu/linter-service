@@ -58,7 +58,7 @@ const nativeSarif = {
 	version: "2.1.0",
 };
 
-test("prefers native Biome SARIF when available", () => {
+test("prefers embedded Biome SARIF when available", () => {
 	const context = makeTempRepo("render-linter-sarif-biome-");
 
 	try {
@@ -76,11 +76,8 @@ test("prefers native Biome SARIF when available", () => {
 			JSON.stringify({
 				details,
 				exit_code: 1,
+				sarif: nativeSarifReport,
 			}),
-		);
-		writeFile(
-			path.join(context.runnerTemp, "biome-native.sarif"),
-			JSON.stringify(nativeSarifReport),
 		);
 
 		const report = runFromEnv({

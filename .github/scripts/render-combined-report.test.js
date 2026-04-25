@@ -313,6 +313,67 @@ test("treats warning summaries as non-blocking findings in combined output", () 
 	}
 });
 
+test("renders Biome detail blocks from per-linter summary details", () => {
+	const tempDir = fs.mkdtempSync(
+		path.join(os.tmpdir(), "render-combined-report-biome-"),
+	);
+	const runnerTemp = path.join(tempDir, "runner-temp");
+	const summaryRoot = path.join(tempDir, "summaries");
+
+	fs.mkdirSync(runnerTemp, { recursive: true });
+	fs.mkdirSync(summaryRoot, { recursive: true });
+	fs.writeFileSync(
+		path.join(summaryRoot, "linter-summary-biome.json"),
+		JSON.stringify(
+			{
+				comment_body:
+					"### biome\n\n❌ Checked 1 file; issue counts are unavailable.\n\n<details><summary>Details</summary>\n\n```text\nlint summary only\n```\n</details>\n",
+				checked_project_count: 0,
+				checked_projects: [],
+				conclusion: "failure",
+				counts_known: false,
+				details_text:
+					"src/app.ts:4:3 lint/suspicious/noDebugger debug statements are not allowed",
+				issue_count: null,
+				issue_target_count: null,
+				linter_name: "biome",
+				passed_target_count: null,
+				selected_files: ["src/app.ts"],
+				selected_file_count: 1,
+				status: "failure",
+				summary_text: "❌ Checked 1 file; issue counts are unavailable.",
+				target_count: 1,
+				target_kind: "file",
+			},
+			null,
+			2,
+		),
+		"utf8",
+	);
+
+	try {
+		const report = runFromEnv({
+			DECRYPT_SUMMARIES_OUTCOME: "success",
+			LINTER_SUMMARY_PATH: summaryRoot,
+			RUNNER_TEMP: runnerTemp,
+			SELECTED_LINTERS_JSON: JSON.stringify(["biome"]),
+		});
+		const commentBody = fs.readFileSync(
+			path.join(runnerTemp, "combined-linter-comment.md"),
+			"utf8",
+		);
+
+		assert.equal(report.overallConclusion, "failure");
+		assert.match(
+			commentBody,
+			/### biome\n\n```text\nsrc\/app\.ts:4:3 lint\/suspicious\/noDebugger debug statements are not allowed\n```/,
+		);
+		assert.doesNotMatch(commentBody, /lint summary only/);
+	} finally {
+		fs.rmSync(tempDir, { force: true, recursive: true });
+	}
+});
+
 test("falls back to decrypt failure messaging when detailed summaries are unavailable", () => {
 	const tempDir = fs.mkdtempSync(
 		path.join(os.tmpdir(), "render-combined-report-missing-"),

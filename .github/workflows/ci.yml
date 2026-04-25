@@ -44,6 +44,9 @@ jobs:
         run: |
           node --test \
             .github/scripts/aggregate-sarif.test.js \
+            .github/scripts/render-combined-report.test.js \
+            .github/scripts/render-linter-report.test.js \
+            .github/scripts/run-linter-batch.test.js \
             .github/scripts/prune-renovate-cache-images.test.js \
             .github/scripts/validate-linters-config.test.js \
             .github/scripts/validate-linter-service-config.test.js \
@@ -51,7 +54,9 @@ jobs:
             .github/scripts/linter-targeting.test.js \
             .github/scripts/select-lint-targets.test.js \
             .github/scripts/installer-version-pins.test.js \
-            .github/scripts/upload-sarif.test.js
+            .github/scripts/upload-sarif.test.js \
+            biome/biome.test.js \
+            biome/render-linter-sarif.test.js
       - name: Collect fixture test matrix
         id: collect
         run: |

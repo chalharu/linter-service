@@ -234,6 +234,7 @@ function runFixtureCase({
 		installOutcome: "success",
 		linterName,
 		resultPath,
+		runnerTemp: caseRunnerTemp,
 		runOutcome: selectedFiles.length > 0 ? "success" : "skipped",
 		selectedFilesPath,
 		selectOutcome: "success",
