@@ -1,8 +1,280 @@
 {
   "checked_projects": [],
   "result": {
-    "details": "",
-    "exit_code": 0
+    "exit_code": 0,
+    "sarif": {
+      "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+      "runs": [
+        {
+          "results": [],
+          "tool": {
+            "driver": {
+              "informationUri": "https://github.com/rhysd/actionlint",
+              "name": "GitHub Actions lint",
+              "rules": [
+                {
+                  "defaultConfiguration": {
+                    "level": "error"
+                  },
+                  "fullDescription": {
+                    "text": "Checks for popular actions released on GitHub, local actions, and action calls at \"uses:\""
+                  },
+                  "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
+                  "id": "action",
+                  "name": "Action",
+                  "properties": {
+                    "description": "Checks for popular actions released on GitHub, local actions, and action calls at \"uses:\"",
+                    "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+                  }
+                },
+                {
+                  "defaultConfiguration": {
+                    "level": "error"
+                  },
+                  "fullDescription": {
+                    "text": "Checks for credentials in \"services:\" configuration"
+                  },
+                  "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
+                  "id": "credentials",
+                  "name": "Credentials",
+                  "properties": {
+                    "description": "Checks for credentials in \"services:\" configuration",
+                    "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+                  }
+                },
+                {
+                  "defaultConfiguration": {
+                    "level": "error"
+                  },
+                  "fullDescription": {
+                    "text": "Checks for deprecated \"set-output\", \"save-state\", \"set-env\", and \"add-path\" commands at \"run:\""
+                  },
+                  "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
+                  "id": "deprecated-commands",
+                  "name": "DeprecatedCommands",
+                  "properties": {
+                    "description": "Checks for deprecated \"set-output\", \"save-state\", \"set-env\", and \"add-path\" commands at \"run:\"",
+                    "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+                  }
+                },
+                {
+                  "defaultConfiguration": {
+                    "level": "error"
+                  },
+                  "fullDescription": {
+                    "text": "Checks for environment variables configuration at \"env:\""
+                  },
+                  "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
+                  "id": "env-var",
+                  "name": "EnvVar",
+                  "properties": {
+                    "description": "Checks for environment variables configuration at \"env:\"",
+                    "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+                  }
+                },
+                {
+                  "defaultConfiguration": {
+                    "level": "error"
+                  },
+                  "fullDescription": {
+                    "text": "Checks for workflow trigger events at \"on:\""
+                  },
+                  "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
+                  "id": "events",
+                  "name": "Events",
+                  "properties": {
+                    "description": "Checks for workflow trigger events at \"on:\"",
+                    "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+                  }
+                },
+                {
+                  "defaultConfiguration": {
+                    "level": "error"
+                  },
+                  "fullDescription": {
+                    "text": "Syntax and semantics checks for expressions embedded with ${{ }} syntax"
+                  },
+                  "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
+                  "id": "expression",
+                  "name": "Expression",
+                  "properties": {
+                    "description": "Syntax and semantics checks for expressions embedded with ${{ }} syntax",
+                    "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+                  }
+                },
+                {
+                  "defaultConfiguration": {
+                    "level": "error"
+                  },
+                  "fullDescription": {
+                    "text": "Checks for glob syntax used in branch names, tags, and paths"
+                  },
+                  "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
+                  "id": "glob",
+                  "name": "Glob",
+                  "properties": {
+                    "description": "Checks for glob syntax used in branch names, tags, and paths",
+                    "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+                  }
+                },
+                {
+                  "defaultConfiguration": {
+                    "level": "error"
+                  },
+                  "fullDescription": {
+                    "text": "Checks for duplication and naming convention of job/step IDs"
+                  },
+                  "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
+                  "id": "id",
+                  "name": "Id",
+                  "properties": {
+                    "description": "Checks for duplication and naming convention of job/step IDs",
+                    "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+                  }
+                },
+                {
+                  "defaultConfiguration": {
+                    "level": "error"
+                  },
+                  "fullDescription": {
+                    "text": "Checks for if: conditions which are always true/false"
+                  },
+                  "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
+                  "id": "if-cond",
+                  "name": "IfCond",
+                  "properties": {
+                    "description": "Checks for if: conditions which are always true/false",
+                    "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+                  }
+                },
+                {
+                  "defaultConfiguration": {
+                    "level": "error"
+                  },
+                  "fullDescription": {
+                    "text": "Checks for job IDs in \"needs:\". Undefined IDs and cyclic dependencies are checked"
+                  },
+                  "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
+                  "id": "job-needs",
+                  "name": "JobNeeds",
+                  "properties": {
+                    "description": "Checks for job IDs in \"needs:\". Undefined IDs and cyclic dependencies are checked",
+                    "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+                  }
+                },
+                {
+                  "defaultConfiguration": {
+                    "level": "error"
+                  },
+                  "fullDescription": {
+                    "text": "Checks for matrix combinations in \"matrix:\""
+                  },
+                  "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
+                  "id": "matrix",
+                  "name": "Matrix",
+                  "properties": {
+                    "description": "Checks for matrix combinations in \"matrix:\"",
+                    "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+                  }
+                },
+                {
+                  "defaultConfiguration": {
+                    "level": "error"
+                  },
+                  "fullDescription": {
+                    "text": "Checks for permissions configuration in \"permissions:\". Permission names and permission scopes are checked"
+                  },
+                  "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
+                  "id": "permissions",
+                  "name": "Permissions",
+                  "properties": {
+                    "description": "Checks for permissions configuration in \"permissions:\". Permission names and permission scopes are checked",
+                    "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+                  }
+                },
+                {
+                  "defaultConfiguration": {
+                    "level": "error"
+                  },
+                  "fullDescription": {
+                    "text": "Checks for GitHub-hosted and preset self-hosted runner labels in \"runs-on:\""
+                  },
+                  "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
+                  "id": "runner-label",
+                  "name": "RunnerLabel",
+                  "properties": {
+                    "description": "Checks for GitHub-hosted and preset self-hosted runner labels in \"runs-on:\"",
+                    "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+                  }
+                },
+                {
+                  "defaultConfiguration": {
+                    "level": "error"
+                  },
+                  "fullDescription": {
+                    "text": "Checks for shell names used for scripts in \"run:\""
+                  },
+                  "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
+                  "id": "shell-name",
+                  "name": "ShellName",
+                  "properties": {
+                    "description": "Checks for shell names used for scripts in \"run:\"",
+                    "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+                  }
+                },
+                {
+                  "defaultConfiguration": {
+                    "level": "error"
+                  },
+                  "fullDescription": {
+                    "text": "Checks for shell script sources in \"run:\" using shellcheck"
+                  },
+                  "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
+                  "id": "shellcheck",
+                  "name": "Shellcheck",
+                  "properties": {
+                    "description": "Checks for shell script sources in \"run:\" using shellcheck",
+                    "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+                  }
+                },
+                {
+                  "defaultConfiguration": {
+                    "level": "error"
+                  },
+                  "fullDescription": {
+                    "text": "Checks for GitHub Actions workflow syntax"
+                  },
+                  "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
+                  "id": "syntax-check",
+                  "name": "SyntaxCheck",
+                  "properties": {
+                    "description": "Checks for GitHub Actions workflow syntax",
+                    "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+                  }
+                },
+                {
+                  "defaultConfiguration": {
+                    "level": "error"
+                  },
+                  "fullDescription": {
+                    "text": "Checks for reusable workflow calls. Inputs and outputs of called reusable workflow are checked"
+                  },
+                  "helpUri": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
+                  "id": "workflow-call",
+                  "name": "WorkflowCall",
+                  "properties": {
+                    "description": "Checks for reusable workflow calls. Inputs and outputs of called reusable workflow are checked",
+                    "queryURI": "https://github.com/rhysd/actionlint/blob/main/docs/checks.md"
+                  }
+                }
+              ],
+              "version": "1.7.12"
+            }
+          }
+        }
+      ],
+      "version": "2.1.0"
+    }
   },
   "selected_files": [
     ".github/workflows/workflow.yml"

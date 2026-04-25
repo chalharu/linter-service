@@ -11,7 +11,69 @@ const { runFromEnv } = require("../.github/scripts/render-linter-sarif.js");
 
 const configPath = path.join(__dirname, "..", "linters.json");
 
-test("emits SARIF for actionlint workflow diagnostics", () => {
+// Native SARIF as emitted by `actionlint -format "$(cat sarif_template.txt)"`
+const nativeSarif = {
+	$schema:
+		"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+	version: "2.1.0",
+	runs: [
+		{
+			tool: {
+				driver: {
+					name: "GitHub Actions lint",
+					version: "1.7.12",
+					informationUri: "https://github.com/rhysd/actionlint",
+					rules: [
+						{
+							id: "expression",
+							name: "Expression",
+							defaultConfiguration: { level: "error" },
+							properties: {
+								description:
+									"Syntax and semantics checks for expressions embedded with ${{ }} syntax",
+								queryURI:
+									"https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
+							},
+							fullDescription: {
+								text: "Syntax and semantics checks for expressions embedded with ${{ }} syntax",
+							},
+							helpUri:
+								"https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
+						},
+					],
+				},
+			},
+			results: [
+				{
+					ruleId: "expression",
+					message: {
+						text: "got unexpected character '\"' while lexing expression",
+					},
+					locations: [
+						{
+							physicalLocation: {
+								artifactLocation: {
+									uri: ".github/workflows/ci.yml",
+									uriBaseId: "%SRCROOT%",
+								},
+								region: {
+									startLine: 7,
+									startColumn: 35,
+									endColumn: 35,
+									snippet: {
+										text: '      - run: echo "${{ github.ref "\n                                  ^',
+									},
+								},
+							},
+						},
+					],
+				},
+			],
+		},
+	],
+};
+
+test("prefers embedded actionlint SARIF when available", () => {
 	const context = makeTempRepo("render-linter-sarif-actionlint-");
 
 	writeFile(
@@ -25,9 +87,8 @@ test("emits SARIF for actionlint workflow diagnostics", () => {
 	writeFile(
 		path.join(context.runnerTemp, "linter-result.json"),
 		JSON.stringify({
-			details:
-				'.github/workflows/ci.yml:12:5: unexpected key "permissions" for "workflow"',
 			exit_code: 1,
+			sarif: nativeSarif,
 		}),
 	);
 
@@ -47,6 +108,7 @@ test("emits SARIF for actionlint workflow diagnostics", () => {
 
 		assert.equal(report.produced, true);
 		assert.equal(report.sarif.runs[0].results.length, 1);
+		assert.equal(report.sarif.runs[0].results[0].ruleId, "expression");
 		assert.equal(
 			report.sarif.runs[0].results[0].locations[0].physicalLocation
 				.artifactLocation.uri,
@@ -55,17 +117,19 @@ test("emits SARIF for actionlint workflow diagnostics", () => {
 		assert.equal(
 			report.sarif.runs[0].results[0].locations[0].physicalLocation.region
 				.startLine,
-			12,
+			7,
 		);
 		assert.equal(
 			report.sarif.runs[0].results[0].locations[0].physicalLocation.region
 				.startColumn,
-			5,
+			35,
 		);
 		assert.match(
 			report.sarif.runs[0].results[0].message.text,
-			/unexpected key "permissions"/,
+			/got unexpected character/,
 		);
+		// Rules are sourced from native SARIF
+		assert.equal(report.sarif.runs[0].tool.driver.rules[0].id, "expression");
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}
