@@ -63,6 +63,7 @@ test("biome/run.sh runs Biome in SARIF mode from the start", () => {
 	const context = makeTempRepo("biome-run-native-sarif-");
 
 	createBiomeStub(context);
+	fs.rmSync(path.join(context.binDir, "python3"), { force: true });
 	writeFile(path.join(context.repoDir, "src/app.ts"), 'console.log("x")\n');
 
 	try {
@@ -75,7 +76,11 @@ test("biome/run.sh runs Biome in SARIF mode from the start", () => {
 		const sarifPath = path.join(context.runnerTemp, "biome-native.sarif");
 
 		assert.equal(result.exit_code, 1);
-		assert.equal(result.details, "SARIF summary");
+		assert.equal(
+			result.sarif.runs[0].results[0].message.text,
+			"native failure",
+		);
+		assert.equal(result.sarif.runs[0].tool.driver.rules[0].id, "parse");
 		assert.equal(fs.existsSync(sarifPath), true);
 		assert.equal(
 			JSON.parse(fs.readFileSync(sarifPath, "utf8")).runs[0].results[0].ruleId,
@@ -90,6 +95,7 @@ test("biome/run.sh fails when native SARIF output is missing", () => {
 	const context = makeTempRepo("biome-run-missing-sarif-");
 
 	createBiomeStub(context);
+	fs.rmSync(path.join(context.binDir, "python3"), { force: true });
 	writeFile(path.join(context.repoDir, "src/app.ts"), 'console.log("x")\n');
 
 	try {

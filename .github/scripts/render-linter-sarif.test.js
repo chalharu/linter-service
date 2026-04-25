@@ -291,6 +291,188 @@ test("parses file line and column diagnostics into SARIF results", () => {
 	}
 });
 
+test("prefers embedded SARIF results and rules over legacy details", () => {
+	const context = makeTempRepo("render-linter-sarif-embedded-");
+	const configPath = path.join(context.tempDir, "config.json");
+
+	writeFile(path.join(context.repoDir, "src/app.js"), "console.log('bad');\n");
+	writeFile(
+		configPath,
+		JSON.stringify(
+			{
+				linters: {
+					example: {
+						sarif: {
+							enabled: true,
+						},
+					},
+				},
+			},
+			null,
+			2,
+		),
+	);
+	writeFile(
+		path.join(context.runnerTemp, "selected-files.txt"),
+		"src/app.js\n",
+	);
+	writeFile(
+		path.join(context.runnerTemp, "linter-result.json"),
+		JSON.stringify({
+			details: "src/app.js:1:1: EX999 legacy fallback",
+			exit_code: 1,
+			sarif: {
+				runs: [
+					{
+						results: [
+							{
+								level: "error",
+								locations: [
+									{
+										physicalLocation: {
+											artifactLocation: {
+												uri: path.join(context.repoDir, "src/app.js"),
+											},
+											region: {
+												startColumn: 3,
+												startLine: 4,
+											},
+										},
+									},
+								],
+								message: {
+									text: "native failure",
+								},
+								ruleId: "EX123",
+							},
+						],
+						tool: {
+							driver: {
+								rules: [
+									{
+										helpUri: "https://example.invalid/rules/EX123",
+										id: "EX123",
+										shortDescription: {
+											text: "native rule",
+										},
+									},
+								],
+							},
+						},
+					},
+				],
+				version: "2.1.0",
+			},
+		}),
+	);
+
+	try {
+		const report = renderSarif({
+			configPath,
+			installOutcome: "success",
+			linterName: "example",
+			outputPath: path.join(context.runnerTemp, "example.sarif"),
+			resultPath: path.join(context.runnerTemp, "linter-result.json"),
+			runOutcome: "success",
+			selectedFilesPath: path.join(context.runnerTemp, "selected-files.txt"),
+			selectOutcome: "success",
+			sourceRepositoryPath: context.repoDir,
+		});
+
+		assert.equal(report.produced, true);
+		assert.equal(report.sarif.runs[0].results.length, 1);
+		assert.equal(report.sarif.runs[0].results[0].ruleId, "EX123");
+		assert.equal(
+			report.sarif.runs[0].results[0].locations[0].physicalLocation
+				.artifactLocation.uri,
+			"src/app.js",
+		);
+		assert.equal(
+			report.sarif.runs[0].tool.driver.rules[0].helpUri,
+			"https://example.invalid/rules/EX123",
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("falls back to derived rules when embedded SARIF has no results", () => {
+	const context = makeTempRepo("render-linter-sarif-embedded-empty-");
+	const configPath = path.join(context.tempDir, "config.json");
+
+	writeFile(path.join(context.repoDir, "src/app.js"), "console.log('bad');\n");
+	writeFile(
+		configPath,
+		JSON.stringify(
+			{
+				linters: {
+					example: {
+						sarif: {
+							enabled: true,
+						},
+					},
+				},
+			},
+			null,
+			2,
+		),
+	);
+	writeFile(
+		path.join(context.runnerTemp, "selected-files.txt"),
+		"src/app.js\n",
+	);
+	writeFile(
+		path.join(context.runnerTemp, "linter-result.json"),
+		JSON.stringify({
+			details: "src/app.js:1:1: EX999 legacy fallback",
+			exit_code: 1,
+			sarif: {
+				runs: [
+					{
+						results: [],
+						tool: {
+							driver: {
+								rules: [
+									{
+										helpUri: "https://example.invalid/rules/EX123",
+										id: "EX123",
+										shortDescription: {
+											text: "unused embedded rule",
+										},
+									},
+								],
+							},
+						},
+					},
+				],
+				version: "2.1.0",
+			},
+		}),
+	);
+
+	try {
+		const report = renderSarif({
+			configPath,
+			installOutcome: "success",
+			linterName: "example",
+			outputPath: path.join(context.runnerTemp, "example.sarif"),
+			resultPath: path.join(context.runnerTemp, "linter-result.json"),
+			runOutcome: "success",
+			selectedFilesPath: path.join(context.runnerTemp, "selected-files.txt"),
+			selectOutcome: "success",
+			sourceRepositoryPath: context.repoDir,
+		});
+
+		assert.equal(report.produced, true);
+		assert.equal(report.sarif.runs[0].results.length, 1);
+		assert.equal(report.sarif.runs[0].results[0].ruleId, "EX999");
+		assert.equal(report.sarif.runs[0].tool.driver.rules.length, 1);
+		assert.equal(report.sarif.runs[0].tool.driver.rules[0].id, "EX999");
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
 test("keeps failing-file counts unknown when fallback diagnostics have no file path", () => {
 	const context = makeTempRepo("render-linter-sarif-pathless-fallback-");
 	const configPath = path.join(context.tempDir, "config.json");

@@ -307,7 +307,7 @@ test("includes checked targets before diagnostic details on failure", () => {
 	}
 });
 
-test("uses native Biome SARIF for failure details and summary output", () => {
+test("uses embedded SARIF for failure details and summary output", () => {
 	const context = makeTempRepo("render-linter-report-biome-");
 	const sparseDetails =
 		"lint ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n  × Some errors were emitted while running checks.";
@@ -321,39 +321,38 @@ test("uses native Biome SARIF for failure details and summary output", () => {
 		);
 		fs.writeFileSync(
 			path.join(context.runnerTemp, "linter-result.json"),
-			JSON.stringify({ details: sparseDetails, exit_code: 1 }),
-			"utf8",
-		);
-		fs.writeFileSync(
-			path.join(context.runnerTemp, "biome-native.sarif"),
 			JSON.stringify({
-				$schema: "https://json.schemastore.org/sarif-2.1.0.json",
-				runs: [
-					{
-						results: [
-							{
-								locations: [
-									{
-										physicalLocation: {
-											artifactLocation: {
-												uri: path.join(context.repoDir, "src/app.ts"),
-											},
-											region: {
-												startColumn: 3,
-												startLine: 4,
+				details: sparseDetails,
+				exit_code: 1,
+				sarif: {
+					$schema: "https://json.schemastore.org/sarif-2.1.0.json",
+					runs: [
+						{
+							results: [
+								{
+									locations: [
+										{
+											physicalLocation: {
+												artifactLocation: {
+													uri: path.join(context.repoDir, "src/app.ts"),
+												},
+												region: {
+													startColumn: 3,
+													startLine: 4,
+												},
 											},
 										},
+									],
+									message: {
+										text: "debug statements are not allowed",
 									},
-								],
-								message: {
-									text: "debug statements are not allowed",
+									ruleId: "lint/suspicious/noDebugger",
 								},
-								ruleId: "lint/suspicious/noDebugger",
-							},
-						],
-					},
-				],
-				version: "2.1.0",
+							],
+						},
+					],
+					version: "2.1.0",
+				},
 			}),
 			"utf8",
 		);

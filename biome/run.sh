@@ -7,9 +7,9 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$script_dir/common.sh"
 
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
-output_file="$RUNNER_TEMP/linter-output.txt"
 native_sarif_file="$RUNNER_TEMP/biome-native.sarif"
-rm -f "$native_sarif_file"
+stderr_file="$RUNNER_TEMP/biome-stderr.log"
+rm -f "$native_sarif_file" "$stderr_file"
 
 set +e
 biome lint \
@@ -18,13 +18,17 @@ biome lint \
   --no-errors-on-unmatched \
   --reporter=sarif \
   --reporter-file="$native_sarif_file" \
-  "$@" >"$output_file" 2>&1
+  "$@" >/dev/null 2>"$stderr_file"
 exit_code=$?
 set -e
 
 if [ ! -s "$native_sarif_file" ]; then
   echo "biome native SARIF reporter did not produce output" >&2
+  if [ -s "$stderr_file" ]; then
+    cat "$stderr_file" >&2
+  fi
   exit 1
 fi
 
-linter_lib::emit_json_result "$exit_code" "$output_file"
+rm -f "$stderr_file"
+linter_lib::emit_json_result_with_sarif "$exit_code" "$native_sarif_file"

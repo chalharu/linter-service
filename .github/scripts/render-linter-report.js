@@ -3,6 +3,10 @@ const path = require("node:path");
 const requireEnv = require("./lib/require-env.js");
 const { loadLinterHook } = require("./lib/linter-hooks.js");
 const {
+	buildDetailsTextFromSarif,
+	readEmbeddedSarif,
+} = require("./lib/sarif.js");
+const {
 	deriveTargetCount,
 	escapeHtml,
 	formatTargetLabel,
@@ -158,6 +162,14 @@ function resolveDetails(
 
 	if (typeof hookDetails === "string") {
 		return normalizeDetailsText(hookDetails, fallback);
+	}
+
+	const sarifDetails = buildDetailsTextFromSarif({
+		sarif: readEmbeddedSarif(result),
+		sourceRepositoryPath,
+	});
+	if (sarifDetails.length > 0) {
+		return normalizeDetailsText(sarifDetails, fallback);
 	}
 
 	const details =
