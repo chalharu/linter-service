@@ -1,8 +1,535 @@
 {
   "checked_projects": [],
   "result": {
-    "details": "INFO zizmor: 🌈 zizmor v1.24.1\n INFO audit: zizmor: 🌈 completed .github/workflows/workflow.yml\nwarning[artipacked]: credential persistence through GitHub Actions artifacts\n --> .github/workflows/workflow.yml:7:9\n  |\n7 |       - uses: actions/checkout@v4\n  |         ^^^^^^^^^^^^^^^^^^^^^^^^^ does not set persist-credentials: false\n  |\n  = note: audit confidence → Low\n  = note: this finding has an auto-fix\n  = help: audit documentation → https://docs.zizmor.sh/audits/#artipacked\n\nwarning[excessive-permissions]: overly broad permissions\n --> .github/workflows/workflow.yml:4:3\n  |\n4 | /   test:\n5 | |     runs-on: ubuntu-latest\n6 | |     steps:\n7 | |       - uses: actions/checkout@v4\n  | |                                  ^\n  | |                                  |\n  | |__________________________________this job\n  |                                    default permissions used due to no permissions: block\n  |\n  = note: audit confidence → Medium\n  = help: audit documentation → https://docs.zizmor.sh/audits/#excessive-permissions\n\nerror[unpinned-uses]: unpinned action reference\n --> .github/workflows/workflow.yml:7:15\n  |\n7 |       - uses: actions/checkout@v4\n  |               ^^^^^^^^^^^^^^^^^^^ action is not pinned to a hash (required by blanket policy)\n  |\n  = note: audit confidence → High\n  = help: audit documentation → https://docs.zizmor.sh/audits/#unpinned-uses\n\n6 findings (3 suppressed, 1 fixable): 0 informational, 0 low, 2 medium, 1 high",
-    "exit_code": 14
+    "exit_code": 1,
+    "sarif": {
+      "$schema": "https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/schemas/sarif-schema-2.1.0.json",
+      "runs": [
+        {
+          "invocations": [
+            {
+              "executionSuccessful": true
+            }
+          ],
+          "results": [
+            {
+              "codeFlows": [
+                {
+                  "threadFlows": [
+                    {
+                      "locations": [
+                        {
+                          "importance": "essential",
+                          "location": {
+                            "logicalLocations": [
+                              {
+                                "properties": {
+                                  "symbolic": {
+                                    "annotation": "does not set persist-credentials: false",
+                                    "feature_kind": "Normal",
+                                    "key": {
+                                      "Local": {
+                                        "given_path": ".github/workflows/workflow.yml",
+                                        "prefix": null
+                                      }
+                                    },
+                                    "kind": "Primary",
+                                    "route": {
+                                      "route": [
+                                        {
+                                          "Key": "jobs"
+                                        },
+                                        {
+                                          "Key": "test"
+                                        },
+                                        {
+                                          "Key": "steps"
+                                        },
+                                        {
+                                          "Index": 0
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            ],
+                            "message": {
+                              "text": "does not set persist-credentials: false"
+                            },
+                            "physicalLocation": {
+                              "artifactLocation": {
+                                "uri": ".github/workflows/workflow.yml"
+                              },
+                              "region": {
+                                "endColumn": 1,
+                                "endLine": 8,
+                                "snippet": {
+                                  "text": "uses: actions/checkout@v4\n"
+                                },
+                                "sourceLanguage": "yaml",
+                                "startColumn": 9,
+                                "startLine": 7
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "kind": "fail",
+              "level": "warning",
+              "locations": [
+                {
+                  "logicalLocations": [
+                    {
+                      "properties": {
+                        "symbolic": {
+                          "annotation": "does not set persist-credentials: false",
+                          "feature_kind": "Normal",
+                          "key": {
+                            "Local": {
+                              "given_path": ".github/workflows/workflow.yml",
+                              "prefix": null
+                            }
+                          },
+                          "kind": "Primary",
+                          "route": {
+                            "route": [
+                              {
+                                "Key": "jobs"
+                              },
+                              {
+                                "Key": "test"
+                              },
+                              {
+                                "Key": "steps"
+                              },
+                              {
+                                "Index": 0
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  "message": {
+                    "text": "does not set persist-credentials: false"
+                  },
+                  "physicalLocation": {
+                    "artifactLocation": {
+                      "uri": ".github/workflows/workflow.yml"
+                    },
+                    "region": {
+                      "endColumn": 1,
+                      "endLine": 8,
+                      "snippet": {
+                        "text": "uses: actions/checkout@v4\n"
+                      },
+                      "sourceLanguage": "yaml",
+                      "startColumn": 9,
+                      "startLine": 7
+                    }
+                  }
+                }
+              ],
+              "message": {
+                "text": "credential persistence through GitHub Actions artifacts"
+              },
+              "properties": {
+                "zizmor/confidence": "Low",
+                "zizmor/persona": "Regular",
+                "zizmor/severity": "Medium"
+              },
+              "ruleId": "zizmor/artipacked"
+            },
+            {
+              "codeFlows": [
+                {
+                  "threadFlows": [
+                    {
+                      "locations": [
+                        {
+                          "importance": "important",
+                          "location": {
+                            "logicalLocations": [
+                              {
+                                "properties": {
+                                  "symbolic": {
+                                    "annotation": "this job",
+                                    "feature_kind": "Normal",
+                                    "key": {
+                                      "Local": {
+                                        "given_path": ".github/workflows/workflow.yml",
+                                        "prefix": null
+                                      }
+                                    },
+                                    "kind": "Related",
+                                    "route": {
+                                      "route": [
+                                        {
+                                          "Key": "jobs"
+                                        },
+                                        {
+                                          "Key": "test"
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            ],
+                            "message": {
+                              "text": "this job"
+                            },
+                            "physicalLocation": {
+                              "artifactLocation": {
+                                "uri": ".github/workflows/workflow.yml"
+                              },
+                              "region": {
+                                "endColumn": 1,
+                                "endLine": 8,
+                                "snippet": {
+                                  "text": "  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n"
+                                },
+                                "sourceLanguage": "yaml",
+                                "startColumn": 3,
+                                "startLine": 4
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "importance": "essential",
+                          "location": {
+                            "logicalLocations": [
+                              {
+                                "properties": {
+                                  "symbolic": {
+                                    "annotation": "default permissions used due to no permissions: block",
+                                    "feature_kind": "Normal",
+                                    "key": {
+                                      "Local": {
+                                        "given_path": ".github/workflows/workflow.yml",
+                                        "prefix": null
+                                      }
+                                    },
+                                    "kind": "Primary",
+                                    "route": {
+                                      "route": [
+                                        {
+                                          "Key": "jobs"
+                                        },
+                                        {
+                                          "Key": "test"
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            ],
+                            "message": {
+                              "text": "default permissions used due to no permissions: block"
+                            },
+                            "physicalLocation": {
+                              "artifactLocation": {
+                                "uri": ".github/workflows/workflow.yml"
+                              },
+                              "region": {
+                                "endColumn": 1,
+                                "endLine": 8,
+                                "snippet": {
+                                  "text": "  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n"
+                                },
+                                "sourceLanguage": "yaml",
+                                "startColumn": 3,
+                                "startLine": 4
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "kind": "fail",
+              "level": "warning",
+              "locations": [
+                {
+                  "logicalLocations": [
+                    {
+                      "properties": {
+                        "symbolic": {
+                          "annotation": "default permissions used due to no permissions: block",
+                          "feature_kind": "Normal",
+                          "key": {
+                            "Local": {
+                              "given_path": ".github/workflows/workflow.yml",
+                              "prefix": null
+                            }
+                          },
+                          "kind": "Primary",
+                          "route": {
+                            "route": [
+                              {
+                                "Key": "jobs"
+                              },
+                              {
+                                "Key": "test"
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  "message": {
+                    "text": "default permissions used due to no permissions: block"
+                  },
+                  "physicalLocation": {
+                    "artifactLocation": {
+                      "uri": ".github/workflows/workflow.yml"
+                    },
+                    "region": {
+                      "endColumn": 1,
+                      "endLine": 8,
+                      "snippet": {
+                        "text": "  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n"
+                      },
+                      "sourceLanguage": "yaml",
+                      "startColumn": 3,
+                      "startLine": 4
+                    }
+                  }
+                }
+              ],
+              "message": {
+                "text": "overly broad permissions"
+              },
+              "properties": {
+                "zizmor/confidence": "Medium",
+                "zizmor/persona": "Regular",
+                "zizmor/severity": "Medium"
+              },
+              "ruleId": "zizmor/excessive-permissions"
+            },
+            {
+              "codeFlows": [
+                {
+                  "threadFlows": [
+                    {
+                      "locations": [
+                        {
+                          "importance": "essential",
+                          "location": {
+                            "logicalLocations": [
+                              {
+                                "properties": {
+                                  "symbolic": {
+                                    "annotation": "action is not pinned to a hash (required by blanket policy)",
+                                    "feature_kind": {
+                                      "Subfeature": {
+                                        "after": 0,
+                                        "fragment": {
+                                          "Raw": "actions/checkout@v4"
+                                        }
+                                      }
+                                    },
+                                    "key": {
+                                      "Local": {
+                                        "given_path": ".github/workflows/workflow.yml",
+                                        "prefix": null
+                                      }
+                                    },
+                                    "kind": "Primary",
+                                    "route": {
+                                      "route": [
+                                        {
+                                          "Key": "jobs"
+                                        },
+                                        {
+                                          "Key": "test"
+                                        },
+                                        {
+                                          "Key": "steps"
+                                        },
+                                        {
+                                          "Index": 0
+                                        },
+                                        {
+                                          "Key": "uses"
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              }
+                            ],
+                            "message": {
+                              "text": "action is not pinned to a hash (required by blanket policy)"
+                            },
+                            "physicalLocation": {
+                              "artifactLocation": {
+                                "uri": ".github/workflows/workflow.yml"
+                              },
+                              "region": {
+                                "endColumn": 34,
+                                "endLine": 7,
+                                "snippet": {
+                                  "text": "actions/checkout@v4"
+                                },
+                                "sourceLanguage": "yaml",
+                                "startColumn": 15,
+                                "startLine": 7
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "kind": "fail",
+              "level": "error",
+              "locations": [
+                {
+                  "logicalLocations": [
+                    {
+                      "properties": {
+                        "symbolic": {
+                          "annotation": "action is not pinned to a hash (required by blanket policy)",
+                          "feature_kind": {
+                            "Subfeature": {
+                              "after": 0,
+                              "fragment": {
+                                "Raw": "actions/checkout@v4"
+                              }
+                            }
+                          },
+                          "key": {
+                            "Local": {
+                              "given_path": ".github/workflows/workflow.yml",
+                              "prefix": null
+                            }
+                          },
+                          "kind": "Primary",
+                          "route": {
+                            "route": [
+                              {
+                                "Key": "jobs"
+                              },
+                              {
+                                "Key": "test"
+                              },
+                              {
+                                "Key": "steps"
+                              },
+                              {
+                                "Index": 0
+                              },
+                              {
+                                "Key": "uses"
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  "message": {
+                    "text": "action is not pinned to a hash (required by blanket policy)"
+                  },
+                  "physicalLocation": {
+                    "artifactLocation": {
+                      "uri": ".github/workflows/workflow.yml"
+                    },
+                    "region": {
+                      "endColumn": 34,
+                      "endLine": 7,
+                      "snippet": {
+                        "text": "actions/checkout@v4"
+                      },
+                      "sourceLanguage": "yaml",
+                      "startColumn": 15,
+                      "startLine": 7
+                    }
+                  }
+                }
+              ],
+              "message": {
+                "text": "unpinned action reference"
+              },
+              "properties": {
+                "zizmor/confidence": "High",
+                "zizmor/persona": "Regular",
+                "zizmor/severity": "High"
+              },
+              "ruleId": "zizmor/unpinned-uses"
+            }
+          ],
+          "tool": {
+            "driver": {
+              "downloadUri": "https://github.com/zizmorcore/zizmor",
+              "informationUri": "https://docs.zizmor.sh",
+              "name": "zizmor",
+              "rules": [
+                {
+                  "help": {
+                    "markdown": "`artipacked`: credential persistence through GitHub Actions artifacts\n\nDocs: <https://docs.zizmor.sh/audits/#artipacked>",
+                    "text": "credential persistence through GitHub Actions artifacts"
+                  },
+                  "helpUri": "https://docs.zizmor.sh/audits/#artipacked",
+                  "id": "zizmor/artipacked",
+                  "name": "artipacked",
+                  "properties": {
+                    "tags": [
+                      "security"
+                    ]
+                  }
+                },
+                {
+                  "help": {
+                    "markdown": "`excessive-permissions`: overly broad permissions\n\nDocs: <https://docs.zizmor.sh/audits/#excessive-permissions>",
+                    "text": "overly broad permissions"
+                  },
+                  "helpUri": "https://docs.zizmor.sh/audits/#excessive-permissions",
+                  "id": "zizmor/excessive-permissions",
+                  "name": "excessive-permissions",
+                  "properties": {
+                    "tags": [
+                      "security"
+                    ]
+                  }
+                },
+                {
+                  "help": {
+                    "markdown": "`unpinned-uses`: unpinned action reference\n\nDocs: <https://docs.zizmor.sh/audits/#unpinned-uses>",
+                    "text": "unpinned action reference"
+                  },
+                  "helpUri": "https://docs.zizmor.sh/audits/#unpinned-uses",
+                  "id": "zizmor/unpinned-uses",
+                  "name": "unpinned-uses",
+                  "properties": {
+                    "tags": [
+                      "security"
+                    ]
+                  }
+                }
+              ],
+              "semanticVersion": "1.24.1",
+              "version": "1.24.1"
+            }
+          }
+        }
+      ],
+      "version": "2.1.0"
+    }
   },
   "selected_files": [
     ".github/workflows/workflow.yml"

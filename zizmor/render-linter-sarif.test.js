@@ -10,9 +10,60 @@ const {
 const { runFromEnv } = require("../.github/scripts/render-linter-sarif.js");
 
 const configPath = path.join(__dirname, "..", "linters.json");
-const details = ".github/workflows/ci.yml:14:5: unpinned action reference";
 
-test("emits SARIF for zizmor diagnostics", () => {
+// Native SARIF as emitted by `zizmor --format=sarif`
+const nativeSarif = {
+	$schema:
+		"https://docs.oasis-open.org/sarif/sarif/v2.1.0/os/schemas/sarif-schema-2.1.0.json",
+	version: "2.1.0",
+	runs: [
+		{
+			tool: {
+				driver: {
+					name: "zizmor",
+					version: "1.24.1",
+					informationUri: "https://docs.zizmor.sh",
+					rules: [
+						{
+							id: "zizmor/unpinned-uses",
+							name: "unpinned-uses",
+							helpUri: "https://docs.zizmor.sh/audits/#unpinned-uses",
+							help: {
+								text: "unpinned action reference",
+								markdown:
+									"`unpinned-uses`: unpinned action reference\n\nDocs: <https://docs.zizmor.sh/audits/#unpinned-uses>",
+							},
+						},
+					],
+				},
+			},
+			results: [
+				{
+					ruleId: "zizmor/unpinned-uses",
+					level: "error",
+					message: { text: "unpinned action reference" },
+					locations: [
+						{
+							physicalLocation: {
+								artifactLocation: {
+									uri: ".github/workflows/ci.yml",
+								},
+								region: {
+									startLine: 14,
+									startColumn: 5,
+									endLine: 14,
+									endColumn: 30,
+								},
+							},
+						},
+					],
+				},
+			],
+		},
+	],
+};
+
+test("prefers embedded zizmor SARIF when available", () => {
 	const context = makeTempRepo("render-linter-sarif-zizmor-");
 
 	writeFile(
@@ -26,8 +77,8 @@ test("emits SARIF for zizmor diagnostics", () => {
 	writeFile(
 		path.join(context.runnerTemp, "linter-result.json"),
 		JSON.stringify({
-			details,
 			exit_code: 1,
+			sarif: nativeSarif,
 		}),
 	);
 
@@ -46,7 +97,11 @@ test("emits SARIF for zizmor diagnostics", () => {
 		});
 
 		assert.equal(report.produced, true);
-		assert.ok(report.sarif.runs[0].results.length >= 1);
+		assert.equal(report.sarif.runs[0].results.length, 1);
+		assert.equal(
+			report.sarif.runs[0].results[0].ruleId,
+			"zizmor/unpinned-uses",
+		);
 		assert.equal(
 			report.sarif.runs[0].results[0].locations[0].physicalLocation
 				.artifactLocation.uri,
@@ -61,6 +116,11 @@ test("emits SARIF for zizmor diagnostics", () => {
 			report.sarif.runs[0].results[0].locations[0].physicalLocation.region
 				.startColumn,
 			5,
+		);
+		// Rules are sourced from native SARIF
+		assert.equal(
+			report.sarif.runs[0].tool.driver.rules[0].id,
+			"zizmor/unpinned-uses",
 		);
 	} finally {
 		cleanupTempRepo(context.tempDir);
