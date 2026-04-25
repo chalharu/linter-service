@@ -186,6 +186,26 @@ test("prefers YAML over JSON when both config files exist", () => {
 	}
 });
 
+test("repository config excludes the vendored actionlint SARIF template from textlint", () => {
+	const config = loadLinterServiceConfig({
+		repositoryPath: path.join(__dirname, "..", ".."),
+	});
+
+	assert.equal(config.exists, true);
+	assert.equal(
+		isPathExcluded(config, "textlint", "actionlint/sarif_template.txt"),
+		true,
+	);
+	assert.equal(
+		isPathExcluded(
+			config,
+			"textlint",
+			"actionlint/render-linter-sarif.test.js",
+		),
+		false,
+	);
+});
+
 test("loads global and per-linter exclude globs with directory normalization", () => {
 	const context = makeTempRepo();
 	writeLinterServiceConfig(context.repoDir, {

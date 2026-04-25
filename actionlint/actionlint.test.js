@@ -22,6 +22,7 @@ const linterLibraryPath = path.join(
 const bashPath = execFileSync("bash", ["-lc", "command -v bash"], {
 	encoding: "utf8",
 }).trim();
+const expressionSnippet = "run: echo $" + "{{ bad";
 
 function linkCommand(context, name) {
 	const targetPath = path.join(context.binDir, name);
@@ -86,7 +87,7 @@ const SARIF_WITH_RESULTS = JSON.stringify({
 									startLine: 5,
 									startColumn: 9,
 									endColumn: 9,
-									snippet: { text: "run: echo ${{ bad" },
+									snippet: { text: expressionSnippet },
 								},
 							},
 						},

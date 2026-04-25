@@ -10,6 +10,13 @@ const {
 const { runFromEnv } = require("../.github/scripts/render-linter-sarif.js");
 
 const configPath = path.join(__dirname, "..", "linters.json");
+const expressionDescription =
+	"Syntax and semantics checks for expressions embedded with $" +
+	"{{ }} syntax";
+const expressionSnippet =
+	'      - run: echo "' +
+	"$" +
+	'{{ github.ref "\n                                  ^';
 
 // Native SARIF as emitted by `actionlint -format "$(cat sarif_template.txt)"`
 const nativeSarif = {
@@ -29,13 +36,12 @@ const nativeSarif = {
 							name: "Expression",
 							defaultConfiguration: { level: "error" },
 							properties: {
-								description:
-									"Syntax and semantics checks for expressions embedded with ${{ }} syntax",
+								description: expressionDescription,
 								queryURI:
 									"https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
 							},
 							fullDescription: {
-								text: "Syntax and semantics checks for expressions embedded with ${{ }} syntax",
+								text: expressionDescription,
 							},
 							helpUri:
 								"https://github.com/rhysd/actionlint/blob/main/docs/checks.md",
@@ -61,7 +67,7 @@ const nativeSarif = {
 									startColumn: 35,
 									endColumn: 35,
 									snippet: {
-										text: '      - run: echo "${{ github.ref "\n                                  ^',
+										text: expressionSnippet,
 									},
 								},
 							},
