@@ -7,5 +7,27 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$script_dir/common.sh"
 
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
-output_file="$RUNNER_TEMP/linter-output.txt"
-linter_lib::run_and_emit_json "$output_file" actionlint "$@"
+native_sarif_file="$RUNNER_TEMP/actionlint-native.sarif"
+stderr_file="$RUNNER_TEMP/actionlint-stderr.log"
+sarif_format=$(cat "$script_dir/sarif_template.txt")
+rm -f "$native_sarif_file" "$stderr_file"
+
+set +e
+actionlint -format "$sarif_format" "$@" >"$native_sarif_file" 2>"$stderr_file"
+exit_code=$?
+set -e
+
+if [ ! -s "$native_sarif_file" ]; then
+  echo "actionlint native SARIF output was empty or missing" >&2
+  if [ -s "$stderr_file" ]; then
+    cat "$stderr_file" >&2
+  fi
+  exit 1
+fi
+
+if [ -s "$stderr_file" ]; then
+  cat "$stderr_file" >&2
+fi
+rm -f "$stderr_file"
+
+linter_lib::emit_json_result_with_sarif "$exit_code" "$native_sarif_file"
