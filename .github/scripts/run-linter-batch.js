@@ -319,6 +319,7 @@ function renderLinterArtifacts({
 		installOutcome,
 		linterName,
 		resultPath: paths.resultPath,
+		runnerTemp,
 		runOutcome,
 		selectedFilesPath: paths.selectedFilesPath,
 		selectOutcome,

@@ -27,6 +27,7 @@ function runFromEnv(env = process.env) {
 		installOutcome: env.INSTALL_TOOL_OUTCOME ?? "",
 		linterName,
 		resultPath: requireEnv(env, "RESULT_PATH"),
+		runnerTemp,
 		runOutcome: env.RUN_LINTER_OUTCOME ?? "",
 		selectedFilesPath: requireEnv(env, "SELECTED_FILES_PATH"),
 		selectOutcome: env.SELECT_FILES_OUTCOME ?? "",
@@ -48,6 +49,7 @@ function renderReport({
 	installOutcome,
 	linterName,
 	resultPath,
+	runnerTemp,
 	runOutcome,
 	selectedFilesPath,
 	selectOutcome,
@@ -86,7 +88,14 @@ function renderReport({
 
 	if (status === "failure" || status === "warning") {
 		detailsText = resolveDetails(
-			result,
+			{
+				configPath,
+				linterName,
+				result,
+				runnerTemp,
+				sourceRepositoryPath,
+				status,
+			},
 			buildDetailsFallback(linterName, status),
 		);
 	}
@@ -134,16 +143,71 @@ function renderReport({
 	};
 }
 
-function resolveDetails(result, fallback) {
+function resolveDetails(
+	{ configPath, linterName, result, runnerTemp, sourceRepositoryPath, status },
+	fallback,
+) {
+	const hookDetails = buildHookDetails({
+		configPath,
+		linterName,
+		result,
+		runnerTemp,
+		sourceRepositoryPath,
+		status,
+	});
+
+	if (typeof hookDetails === "string") {
+		return normalizeDetailsText(hookDetails, fallback);
+	}
+
 	const details =
 		result && typeof result.details === "string" ? result.details.trim() : "";
 
-	if (details.length === 0) {
+	return normalizeDetailsText(details, fallback);
+}
+
+function normalizeDetailsText(details, fallback) {
+	if (typeof details !== "string" || details.length === 0) {
 		return fallback;
 	}
 
 	if (details.length > DETAILS_LIMIT) {
 		return `${details.slice(0, DETAILS_LIMIT)}\n... truncated ...`;
+	}
+
+	return details;
+}
+
+function buildHookDetails({
+	configPath,
+	linterName,
+	result,
+	runnerTemp,
+	sourceRepositoryPath,
+	status,
+}) {
+	const hook = loadLinterHook({
+		configPath,
+		fileName: "render-linter-report.js",
+		linterName,
+	});
+
+	if (typeof hook?.buildDetails !== "function") {
+		return undefined;
+	}
+
+	const details = hook.buildDetails({
+		linterName,
+		result,
+		runnerTemp,
+		sourceRepositoryPath,
+		status,
+	});
+
+	if (typeof details !== "string" && typeof details !== "undefined") {
+		throw new Error(
+			`${linterName} render-linter-report.js must return a string when buildDetails is defined`,
+		);
 	}
 
 	return details;

@@ -164,4 +164,5 @@ function dedupeRules(rules) {
 module.exports = {
 	buildSarifResults,
 	buildSarifRules,
+	readNativeSarifRun,
 };
