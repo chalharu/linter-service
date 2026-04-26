@@ -781,6 +781,84 @@ test("rejects negative cargo-coupling thresholds", () => {
 	}
 });
 
+test("supports cargo-symbol-length max_symbol_length threshold", () => {
+	const context = makeTempRepo();
+
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			"cargo-symbol-length": {
+				max_symbol_length: 512,
+			},
+		},
+	});
+
+	try {
+		const config = loadLinterServiceConfig({
+			repositoryPath: context.repoDir,
+		});
+
+		assert.deepEqual(getLinterConfig(config, "cargo-symbol-length"), {
+			disabled: false,
+			disabled_explicit: false,
+			exclude_paths: [],
+			max_symbol_length: 512,
+		});
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("defaults cargo-symbol-length max_symbol_length when omitted", () => {
+	const context = makeTempRepo();
+
+	writeLinterServiceConfig(
+		context.repoDir,
+		{
+			linters: {
+				"cargo-symbol-length": {},
+			},
+		},
+		"linter-service.json",
+	);
+
+	try {
+		const config = loadLinterServiceConfig({
+			repositoryPath: context.repoDir,
+		});
+
+		assert.equal(
+			getLinterConfig(config, "cargo-symbol-length").max_symbol_length,
+			1024,
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("rejects invalid cargo-symbol-length max_symbol_length", () => {
+	const context = makeTempRepo();
+
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			"cargo-symbol-length": {
+				max_symbol_length: 0,
+			},
+		},
+	});
+
+	try {
+		assert.throws(
+			() =>
+				loadLinterServiceConfig({
+					repositoryPath: context.repoDir,
+				}),
+			/positive integer/u,
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
 test("requires textlint preset_packages when textlint is enabled", () => {
 	const context = makeTempRepo();
 

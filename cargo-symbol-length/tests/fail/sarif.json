@@ -1,0 +1,51 @@
+{
+	"$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+	"runs": [
+		{
+			"automationDetails": {
+				"id": "linter-service/cargo-symbol-length"
+			},
+			"results": [
+				{
+					"level": "error",
+					"locations": [
+						{
+							"physicalLocation": {
+								"artifactLocation": {
+									"uri": "src/lib.rs"
+								},
+								"region": {
+									"startColumn": 1,
+									"startLine": 1
+								}
+							}
+						}
+					],
+					"message": {
+						"text": "Symbol name is 1025 characters long (exceeds threshold): aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\u2026"
+					},
+					"properties": {
+						"linter_name": "cargo-symbol-length"
+					},
+					"ruleId": "cargo-symbol-length/symbol-too-long"
+				}
+			],
+			"tool": {
+				"driver": {
+					"informationUri": "https://github.com/chalharu/linter-service",
+					"name": "linter-service/cargo-symbol-length",
+					"rules": [
+						{
+							"id": "cargo-symbol-length/symbol-too-long",
+							"name": "SymbolTooLong",
+							"shortDescription": {
+								"text": "Symbol name length exceeds configured threshold"
+							}
+						}
+					]
+				}
+			}
+		}
+	],
+	"version": "2.1.0"
+}
