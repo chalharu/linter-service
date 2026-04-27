@@ -12,7 +12,6 @@ const {
 	writeFile,
 } = require("../.github/scripts/cargo-linter-test-lib.js");
 
-const installPath = path.join(__dirname, "install.sh");
 const runPath = path.join(__dirname, "run.sh");
 
 const SHORT_SYMBOL = "short_fn";
@@ -219,7 +218,12 @@ NODE
           target_kind="lib"
         fi
 
-        cmd="cargo rustc --manifest-path $manifest --$target_kind -- --emit=obj -o /cargo-target/symbol-scan-$run_index.o"
+        target_name="$package_name"
+        if [ "$target_kind" = "lib" ]; then
+          target_name="\${package_name//-/_}"
+        fi
+
+        cmd="cargo rustc --manifest-path $manifest --$target_kind -- --emit=obj=/cargo-target/symbol-scan-$run_index.o"
         run_exit=0
 
         if [ -n "\${FAIL_MANIFEST:-}" ] && [ "$manifest" = "$FAIL_MANIFEST" ]; then
@@ -239,7 +243,7 @@ NODE
           printf '%s\\n' "$cmd" > "$run_dir/command.txt"
           printf '%s\\n' "$manifest" > "$run_dir/manifest_path.txt"
           printf '%s\\n' "$target_kind" > "$run_dir/target_kind.txt"
-          printf '%s\\n' "$package_name" > "$run_dir/target_name.txt"
+          printf '%s\\n' "$target_name" > "$run_dir/target_name.txt"
           printf '%s\\n' "$src_path" > "$run_dir/target_src_path.txt"
           printf '%s\\n' "$run_exit" > "$run_dir/exit_code.txt"
           printf '' > "$run_dir/stdout.txt"

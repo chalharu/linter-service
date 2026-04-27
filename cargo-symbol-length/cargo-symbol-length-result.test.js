@@ -15,7 +15,7 @@ const SHORT_SYMBOL = "short_fn";
 const LONG_SYMBOL = "a".repeat(1025);
 
 function makeRun({
-	command = "cargo rustc --manifest-path Cargo.toml --lib -- --emit=obj -o /cargo-target/symbol-scan-1.o",
+	command = "cargo rustc --manifest-path Cargo.toml --lib -- --emit=obj=/cargo-target/symbol-scan-1.o",
 	exit_code = 0,
 	manifest_path = "/work/Cargo.toml",
 	symbols_raw = "",
@@ -147,7 +147,7 @@ test("buildCargoSymbolLengthResult normalizes /work/ prefix from manifest_path a
 		runs: [
 			makeRun({
 				command:
-					"cargo rustc --manifest-path /work/Cargo.toml --lib -- --emit=obj",
+					"cargo rustc --manifest-path /work/Cargo.toml --lib -- --emit=obj=/cargo-target/symbol-scan-1.o",
 				manifest_path: "/work/Cargo.toml",
 				symbols_raw: "",
 			}),
@@ -157,7 +157,7 @@ test("buildCargoSymbolLengthResult normalizes /work/ prefix from manifest_path a
 	assert.equal(result.cargo_symbol_length_runs[0].manifest_path, "Cargo.toml");
 	assert.equal(
 		result.cargo_symbol_length_runs[0].command,
-		"cargo rustc --manifest-path Cargo.toml --lib -- --emit=obj",
+		"cargo rustc --manifest-path Cargo.toml --lib -- --emit=obj=/cargo-target/symbol-scan-1.o",
 	);
 });
 

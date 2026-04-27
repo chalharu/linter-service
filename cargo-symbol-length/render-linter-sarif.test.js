@@ -31,7 +31,7 @@ test("emits SARIF for cargo-symbol-length findings", () => {
 			cargo_symbol_length_runs: [
 				{
 					command:
-						"cargo rustc --manifest-path Cargo.toml --lib -- --emit=obj -o /cargo-target/symbol-scan-1.o",
+						"cargo rustc --manifest-path Cargo.toml --lib -- --emit=obj=/cargo-target/symbol-scan-1.o",
 					exit_code: 0,
 					findings: [
 						{
@@ -109,7 +109,7 @@ test("emits empty SARIF when no cargo-symbol-length findings", () => {
 			cargo_symbol_length_runs: [
 				{
 					command:
-						"cargo rustc --manifest-path Cargo.toml --lib -- --emit=obj -o /cargo-target/symbol-scan-1.o",
+						"cargo rustc --manifest-path Cargo.toml --lib -- --emit=obj=/cargo-target/symbol-scan-1.o",
 					exit_code: 0,
 					findings: [],
 					manifest_path: "Cargo.toml",
@@ -166,7 +166,7 @@ test("truncates long symbol names in SARIF message to 120 characters plus ellips
 			cargo_symbol_length_runs: [
 				{
 					command:
-						"cargo rustc --manifest-path Cargo.toml --lib -- --emit=obj -o /cargo-target/symbol-scan-1.o",
+						"cargo rustc --manifest-path Cargo.toml --lib -- --emit=obj=/cargo-target/symbol-scan-1.o",
 					exit_code: 0,
 					findings: [
 						{

@@ -156,6 +156,7 @@ def scan_manifest(manifest_path: str, run_index_state: list[int]) -> bool:
         tgt_src = strip_work_prefix(tgt["src_path"])
         obj_path = Path(CARGO_TARGET) / f"symbol-scan-{idx}.o"
 
+        emit_arg = f"--emit=obj={obj_path}"
         if tgt_flag == "--lib":
             cmd = [
                 "cargo",
@@ -164,9 +165,7 @@ def scan_manifest(manifest_path: str, run_index_state: list[int]) -> bool:
                 tgt_manifest,
                 "--lib",
                 "--",
-                "--emit=obj",
-                "-o",
-                str(obj_path),
+                emit_arg,
             ]
         else:
             cmd = [
@@ -177,9 +176,7 @@ def scan_manifest(manifest_path: str, run_index_state: list[int]) -> bool:
                 "--bin",
                 tgt_name,
                 "--",
-                "--emit=obj",
-                "-o",
-                str(obj_path),
+                emit_arg,
             ]
 
         cmd_str = " ".join(cmd)
