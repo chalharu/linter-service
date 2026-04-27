@@ -27,6 +27,9 @@
 				},
 				"cargo-coupling": {
 					"$ref": "#/$defs/cargoCouplingLinterConfig"
+				},
+				"cargo-symbol-length": {
+					"$ref": "#/$defs/cargoSymbolLengthLinterConfig"
 				}
 			},
 			"additionalProperties": {
@@ -56,6 +59,7 @@
 				"cargo-clippy",
 				"cargo-deny",
 				"cargo-coupling",
+				"cargo-symbol-length",
 				"taplo",
 				"biome",
 				"editorconfig-checker",
@@ -257,6 +261,22 @@
 				},
 				"max_circular": {
 					"$ref": "#/$defs/cargoCouplingThreshold"
+				}
+			}
+		},
+		"cargoSymbolLengthLinterConfig": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"disabled": {
+					"type": "boolean"
+				},
+				"exclude_paths": {
+					"$ref": "#/$defs/nonEmptyStringArray"
+				},
+				"max_symbol_length": {
+					"type": "integer",
+					"minimum": 1
 				}
 			}
 		}

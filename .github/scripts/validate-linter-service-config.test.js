@@ -203,6 +203,65 @@ test("rejects negative cargo-coupling thresholds", () => {
 	}
 });
 
+test("accepts cargo-symbol-length max_symbol_length threshold", () => {
+	const tempDir = fs.mkdtempSync(
+		path.join(os.tmpdir(), "linter-service-schema-"),
+	);
+	const configPath = path.join(tempDir, "linter-service.yaml");
+
+	writeConfig(configPath, {
+		linters: {
+			"cargo-symbol-length": {
+				max_symbol_length: 512,
+			},
+		},
+	});
+
+	try {
+		const report = validateLinterServiceConfig({
+			configPath,
+			schemaPath: rootSchemaPath,
+		});
+
+		assert.deepEqual(report.normalizedConfig.linters["cargo-symbol-length"], {
+			disabled: false,
+			disabled_explicit: false,
+			exclude_paths: [],
+			max_symbol_length: 512,
+		});
+	} finally {
+		fs.rmSync(tempDir, { force: true, recursive: true });
+	}
+});
+
+test("rejects non-positive cargo-symbol-length max_symbol_length", () => {
+	const tempDir = fs.mkdtempSync(
+		path.join(os.tmpdir(), "linter-service-schema-"),
+	);
+	const configPath = path.join(tempDir, "linter-service.yaml");
+
+	writeConfig(configPath, {
+		linters: {
+			"cargo-symbol-length": {
+				max_symbol_length: 0,
+			},
+		},
+	});
+
+	try {
+		assert.throws(
+			() =>
+				validateLinterServiceConfig({
+					configPath,
+					schemaPath: rootSchemaPath,
+				}),
+			/must be >= 1|minimum/u,
+		);
+	} finally {
+		fs.rmSync(tempDir, { force: true, recursive: true });
+	}
+});
+
 test("rejects unexpected linter properties", () => {
 	const tempDir = fs.mkdtempSync(
 		path.join(os.tmpdir(), "linter-service-schema-"),

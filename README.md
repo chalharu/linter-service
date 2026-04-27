@@ -68,6 +68,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | `cargo-clippy` | `*.rs` | `clippy.toml`, `.clippy.toml`, `rust-toolchain.toml`, `rust-toolchain` | ✅ |
 | `cargo-coupling` | `*.rs` | 対象 `Cargo.toml` の親方向の `.coupling.toml`, `coupling.toml`、repo root の `.github/linter-service.yaml`, `.github/linter-service.yml`, `.github/linter-service.json` | ✅ |
 | `cargo-deny` | `Cargo.toml`, `Cargo.lock`, `deny.toml`, `.cargo/config`, `.cargo/config.toml` | 対象 `Cargo.toml` の親方向の `deny.toml` | ✅ |
+| `cargo-symbol-length` | `*.rs`, `Cargo.toml`, `Cargo.lock` | repo root の `.github/linter-service.yaml`, `.github/linter-service.yml`, `.github/linter-service.json`, `rust-toolchain.toml`, `rust-toolchain` | ✅ |
 | `dotenv-linter` | `.env`, `.env.*` | なし | ✅ |
 | `editorconfig-checker` | upstream default exclude に含まれない file | 対象 file の親 directory ごとの `.editorconfig`, repo root の `.editorconfig-checker.json`, `.ecrc` | ✅ |
 | `ghalint` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | 左から順に `.ghalint.yaml`, `.ghalint.yml`, `ghalint.yaml`, `ghalint.yml`, `.github/ghalint.yaml`, `.github/ghalint.yml` | ✅ |
@@ -94,6 +95,7 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | `cargo-clippy` | 最寄り `Cargo.toml` 基準の package 単位実行、`.cargo/config*`, private registry, private git dependency は未対応。 |
 | `cargo-coupling` | checksum-verified な upstream source tarball と repo 同梱の `Dockerfile.full` から local image を build して `--json --no-git` 実行し、quality gate は `linters.cargo-coupling.*` で `min_grade=B`, `max_critical=0`, `max_circular=0` を上書きできる。`.cargo/config*` は未対応。 |
 | `cargo-deny` | 最寄り `Cargo.toml` 基準の package 単位実行、`.cargo/config*`, private registry, private git dependency は未対応。 |
+| `cargo-symbol-length` | 最寄り `Cargo.toml` 基準の package 単位実行、`cargo rustc -- --emit=obj` で object file を生成して `nm --defined-only -j` でシンボル名を抽出し、`max_symbol_length` 以上のシンボルを報告する。`.cargo/config*` は未対応。 |
 | `dotenv-linter` | changed `.env` file への upstream default checks 直接適用、`--schema` と ignore-checks 注入は未対応。 |
 | `editorconfig-checker` | `PassedFiles` 制限、`NoColor` 強制。 |
 | `helmlint` | changed file から親方向の `Chart.yaml` を解決し、chart directory ごとに重複排除して `helm lint` 実行。 |
@@ -156,6 +158,7 @@ linters:
 | `linters.cargo-coupling.min_grade` | `cargo-coupling` | quality gate の最低 grade。既定値は `B`。 |
 | `linters.cargo-coupling.max_critical` | `cargo-coupling` | quality gate で許容する critical issue 数。既定値は `0`。 |
 | `linters.cargo-coupling.max_circular` | `cargo-coupling` | quality gate で許容する circular dependency 数。既定値は `0`。 |
+| `linters.cargo-symbol-length.max_symbol_length` | `cargo-symbol-length` | シンボル名長の上限しきい値（文字数）。このしきい値以上のシンボルを検出する。既定値は `1024`。 |
 | `linters.lizard.languages` | `lizard` | `lizard` opt-in 時の対象言語一覧。`disabled: false` と併用する。 |
 | `linters.textlint.preset_packages` | `textlint` | exact version 付き npm package spec の配列。`.textlintrc` と併せて `textlint` 自動選択時の必須項目。 |
 
