@@ -13,8 +13,22 @@ rust_toolchain_version="1.94.1"
 # renovate: datasource=github-releases depName=EmbarkStudios/cargo-deny
 cargo_deny_version="0.19.0"
 
+cargo_deny_install_binary() {
+  local source_path=$1
+  local destination="$CARGO_HOME/bin/cargo-deny"
+
+  mkdir -p "$CARGO_HOME/bin"
+  if [ "$source_path" != "$destination" ]; then
+    cp "$source_path" "$destination"
+  fi
+  chmod +x "$destination"
+}
+
 if command -v cargo >/dev/null 2>&1 && cargo --version >/dev/null 2>&1 && \
    command -v cargo-deny >/dev/null 2>&1 && cargo-deny --version >/dev/null 2>&1; then
+  cargo_deny_install_binary "$(command -v cargo-deny)"
+  cargo_deny_persist_env
+  linter_lib::add_path "$CARGO_HOME/bin"
   exit 0
 fi
 
@@ -47,8 +61,7 @@ mkdir -p "$extract_dir" "$CARGO_HOME/bin"
 
 curl -fsSL "https://github.com/EmbarkStudios/cargo-deny/releases/download/$cargo_deny_version/$asset" -o "$archive_path"
 tar -xzf "$archive_path" -C "$extract_dir"
-cp "$release_dir/cargo-deny" "$CARGO_HOME/bin/cargo-deny"
-chmod +x "$CARGO_HOME/bin/cargo-deny"
+cargo_deny_install_binary "$release_dir/cargo-deny"
 
 cargo_deny_persist_env
 linter_lib::add_path "$CARGO_HOME/bin"

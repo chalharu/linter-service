@@ -2,10 +2,10 @@
 """
 cargo-symbol-length scan script.
 
-Runs inside a Docker container. For each workspace manifest path given as
-an argument, enumerates the workspace default members' lib and bin targets,
+Runs inside a Docker container. For each workspace manifest path given as an
+argument, enumerates the workspace default members' lib and bin targets,
 compiles each to an object file with --emit=obj, then runs nm to extract
-symbol names.  Writes structured per-target run-entry directories under
+symbol names. Writes structured per-target run-entry directories under
 /run-entries.
 """
 
@@ -125,6 +125,21 @@ def append_run_stderr(run_dir: Path, text: str) -> None:
         f"{existing}{suffix}\n",
         encoding="utf-8",
     )
+
+
+def next_run_index() -> int:
+    if not RUN_ENTRIES.exists():
+        return 0
+
+    max_index = 0
+    for entry in RUN_ENTRIES.iterdir():
+        if not entry.is_dir():
+            continue
+        try:
+            max_index = max(max_index, int(entry.name))
+        except ValueError:
+            continue
+    return max_index
 
 
 def scan_manifest(manifest_path: str, run_index_state: list[int]) -> bool:
@@ -265,7 +280,7 @@ def main() -> int:
         print("error: nm not found in PATH; install binutils", file=sys.stderr)
         return 1
 
-    run_index_state = [0]
+    run_index_state = [next_run_index()]
     overall_ok = True
 
     for manifest_path in manifests:

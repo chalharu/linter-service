@@ -109,9 +109,9 @@ test("emits SARIF for cargo-clippy structured diagnostics", () => {
 	}
 });
 
-test("keeps cargo-clippy failing-file counts unavailable for config-only failures", () => {
+test("keeps cargo-clippy failing-file counts unavailable for non-file-specific failures", () => {
 	const context = makeTempRepo(
-		"render-linter-sarif-cargo-clippy-config-failure-",
+		"render-linter-sarif-cargo-clippy-global-failure-",
 	);
 
 	writeFile(
@@ -121,10 +121,6 @@ test("keeps cargo-clippy failing-file counts unavailable for config-only failure
 	writeFile(path.join(context.repoDir, "src/lib.rs"), "pub fn demo() {}\n");
 	writeFile(path.join(context.repoDir, "src/main.rs"), "fn main() {}\n");
 	writeFile(
-		path.join(context.repoDir, ".cargo/config.toml"),
-		'[registries.private]\nindex = "sparse+https://example.invalid/index/"\n',
-	);
-	writeFile(
 		path.join(context.runnerTemp, "selected-files.txt"),
 		"src/lib.rs\nsrc/main.rs\n",
 	);
@@ -132,7 +128,7 @@ test("keeps cargo-clippy failing-file counts unavailable for config-only failure
 		path.join(context.runnerTemp, "linter-result.json"),
 		JSON.stringify({
 			details:
-				"Repository-supplied `.cargo/config.toml` is not supported in this shared linter service because `cargo fetch` for untrusted pull requests cannot safely honor repository-controlled Cargo configuration.\nUse the default Cargo registry configuration for the shared `cargo-clippy` path.\n",
+				"error: cargo clippy failed before emitting file-specific diagnostics\n",
 			exit_code: 1,
 		}),
 	);

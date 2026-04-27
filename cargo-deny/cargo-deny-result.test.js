@@ -9,7 +9,7 @@ test("buildCargoDenyResult renders advisory and config diagnostics from structur
 		runs: [
 			{
 				command:
-					"cargo-deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output --config deny.toml",
+					"cargo deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output --config deny.toml",
 				config_path: "deny.toml",
 				exit_code: 1,
 				manifest_path: "Cargo.toml",
@@ -59,7 +59,7 @@ test("buildCargoDenyResult renders advisory and config diagnostics from structur
 	assert.equal(result.cargo_deny_runs[0].diagnostics.length, 1);
 	assert.match(
 		result.details,
-		/==> cargo-deny --format json --color never --log-level warn --all-features --manifest-path Cargo\.toml check --audit-compatible-output --config deny\.toml/,
+		/==> cargo deny --format json --color never --log-level warn --all-features --manifest-path Cargo\.toml check --audit-compatible-output --config deny\.toml/,
 	);
 	assert.match(
 		result.details,
@@ -75,7 +75,7 @@ test("buildCargoDenyResult renders warning advisories and diagnostic fallbacks",
 		runs: [
 			{
 				command:
-					"cargo-deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output --config deny.toml",
+					"cargo deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output --config deny.toml",
 				config_path: "deny.toml",
 				exit_code: 1,
 				manifest_path: "Cargo.toml",
@@ -140,7 +140,7 @@ test("buildCargoDenyResult ignores warning-only duplicate diagnostics", () => {
 		runs: [
 			{
 				command:
-					"cargo-deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output",
+					"cargo deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output",
 				config_path: "",
 				exit_code: 1,
 				manifest_path: "Cargo.toml",
@@ -207,7 +207,7 @@ test("buildCargoDenyResult drops cargo progress lines but keeps failure output",
 		runs: [
 			{
 				command:
-					"cargo-deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output",
+					"cargo deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output",
 				config_path: "",
 				exit_code: 1,
 				manifest_path: "Cargo.toml",
@@ -231,7 +231,7 @@ test("buildCargoDenyResult treats progress-only output as non-actionable", () =>
 		exitCode: 1,
 		runs: [
 			{
-				command: "cargo-deny check",
+				command: "cargo deny check",
 				config_path: "",
 				exit_code: 1,
 				manifest_path: "Cargo.toml",

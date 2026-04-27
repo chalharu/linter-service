@@ -47,6 +47,7 @@ case "$command" in
     image_ref=""
     manifest=""
     prev=""
+    cargo_subcommand=""
     is_clippy=0
     is_metadata=0
     is_rustup_seed=0
@@ -54,6 +55,7 @@ case "$command" in
     option_with_value=""
     run_entries_mount_src=""
     work_mount_src=""
+    container_workdir="/work"
     batch_mode=""
     for arg in "$@"; do
       if [ -n "$option_with_value" ]; then
@@ -76,6 +78,9 @@ case "$command" in
                 run_entries_mount_src="\${run_entries_mount_src%%,*}"
                 ;;
             esac
+            ;;
+          --workdir)
+            container_workdir="$arg"
             ;;
           --env|-e)
             case "$arg" in
@@ -117,6 +122,26 @@ case "$command" in
       fi
       prev="$arg"
     done
+    cargo_arg_index=0
+    while [ "$cargo_arg_index" -lt "\${#command_args[@]}" ]; do
+      arg="\${command_args[$cargo_arg_index]}"
+      if [ "$cargo_arg_index" -eq 0 ] && [ "$arg" = "cargo" ]; then
+        cargo_arg_index=$((cargo_arg_index + 1))
+        continue
+      fi
+      if [ "$arg" = "--config" ]; then
+        cargo_arg_index=$((cargo_arg_index + 2))
+        continue
+      fi
+      cargo_subcommand="$arg"
+      break
+    done
+    if [ "$cargo_subcommand" = "metadata" ]; then
+      is_metadata=1
+    fi
+    if [ "$cargo_subcommand" = "clippy" ]; then
+      is_clippy=1
+    fi
     printf '%s\\n' "$*" >> "$DOCKER_RUN_ARGS_LOG"
     case "$*" in
       *"tar -C /usr/local/rustup -cf - . | tar -xf - -C /rustup-home"*)
@@ -139,12 +164,37 @@ case "$command" in
       printf 'error: could not create temp file /usr/local/rustup/tmp/test_file: Read-only file system (os error 30)\\n' >&2
       exit 1
     fi
+    if [ -n "$manifest" ]; then
+      manifest=$(node - "$container_workdir" "$manifest" <<'NODE'
+const path = require("node:path");
+const [workdir, manifest] = process.argv.slice(2);
+const absolute = manifest.startsWith("/work")
+  ? path.posix.normalize(manifest)
+  : path.posix.normalize(path.posix.join(workdir || "/work", manifest));
+process.stdout.write(
+  absolute === "/work"
+    ? ""
+    : absolute.startsWith("/work/")
+      ? absolute.slice("/work/".length)
+      : absolute,
+);
+NODE
+)
+      manifest_host_path=$(node - "$work_mount_src" "$manifest" <<'NODE'
+const path = require("node:path");
+const [sourceRoot, manifest] = process.argv.slice(2);
+process.stdout.write(path.join(sourceRoot, ...manifest.split("/")));
+NODE
+)
+    else
+      manifest_host_path=""
+    fi
     if [ "$is_metadata" -eq 1 ]; then
       if [ -z "$manifest" ]; then
         echo "missing --manifest-path" >&2
         exit 1
       fi
-      current_dir="$work_mount_src/$(dirname "$manifest")"
+      current_dir=$(dirname "$manifest_host_path")
       workspace_dir="$current_dir"
       search_dir="$current_dir"
       while :; do
@@ -360,15 +410,13 @@ defineCommonCargoManifestTests({
 			fs.readFileSync(tooling.dockerManifestLog, "utf8").trim().split("\n"),
 			["Cargo.toml", "crates/member/Cargo.toml"],
 		);
+		assert.match(runArgs, /cargo fetch --manifest-path Cargo\.toml/);
 		assert.match(
 			runArgs,
-			/--env LINTER_SERVICE_BATCH_MODE=fetch localhost\/linter-service-cargo-clippy:rust-1-bookworm sh -ceu/,
-		);
-		assert.match(
-			runArgs,
-			/--env LINTER_SERVICE_BATCH_MODE=clippy --network=none localhost\/linter-service-cargo-clippy:rust-1-bookworm sh -ceu/,
+			/cargo clippy --message-format=json --manifest-path Cargo\.toml/,
 		);
 		assert.match(runArgs, /--message-format=json/);
+		assert.doesNotMatch(runArgs, /--workdir \/work [^\n]* --workdir /);
 		assert.match(
 			runArgs,
 			/--cap-drop ALL --security-opt no-new-privileges --read-only --tmpfs \/tmp/,
@@ -378,15 +426,15 @@ defineCommonCargoManifestTests({
 		assert.match(runArgs, /dst=\/usr\/local\/rustup/);
 		assert.deepEqual(
 			fs.readFileSync(tooling.worktreeGitLog, "utf8").trim().split("\n"),
-			["absent", "absent"],
+			["absent", "absent", "absent", "absent"],
 		);
 		assert.match(
 			result.details,
-			/docker run cargo fetch --manifest-path Cargo\.toml/,
+			/==> docker run cargo fetch --manifest-path Cargo\.toml/,
 		);
 		assert.match(
 			result.details,
-			/docker run cargo clippy --manifest-path Cargo\.toml/,
+			/cargo clippy --message-format=json --manifest-path Cargo\.toml/,
 		);
 	},
 	assertMissingManifestResult({ pathValue, result, tooling }) {
@@ -405,11 +453,10 @@ defineCommonCargoManifestTests({
 	},
 	assertContinueAfterFailureResult({ result }) {
 		assert.equal(result.exit_code, 1);
-		assert.match(result.details, /error: clippy failure/);
-		assert.match(result.details, /could not compile fixture \(lib\)/);
+		assert.match(result.details, /clippy failure Cargo\.toml/);
 		assert.match(
 			result.details,
-			/docker run cargo clippy --manifest-path crates\/member\/Cargo\.toml --all-targets -- -D warnings/,
+			/cargo clippy --message-format=json --manifest-path crates\/member\/Cargo\.toml --all-targets -- -D warnings/,
 		);
 	},
 });
@@ -462,8 +509,114 @@ channel = "1.94"
 	}
 });
 
-test("cargo-clippy.sh rejects repository-supplied Cargo config on the shared path", () => {
-	const context = makeTempRepo("cargo-clippy-unsafe-config-");
+test("cargo-clippy.sh honors repo-local Cargo config and keeps workspace member config chains distinct", () => {
+	const context = makeTempRepo("cargo-clippy-cargo-config-");
+	const tooling = setupDockerTooling(context);
+
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		`[workspace]
+members = ["crates/member", "crates/other"]
+resolver = "2"
+`,
+	);
+	writeFile(
+		path.join(context.repoDir, ".cargo/config.toml"),
+		`[build]
+target-dir = "target/root"
+ `,
+	);
+	writeFile(
+		path.join(context.repoDir, "crates/member/Cargo.toml"),
+		`[package]
+name = "member"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+	writeFile(
+		path.join(context.repoDir, "crates/member/src/lib.rs"),
+		"pub fn member_lib() {}\n",
+	);
+	writeFile(
+		path.join(context.repoDir, "crates/member/.cargo/config.toml"),
+		`[build]
+target-dir = "target/member"
+`,
+	);
+	writeFile(
+		path.join(context.repoDir, "crates/other/Cargo.toml"),
+		`[package]
+name = "other"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+	writeFile(
+		path.join(context.repoDir, "crates/other/src/lib.rs"),
+		"pub fn other_lib() {}\n",
+	);
+	writeFile(
+		path.join(context.runnerTemp, "cargo-clippy-structured-runs.json"),
+		'[{"stale":true}]\n',
+	);
+
+	try {
+		const output = execFileSync(
+			"bash",
+			[runPath, "crates/member/src/lib.rs", "crates/other/src/lib.rs"],
+			{
+				cwd: context.repoDir,
+				encoding: "utf8",
+				env: {
+					...process.env,
+					...tooling.env,
+					PATH: `${context.binDir}:${process.env.PATH}`,
+					RUNNER_TEMP: context.runnerTemp,
+				},
+			},
+		);
+		const result = JSON.parse(output);
+		const runArgs = fs.readFileSync(tooling.dockerRunArgsLog, "utf8");
+
+		assert.equal(result.exit_code, 0);
+		assert.deepEqual(
+			fs
+				.readFileSync(tooling.dockerFetchManifestLog, "utf8")
+				.trim()
+				.split("\n"),
+			["Cargo.toml", "Cargo.toml"],
+		);
+		assert.deepEqual(
+			fs.readFileSync(tooling.dockerManifestLog, "utf8").trim().split("\n"),
+			["Cargo.toml", "Cargo.toml"],
+		);
+		assert.match(
+			runArgs,
+			/--workdir \/work\/crates\/member [^\n]*cargo fetch --manifest-path \.\.\/\.\.\/Cargo\.toml/,
+		);
+		assert.match(
+			runArgs,
+			/--workdir \/work\/crates\/other [^\n]*cargo fetch --manifest-path \.\.\/\.\.\/Cargo\.toml/,
+		);
+		assert.match(
+			runArgs,
+			/--workdir \/work\/crates\/member [^\n]*cargo clippy --message-format=json --manifest-path \.\.\/\.\.\/Cargo\.toml --all-targets -- -D warnings/,
+		);
+		assert.doesNotMatch(runArgs, /--config .*\.cargo\/config/);
+		assert.equal(
+			fs.existsSync(
+				path.join(context.runnerTemp, "cargo-clippy-structured-runs.json"),
+			),
+			true,
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("cargo-clippy.sh prefers .cargo/config over .cargo/config.toml in the same directory", () => {
+	const context = makeTempRepo("cargo-clippy-cargo-config-precedence-");
 	const tooling = setupDockerTooling(context);
 
 	writeFile(
@@ -475,15 +628,10 @@ edition = "2021"
 `,
 	);
 	writeFile(path.join(context.repoDir, "src/lib.rs"), "pub fn root_lib() {}\n");
+	writeFile(path.join(context.repoDir, ".cargo/config"), "[net]\nretry = 3\n");
 	writeFile(
 		path.join(context.repoDir, ".cargo/config.toml"),
-		`[registries.private]
-index = "sparse+https://example.invalid/index/"
-`,
-	);
-	writeFile(
-		path.join(context.runnerTemp, "cargo-clippy-structured-runs.json"),
-		'[{"stale":true}]\n',
+		"[build]\ntarget-dir = 'target/config-toml'\n",
 	);
 
 	try {
@@ -502,16 +650,99 @@ index = "sparse+https://example.invalid/index/"
 		assert.equal(result.exit_code, 1);
 		assert.match(
 			result.details,
-			/Repository-supplied `\.cargo\/config\.toml` is not supported/,
+			/repo-local Cargo config for networked resolution is restricted on the shared runner\./,
 		);
-		assert.equal(
-			fs.existsSync(
-				path.join(context.runnerTemp, "cargo-clippy-structured-runs.json"),
-			),
-			false,
+		assert.match(result.details, /unsupported top-level section\(s\): net/);
+		assert.equal(fs.existsSync(tooling.dockerFetchManifestLog), false);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("cargo-clippy.sh rejects unsafe nested Cargo config settings during networked resolution", () => {
+	const context = makeTempRepo("cargo-clippy-unsafe-nested-cargo-config-");
+	const tooling = setupDockerTooling(context);
+
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		`[package]
+name = "root"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+	writeFile(path.join(context.repoDir, "src/lib.rs"), "pub fn root_lib() {}\n");
+	writeFile(
+		path.join(context.repoDir, ".cargo/config.toml"),
+		'[build]\nrustc-wrapper = "scripts/wrapper.sh"\n',
+	);
+
+	try {
+		const output = execFileSync("bash", [runPath, "src/lib.rs"], {
+			cwd: context.repoDir,
+			encoding: "utf8",
+			env: {
+				...process.env,
+				...tooling.env,
+				PATH: `${context.binDir}:${process.env.PATH}`,
+				RUNNER_TEMP: context.runnerTemp,
+			},
+		});
+		const result = JSON.parse(output);
+
+		assert.equal(result.exit_code, 1);
+		assert.match(
+			result.details,
+			/repo-local Cargo config for networked resolution is restricted on the shared runner\./,
 		);
-		assert.equal(fs.existsSync(tooling.dockerRunArgsLog), false);
-		assert.equal(fs.existsSync(tooling.dockerManifestLog), false);
+		assert.match(
+			result.details,
+			/unsupported setting\(s\): build\.rustc-wrapper/,
+		);
+		assert.equal(fs.existsSync(tooling.dockerFetchManifestLog), false);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("cargo-clippy.sh rejects linker-capable rustflags during networked resolution", () => {
+	const context = makeTempRepo("cargo-clippy-unsafe-rustflags-cargo-config-");
+	const tooling = setupDockerTooling(context);
+
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		`[package]
+name = "root"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+	writeFile(path.join(context.repoDir, "src/lib.rs"), "pub fn root_lib() {}\n");
+	writeFile(
+		path.join(context.repoDir, ".cargo/config.toml"),
+		'[build]\nrustflags = ["-C", "linker=/bin/sh"]\n',
+	);
+
+	try {
+		const output = execFileSync("bash", [runPath, "src/lib.rs"], {
+			cwd: context.repoDir,
+			encoding: "utf8",
+			env: {
+				...process.env,
+				...tooling.env,
+				PATH: `${context.binDir}:${process.env.PATH}`,
+				RUNNER_TEMP: context.runnerTemp,
+			},
+		});
+		const result = JSON.parse(output);
+
+		assert.equal(result.exit_code, 1);
+		assert.match(
+			result.details,
+			/repo-local Cargo config for networked resolution is restricted on the shared runner\./,
+		);
+		assert.match(result.details, /unsupported setting\(s\): build\.rustflags/);
+		assert.equal(fs.existsSync(tooling.dockerFetchManifestLog), false);
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}
@@ -572,15 +803,15 @@ edition = "2021"
 		);
 		assert.doesNotMatch(
 			result.details,
-			/docker run cargo clippy --manifest-path Cargo\.toml --all-targets -- -D warnings/,
+			/cargo clippy --message-format=json --manifest-path Cargo\.toml --all-targets -- -D warnings/,
 		);
 		assert.match(
 			result.details,
-			/docker run cargo fetch --manifest-path crates\/member\/Cargo\.toml/,
+			/==> docker run cargo fetch --manifest-path Cargo\.toml/,
 		);
 		assert.match(
 			result.details,
-			/docker run cargo clippy --manifest-path crates\/member\/Cargo\.toml --all-targets -- -D warnings/,
+			/cargo clippy --message-format=json --manifest-path crates\/member\/Cargo\.toml --all-targets -- -D warnings/,
 		);
 		assert.deepEqual(
 			fs.readFileSync(tooling.dockerManifestLog, "utf8").trim().split("\n"),
@@ -652,11 +883,11 @@ edition = "2021"
 		);
 		assert.match(
 			result.details,
-			/docker run cargo fetch --manifest-path Cargo\.toml/,
+			/==> docker run cargo fetch --manifest-path Cargo\.toml/,
 		);
 		assert.match(
 			result.details,
-			/docker run cargo clippy --manifest-path Cargo\.toml --all-targets -- -D warnings/,
+			/cargo clippy --message-format=json --manifest-path Cargo\.toml --all-targets -- -D warnings/,
 		);
 		assert.doesNotMatch(
 			result.details,
@@ -718,11 +949,11 @@ edition = "2021"
 		);
 		assert.match(
 			result.details,
-			/docker run cargo fetch --manifest-path Cargo\.toml/,
+			/==> docker run cargo fetch --manifest-path \.\.\/\.\.\/Cargo\.toml/,
 		);
 		assert.match(
 			result.details,
-			/docker run cargo clippy --manifest-path Cargo\.toml --all-targets -- -D warnings/,
+			/cargo clippy --message-format=json --manifest-path Cargo\.toml --all-targets -- -D warnings/,
 		);
 		assert.doesNotMatch(
 			result.details,

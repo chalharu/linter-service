@@ -65,10 +65,10 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 | --- | --- | --- | --- |
 | `actionlint` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | `.github/actionlint.yaml`, `.github/actionlint.yml` | ✅ |
 | `biome` | `*.js`, `*.jsx`, `*.ts`, `*.tsx`, `*.json`, `*.jsonc`, `*.cjs`, `*.cts`, `*.mjs`, `*.mts` | `biome.json`, `biome.jsonc`, `.biome.json`, `.biome.jsonc` | ✅ |
-| `cargo-clippy` | `*.rs` | `clippy.toml`, `.clippy.toml`, `rust-toolchain.toml`, `rust-toolchain` | ✅ |
-| `cargo-coupling` | `*.rs` | 対象 `Cargo.toml` の親方向の `.coupling.toml`, `coupling.toml`、repo root の `.github/linter-service.yaml`, `.github/linter-service.yml`, `.github/linter-service.json` | ✅ |
-| `cargo-deny` | `Cargo.toml`, `Cargo.lock`, `deny.toml`, `.cargo/config`, `.cargo/config.toml` | 対象 `Cargo.toml` の親方向の `deny.toml` | ✅ |
-| `cargo-symbol-length` | `*.rs`, `Cargo.toml`, `Cargo.lock` | repo root の `.github/linter-service.yaml`, `.github/linter-service.yml`, `.github/linter-service.json`, `rust-toolchain.toml`, `rust-toolchain` | ✅ |
+| `cargo-clippy` | `*.rs` | `clippy.toml`, `.clippy.toml`, `rust-toolchain.toml`, `rust-toolchain`, 対象 `Cargo.toml` の親方向の `.cargo/config`, `.cargo/config.toml` | ✅ |
+| `cargo-coupling` | `*.rs` | 対象 `Cargo.toml` の親方向の `.coupling.toml`, `coupling.toml`, `.cargo/config`, `.cargo/config.toml`、repo root の `.github/linter-service.yaml`, `.github/linter-service.yml`, `.github/linter-service.json` | ✅ |
+| `cargo-deny` | `Cargo.toml`, `Cargo.lock`, `deny.toml`, `.cargo/config`, `.cargo/config.toml` | 対象 `Cargo.toml` の親方向の `deny.toml`, `.cargo/config`, `.cargo/config.toml` | ✅ |
+| `cargo-symbol-length` | `*.rs`, `Cargo.toml`, `Cargo.lock` | repo root の `.github/linter-service.yaml`, `.github/linter-service.yml`, `.github/linter-service.json`, `rust-toolchain.toml`, `rust-toolchain`, 対象 `Cargo.toml` の親方向の `.cargo/config`, `.cargo/config.toml` | ✅ |
 | `dotenv-linter` | `.env`, `.env.*` | なし | ✅ |
 | `editorconfig-checker` | upstream default exclude に含まれない file | 対象 file の親 directory ごとの `.editorconfig`, repo root の `.editorconfig-checker.json`, `.ecrc` | ✅ |
 | `ghalint` | `.github/workflows/*.yml`, `.github/workflows/*.yaml` | 左から順に `.ghalint.yaml`, `.ghalint.yml`, `ghalint.yaml`, `ghalint.yml`, `.github/ghalint.yaml`, `.github/ghalint.yml` | ✅ |
@@ -92,10 +92,10 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 
 | linter | 実行メモ |
 | --- | --- |
-| `cargo-clippy` | 最寄り `Cargo.toml` 基準の package 単位実行、`.cargo/config*`, private registry, private git dependency は未対応。 |
-| `cargo-coupling` | checksum-verified な upstream source tarball と repo 同梱の `Dockerfile.full` から local image を build して `--json --no-git` 実行し、quality gate は `linters.cargo-coupling.*` で `min_grade=B`, `max_critical=0`, `max_circular=0` を上書きできる。`.cargo/config*` は未対応。 |
-| `cargo-deny` | 最寄り `Cargo.toml` 基準の package 単位実行、`.cargo/config*`, private registry, private git dependency は未対応。 |
-| `cargo-symbol-length` | 最寄り `Cargo.toml` 基準の package 単位実行、`cargo rustc -- --emit=obj` で object file を生成して `nm --defined-only -j` でシンボル名を抽出し、`max_symbol_length` 以上のシンボルを報告する。`.cargo/config*` は未対応。 |
+| `cargo-clippy` | Cargo workspace manifest を正規化した上で対象 manifest directory を workdir にして実行し、repo-local `.cargo/config*` は Cargo の通常探索で拾う。共有 runner で network が必要な `cargo fetch` 前には repo-local config を検査し、network / source / registry / credential 系と、実行バイナリ差し替えにつながる unsafe setting を reject する。 |
+| `cargo-coupling` | checksum-verified な upstream source tarball と repo 同梱の `Dockerfile.full` から local image を build して `--json --no-git` 実行し、quality gate は `linters.cargo-coupling.*` で `min_grade=B`, `max_critical=0`, `max_circular=0` を上書きできる。Cargo 呼び出しは対象 manifest directory を workdir にして repo-local `.cargo/config*` を尊重する。 |
+| `cargo-deny` | Cargo workspace manifest を正規化しつつ元の manifest directory を workdir にして `cargo deny` を実行し、member-local `.cargo/config*` と最寄り `deny.toml` を自然な探索順で使う。共有 runner で networked resolution を伴うため、repo-local `.cargo/config*` は `cargo-clippy` と同じ safety gate を通した safe subset だけ許可する。 |
+| `cargo-symbol-length` | Cargo workspace manifest を正規化した上で対象 manifest directory を workdir にし、`cargo fetch` と `cargo rustc -- --emit=obj` を実行する。network が必要な `cargo fetch` 前には repo-local `.cargo/config*` を `cargo-clippy` と同じ safety gate で検査し、safe subset 以外は reject する。scan run-entry は既存 directory の続き番号を使って上書きを防ぐ。 |
 | `dotenv-linter` | changed `.env` file への upstream default checks 直接適用、`--schema` と ignore-checks 注入は未対応。 |
 | `editorconfig-checker` | `PassedFiles` 制限、`NoColor` 強制。 |
 | `helmlint` | changed file から親方向の `Chart.yaml` を解決し、chart directory ごとに重複排除して `helm lint` 実行。 |

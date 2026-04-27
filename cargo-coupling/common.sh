@@ -112,19 +112,23 @@ cargo_coupling_analysis_path_for_manifest() {
   manifest_dir=$(dirname "$manifest_path")
   src_dir="$manifest_dir/src"
 
-  if [ "$manifest_dir" = "." ]; then
-    if [ -d src ]; then
-      printf '%s\n' "src"
-    else
-      printf '%s\n' "."
-    fi
-    return 0
-  fi
-
   if [ -d "$src_dir" ]; then
-    printf '%s\n' "$src_dir"
+    printf '%s\n' "src"
     return 0
   fi
 
-  printf '%s\n' "$manifest_dir"
+  printf '%s\n' "."
+}
+
+cargo_coupling_workdir_for_manifest() {
+  local manifest_path=$1
+  local manifest_dir
+
+  manifest_dir=$(dirname "$manifest_path")
+  if [ "$manifest_dir" = "." ]; then
+    printf '%s\n' "/work"
+    return 0
+  fi
+
+  printf '/work/%s\n' "$manifest_dir"
 }

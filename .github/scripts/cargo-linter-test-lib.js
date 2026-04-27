@@ -15,11 +15,12 @@ function createJsonPythonStub(binDir) {
 		path.join(binDir, "python3"),
 		`#!/usr/bin/env bash
 set -euo pipefail
-cat >/dev/null
-node - "$@" <<'NODE'
+script=$(cat)
+if result=$(PYTHON_STUB_SCRIPT="$script" node - "$@" <<'NODE'
 const fs = require("node:fs");
 
 const args = process.argv.slice(2);
+const script = process.env.PYTHON_STUB_SCRIPT || "";
 
 if (args.length === 3) {
 \tconst [, exitCode, outputFile] = args;
@@ -58,11 +59,21 @@ if (args.length === 2) {
 \tprocess.exit(0);
 }
 
-process.stderr.write(
-\t'unsupported python stub invocation: ' + JSON.stringify(args) + '\\n',
-);
-process.exit(1);
+process.exit(2);
 NODE
+\t2>/dev/null); then
+\tprintf '%s' "$result"
+\texit 0
+fi
+
+if [ -x /usr/bin/python3 ]; then
+\tprintf '%s' "$script" | /usr/bin/python3 "$@"
+\texit $?
+fi
+
+process_stderr='unsupported python stub invocation: '
+printf '%s%s\n' "$process_stderr" "$*"
+exit 1
 `,
 	);
 }

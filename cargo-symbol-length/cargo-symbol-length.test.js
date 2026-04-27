@@ -46,11 +46,13 @@ case "$command" in
     image_ref=""
     run_entries_mount_src=""
     work_mount_src=""
+    container_workdir="/work"
     batch_mode=""
     command_args=()
     option_with_value=""
     is_rustup_seed=0
     is_metadata=0
+    cargo_subcommand=""
     manifest=""
     prev=""
 
@@ -72,6 +74,9 @@ case "$command" in
                 run_entries_mount_src="\${run_entries_mount_src%%,*}"
                 ;;
             esac
+            ;;
+          --workdir)
+            container_workdir="$arg"
             ;;
           --env|-e)
             case "$arg" in
@@ -110,6 +115,23 @@ case "$command" in
       fi
       prev="$arg"
     done
+    cargo_arg_index=0
+    while [ "$cargo_arg_index" -lt "\${#command_args[@]}" ]; do
+      arg="\${command_args[$cargo_arg_index]}"
+      if [ "$cargo_arg_index" -eq 0 ] && [ "$arg" = "cargo" ]; then
+        cargo_arg_index=$((cargo_arg_index + 1))
+        continue
+      fi
+      if [ "$arg" = "--config" ]; then
+        cargo_arg_index=$((cargo_arg_index + 2))
+        continue
+      fi
+      cargo_subcommand="$arg"
+      break
+    done
+    if [ "$cargo_subcommand" = "metadata" ]; then
+      is_metadata=1
+    fi
 
     printf '%s\\n' "$*" >> "$DOCKER_RUN_ARGS_LOG"
 
@@ -125,12 +147,38 @@ case "$command" in
       exit 0
     fi
 
+    if [ -n "$manifest" ]; then
+      manifest=$(node - "$container_workdir" "$manifest" <<'NODE'
+const path = require("node:path");
+const [workdir, manifest] = process.argv.slice(2);
+const absolute = manifest.startsWith("/work")
+  ? path.posix.normalize(manifest)
+  : path.posix.normalize(path.posix.join(workdir || "/work", manifest));
+process.stdout.write(
+  absolute === "/work"
+    ? ""
+    : absolute.startsWith("/work/")
+      ? absolute.slice("/work/".length)
+      : absolute,
+);
+NODE
+)
+      manifest_host_path=$(node - "$work_mount_src" "$manifest" <<'NODE'
+const path = require("node:path");
+const [sourceRoot, manifest] = process.argv.slice(2);
+process.stdout.write(path.join(sourceRoot, ...manifest.split("/")));
+NODE
+)
+    else
+      manifest_host_path=""
+    fi
+
     if [ "$is_metadata" -eq 1 ]; then
       if [ -z "$manifest" ]; then
         echo "missing --manifest-path" >&2
         exit 1
       fi
-      current_dir="$work_mount_src/$(dirname "$manifest")"
+      current_dir=$(dirname "$manifest_host_path")
       workspace_dir="$current_dir"
       search_dir="$current_dir"
       while :; do
@@ -182,12 +230,52 @@ NODE
       exit 0
     fi
 
+    if [ "$cargo_subcommand" = "fetch" ]; then
+      printf '%s\\n' "$manifest" >> "$DOCKER_FETCH_MANIFEST_LOG"
+      printf '==> docker run cargo fetch --manifest-path %s\\n' "$manifest"
+      printf 'prefetched %s\\n' "$manifest"
+      if [ -n "\${FAIL_FETCH_MANIFEST:-}" ] && [ "$manifest" = "$FAIL_FETCH_MANIFEST" ]; then
+        printf 'fetch failure %s\\n' "$manifest" >&2
+        exit 1
+      fi
+      echo
+      exit 0
+    fi
+
     # python3 /linter/scan.py MANIFEST... (--network=none)
     if [ "\${command_args[0]:-}" = "python3" ] && [ "\${command_args[1]:-}" = "/linter/scan.py" ]; then
-      scan_manifests=("\${command_args[@]:2}")
+      scan_args=("\${command_args[@]:2}")
+      scan_manifests=()
+      scan_index=0
+      while [ "$scan_index" -lt "\${#scan_args[@]}" ]; do
+        scan_arg="\${scan_args[$scan_index]}"
+        scan_manifests+=("$scan_arg")
+        scan_index=$((scan_index + 1))
+      done
       failure=0
-      run_index=0
+      run_index=$(find "$run_entries_mount_src" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l)
       for manifest in "\${scan_manifests[@]}"; do
+        manifest=$(node - "$container_workdir" "$manifest" <<'NODE'
+const path = require("node:path");
+const [workdir, manifest] = process.argv.slice(2);
+const absolute = manifest.startsWith("/work")
+  ? path.posix.normalize(manifest)
+  : path.posix.normalize(path.posix.join(workdir || "/work", manifest));
+process.stdout.write(
+  absolute === "/work"
+    ? ""
+    : absolute.startsWith("/work/")
+      ? absolute.slice("/work/".length)
+      : absolute,
+);
+NODE
+)
+        manifest_host_path=$(node - "$work_mount_src" "$manifest" <<'NODE'
+const path = require("node:path");
+const [sourceRoot, manifest] = process.argv.slice(2);
+process.stdout.write(path.join(sourceRoot, ...manifest.split("/")));
+NODE
+)
         run_index=$((run_index + 1))
         run_dir=""
         if [ -n "$run_entries_mount_src" ]; then
@@ -196,7 +284,7 @@ NODE
         fi
         printf '%s\\n' "$manifest" >> "$DOCKER_MANIFEST_LOG"
 
-        package_name=$(node - "$work_mount_src/$manifest" <<'NODE'
+        package_name=$(node - "$manifest_host_path" <<'NODE'
 const fs = require("node:fs");
 const [manifestPath] = process.argv.slice(2);
 let name = "";
@@ -209,7 +297,7 @@ for (const line of fs.readFileSync(manifestPath, "utf8").split("\\n")) {
 process.stdout.write(name);
 NODE
 )
-        manifest_dir=$(dirname "$work_mount_src/$manifest")
+        manifest_dir=$(dirname "$manifest_host_path")
         src_path="src/lib.rs"
         if [ ! -f "$manifest_dir/src/lib.rs" ] && [ -f "$manifest_dir/src/main.rs" ]; then
           src_path="src/main.rs"
@@ -453,8 +541,55 @@ test("cargo-symbol-length.sh honors repository-configured max_symbol_length", ()
 	}
 });
 
-test("cargo-symbol-length.sh rejects repository-supplied .cargo/config.toml", () => {
+test("cargo-symbol-length.sh honors repository-supplied Cargo config", () => {
 	const context = makeTempRepo("cargo-symbol-length-cargo-config-");
+	const tooling = setupDockerTooling(context);
+
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		'[package]\nname = "fixture"\nversion = "0.1.0"\nedition = "2021"\n',
+	);
+	writeFile(path.join(context.repoDir, "src/lib.rs"), "pub fn hello() {}\n");
+	writeFile(
+		path.join(context.repoDir, ".cargo/config.toml"),
+		"[build]\ntarget-dir = 'target/root'\n",
+	);
+
+	try {
+		const output = execFileSync("bash", [runPath, "src/lib.rs"], {
+			cwd: context.repoDir,
+			encoding: "utf8",
+			env: {
+				...process.env,
+				...tooling.env,
+				PATH: `${context.binDir}:${process.env.PATH}`,
+				RUNNER_TEMP: context.runnerTemp,
+			},
+		});
+		const result = JSON.parse(output);
+		const runArgs = fs.readFileSync(tooling.dockerRunArgsLog, "utf8");
+
+		assert.equal(result.exit_code, 0);
+		assert.match(
+			runArgs,
+			/--workdir \/work [^\n]*cargo fetch --manifest-path Cargo\.toml/,
+		);
+		assert.match(
+			runArgs,
+			/--workdir \/work [^\n]*python3 \/linter\/scan\.py Cargo\.toml/,
+		);
+		assert.doesNotMatch(runArgs, /--config .*\.cargo\/config/);
+		assert.deepEqual(
+			fs.readFileSync(tooling.dockerManifestLog, "utf8").trim().split("\n"),
+			["Cargo.toml"],
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("cargo-symbol-length.sh rejects unsafe repo-local Cargo config before cargo fetch", () => {
+	const context = makeTempRepo("cargo-symbol-length-unsafe-cargo-config-");
 	const tooling = setupDockerTooling(context);
 
 	writeFile(
@@ -483,8 +618,10 @@ test("cargo-symbol-length.sh rejects repository-supplied .cargo/config.toml", ()
 		assert.equal(result.exit_code, 1);
 		assert.match(
 			result.details,
-			/not supported in this shared linter service/u,
+			/repo-local Cargo config for networked resolution is restricted on the shared runner\./,
 		);
+		assert.match(result.details, /unsupported top-level section\(s\): net/);
+		assert.equal(fs.existsSync(tooling.dockerFetchManifestLog), false);
 		assert.equal(fs.existsSync(tooling.dockerManifestLog), false);
 	} finally {
 		cleanupTempRepo(context.tempDir);

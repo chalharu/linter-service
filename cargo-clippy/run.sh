@@ -15,19 +15,8 @@ rm -f "$result_json_file" "$structured_runs_file"
 rm -rf "$run_entries_dir"
 cargo_clippy_require_docker
 manifests=()
-normalized_manifests=()
-relevant_dirs=()
-unsupported_config=""
+run_targets=()
 if ! linter_lib::collect_cargo_manifests "$output_file" "Cargo clippy" manifests "$@"; then
-  linter_lib::emit_json_result 1 "$output_file"
-  exit 0
-fi
-mapfile -t relevant_dirs < <(linter_lib::collect_cargo_relevant_dirs "${manifests[@]}")
-if unsupported_config="$(linter_lib::find_unsupported_cargo_config "${relevant_dirs[@]}")"; then
-  cat > "$output_file" <<EOF
-Repository-supplied \`$unsupported_config\` is not supported in this shared linter service because \`cargo fetch\` for untrusted pull requests cannot safely honor repository-controlled Cargo configuration.
-Use the default Cargo registry configuration for the shared \`cargo-clippy\` path.
-EOF
   linter_lib::emit_json_result 1 "$output_file"
   exit 0
 fi
@@ -78,7 +67,6 @@ docker_run_common=(
   --read-only
   --tmpfs /tmp
   --user "$user_id:$group_id"
-  --workdir /work
   --mount "type=bind,src=$source_root,dst=/work"
   --mount "type=bind,src=$cargo_home,dst=/cargo-home"
   --mount "type=bind,src=$rustup_root,dst=/usr/local/rustup"
@@ -97,40 +85,44 @@ metadata_docker_run_common=(
   --read-only
   --tmpfs /tmp
   --user "$user_id:$group_id"
-  --workdir /work
   --mount "type=bind,src=$source_root,dst=/work"
 )
 
 cargo_clippy_resolve_workspace_manifest() {
   local manifest_path=$1
+  local manifest_arg workdir
 
-  linter_lib::resolve_cargo_workspace_manifest /work "$manifest_path" \
-    docker run "${metadata_docker_run_common[@]}" --network=none "$image_ref" cargo
+  manifest_arg=$(linter_lib::relative_repo_path_from_manifest_dir "$manifest_path" "$manifest_path")
+  workdir=$(linter_lib::cargo_workdir_for_manifest "$manifest_path")
+
+  linter_lib::resolve_cargo_workspace_manifest /work "$manifest_arg" \
+    docker run "${metadata_docker_run_common[@]}" --network=none --workdir "$workdir" "$image_ref" cargo
 }
 
-cargo_clippy_normalize_manifests() {
-  local -A seen_manifests=()
-  local manifest_path normalized_manifest
+cargo_clippy_collect_run_targets() {
+  local -A seen_targets=()
+  local manifest_path normalized_manifest config_key dedupe_key
 
   for manifest_path in "${manifests[@]}"; do
     normalized_manifest=$(cargo_clippy_resolve_workspace_manifest "$manifest_path")
-    if [ -n "${seen_manifests[$normalized_manifest]+x}" ]; then
+    config_key=$(linter_lib::cargo_config_chain_key "$manifest_path")
+    dedupe_key="$normalized_manifest"$'\t'"$config_key"
+    if [ -n "${seen_targets[$dedupe_key]+x}" ]; then
       continue
     fi
 
-    seen_manifests["$normalized_manifest"]=1
-    printf '%s\n' "$normalized_manifest"
+    seen_targets["$dedupe_key"]=1
+    printf '%s\t%s\n' "$normalized_manifest" "$manifest_path"
   done
 }
 
-mapfile -t normalized_manifests < <(cargo_clippy_normalize_manifests)
+mapfile -t run_targets < <(cargo_clippy_collect_run_targets)
 
 run_cargo_clippy() {
   local failure=0
-  local current_manifest
-  local fetch_failures_path="$cargo_home/fetch-failed-manifests.txt"
-  local clippy_manifests=()
-  local -A failed_fetches=()
+  local current_manifest current_manifest_arg original_manifest run_target run_dir run_exit command_line
+  local cargo_clippy_command cargo_clippy_display_command cargo_fetch_command network_safety_output workdir
+  local run_index=0
 
   if ! seed_writable_rustup_home; then
     return 1
@@ -138,87 +130,79 @@ run_cargo_clippy() {
 
   rm -rf "$run_entries_dir"
   mkdir -p "$run_entries_dir"
-  rm -f "$fetch_failures_path"
 
-  if ! docker run \
-    "${docker_run_common[@]}" \
-    --env LINTER_SERVICE_BATCH_MODE=fetch \
-    "$image_ref" \
-    sh -ceu '
-      failed_path=/cargo-home/fetch-failed-manifests.txt
-      : > "$failed_path"
-      for manifest_path in "$@"; do
-        printf "==> docker run cargo fetch --manifest-path %s\n" "$manifest_path"
-        if ! cargo fetch --manifest-path "$manifest_path"; then
-          printf "%s\n" "$manifest_path" >> "$failed_path"
-        fi
-        echo
-      done
-    ' sh "${normalized_manifests[@]}"; then
-    return 1
-  fi
+  for run_target in "${run_targets[@]}"; do
+    IFS=$'\t' read -r current_manifest original_manifest <<< "$run_target"
+    workdir=$(linter_lib::cargo_workdir_for_manifest "$original_manifest")
+    current_manifest_arg=$(linter_lib::relative_repo_path_from_manifest_dir "$original_manifest" "$current_manifest")
 
-  if [ -s "$fetch_failures_path" ]; then
-    failure=1
-    while IFS= read -r current_manifest; do
-      if [ -n "$current_manifest" ]; then
-        failed_fetches["$current_manifest"]=1
-      fi
-    done < "$fetch_failures_path"
-  fi
+    if ! network_safety_output=$(linter_lib::validate_network_safe_cargo_config "$original_manifest" 2>&1); then
+      failure=1
+      printf '==> reject cargo fetch --manifest-path %s\n%s\n\n' "$current_manifest" "$network_safety_output"
+      printf '==> skip cargo clippy --manifest-path %s because cargo fetch safety checks failed\n\n' "$current_manifest"
+      continue
+    fi
 
-  for current_manifest in "${normalized_manifests[@]}"; do
-    if [ -n "${failed_fetches[$current_manifest]+x}" ]; then
+    cargo_fetch_command=(cargo fetch --manifest-path "$current_manifest_arg")
+    printf '==> docker run %s\n' "${cargo_fetch_command[*]}"
+    if ! docker run \
+      "${docker_run_common[@]}" \
+      --workdir "$workdir" \
+      "$image_ref" \
+      "${cargo_fetch_command[@]}"; then
+      failure=1
       printf '==> skip cargo clippy --manifest-path %s because cargo fetch failed\n\n' "$current_manifest"
       continue
     fi
-    clippy_manifests+=("$current_manifest")
+    echo
+
+    run_index=$((run_index + 1))
+    run_dir=$(printf '%s/%04d' "$run_entries_dir" "$run_index")
+    mkdir -p "$run_dir"
+    cargo_clippy_command=(
+      cargo
+      clippy
+      --message-format=json
+      --manifest-path "$current_manifest_arg"
+      --all-targets
+      --
+      -D warnings
+    )
+    cargo_clippy_display_command=(
+      cargo
+      clippy
+      --message-format=json
+      --manifest-path "$current_manifest"
+      --all-targets
+      --
+      -D warnings
+    )
+    command_line="${cargo_clippy_display_command[*]}"
+    printf '%s\n' "$command_line" > "$run_dir/command.txt"
+    printf '%s\n' "$current_manifest" > "$run_dir/manifest_path.txt"
+    set +e
+    docker run \
+      "${docker_run_common[@]}" \
+      --workdir "$workdir" \
+      --network=none \
+      "$image_ref" \
+      "${cargo_clippy_command[@]}" >"$run_dir/stdout.txt" 2>"$run_dir/stderr.txt"
+    run_exit=$?
+    set -e
+    printf '%s\n' "$run_exit" > "$run_dir/exit_code.txt"
+    if [ "$run_exit" -ne 0 ]; then
+      failure=1
+    fi
   done
-
-  if [ "${#clippy_manifests[@]}" -eq 0 ]; then
-    return "$failure"
-  fi
-
-  if ! docker run \
-    "${docker_run_common[@]}" \
-    --env LINTER_SERVICE_BATCH_MODE=clippy \
-    --network=none \
-    "$image_ref" \
-    sh -ceu '
-      failure=0
-      run_index=0
-      for manifest_path in "$@"; do
-        run_index=$((run_index + 1))
-        run_dir=$(printf "/run-entries/%04d" "$run_index")
-        mkdir -p "$run_dir"
-        printf "%s\n" "docker run cargo clippy --manifest-path $manifest_path --all-targets -- -D warnings" > "$run_dir/command.txt"
-        printf "%s\n" "$manifest_path" > "$run_dir/manifest_path.txt"
-        set +e
-        cargo clippy \
-          --message-format=json \
-          --manifest-path "$manifest_path" \
-          --all-targets \
-          -- \
-          -D warnings >"$run_dir/stdout.txt" 2>"$run_dir/stderr.txt"
-        run_exit=$?
-        set -e
-        printf "%s\n" "$run_exit" > "$run_dir/exit_code.txt"
-        if [ "$run_exit" -ne 0 ]; then
-          failure=1
-        fi
-      done
-      exit "$failure"
-    ' sh "${clippy_manifests[@]}"; then
-    failure=1
-  fi
 
   return "$failure"
 }
 
-set +e
-run_cargo_clippy >"$output_file" 2>&1
-exit_code=$?
-set -e
+if run_cargo_clippy >"$output_file" 2>&1; then
+  exit_code=0
+else
+  exit_code=$?
+fi
 
 node "$script_dir/cargo-clippy-result.js" \
   "$run_entries_dir" \
