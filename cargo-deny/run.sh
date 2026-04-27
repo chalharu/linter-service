@@ -40,6 +40,7 @@ cleanup_workspace() {
 
 trap cleanup_workspace EXIT
 
+# shellcheck disable=SC2034 # Used indirectly via local -n in cargo_deny_collect_run_targets.
 metadata_docker_run_common=(
   docker run
   --rm

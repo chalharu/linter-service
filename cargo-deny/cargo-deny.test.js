@@ -114,64 +114,6 @@ esac
 	);
 }
 
-function createCargoStub(binDir) {
-	writeExecutable(
-		path.join(binDir, "cargo"),
-		`#!/usr/bin/env bash
-set -euo pipefail
-if [ "\${1-}" = "--version" ]; then
-  echo "cargo 0.0.0"
-  exit 0
-fi
-if [ "\${1-}" != "metadata" ]; then
-  echo "unexpected cargo command: $*" >&2
-  exit 1
-fi
-shift
-manifest=""
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    --manifest-path|--format-version)
-      if [ "$1" = "--manifest-path" ]; then
-        manifest="$2"
-      fi
-      shift 2
-      ;;
-    --no-deps)
-      shift
-      ;;
-    *)
-      shift
-      ;;
-  esac
-done
-if [ -z "$manifest" ]; then
-  echo "missing --manifest-path" >&2
-  exit 1
-fi
-current_dir=$(dirname "$manifest")
-workspace_dir="$current_dir"
-search_dir="$current_dir"
-while :; do
-  candidate="$search_dir/Cargo.toml"
-  if [ -f "$candidate" ] && grep -Eq '^\\[workspace\\]' "$candidate"; then
-    workspace_dir="$search_dir"
-    break
-  fi
-  if [ "$search_dir" = "." ] || [ "$search_dir" = "/" ]; then
-    break
-  fi
-  search_dir=$(dirname "$search_dir")
-done
-workspace_root=$(cd "$workspace_dir" && pwd)
-node - "$workspace_root" <<'NODE'
-const [workspaceRoot] = process.argv.slice(2);
-process.stdout.write(JSON.stringify({ workspace_root: workspaceRoot }));
-NODE
-`,
-	);
-}
-
 function createCargoDenyStub(binDir) {
 	writeExecutable(
 		path.join(binDir, "docker"),
