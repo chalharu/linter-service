@@ -6,6 +6,7 @@ const {
 	buildDetailsTextFromSarif,
 	readEmbeddedSarif,
 } = require("./lib/sarif.js");
+const { buildTextCodeBlock } = require("./lib/markdown-code-block.js");
 const {
 	deriveTargetCount,
 	escapeHtml,
@@ -28,6 +29,7 @@ function runFromEnv(env = process.env) {
 	const report = renderReport({
 		configPath: requireEnv(env, "LINTER_CONFIG_PATH"),
 		exitCodeRaw: env.EXIT_CODE ?? "",
+		failureDetailsPath: env.FAILURE_DETAILS_PATH ?? "",
 		installOutcome: env.INSTALL_TOOL_OUTCOME ?? "",
 		linterName,
 		resultPath: requireEnv(env, "RESULT_PATH"),
@@ -50,6 +52,7 @@ function runFromEnv(env = process.env) {
 function renderReport({
 	configPath,
 	exitCodeRaw,
+	failureDetailsPath,
 	installOutcome,
 	linterName,
 	resultPath,
@@ -90,10 +93,15 @@ function renderReport({
 	const conclusion =
 		status === "failure" || status === "infra_failure" ? "failure" : "success";
 
-	if (status === "failure" || status === "warning") {
+	if (
+		status === "failure" ||
+		status === "warning" ||
+		status === "infra_failure"
+	) {
 		detailsText = resolveDetails(
 			{
 				configPath,
+				failureDetailsPath,
 				linterName,
 				result,
 				runnerTemp,
@@ -122,14 +130,17 @@ function renderReport({
 		appendTargetLines(lines, targetLines);
 	}
 
-	if (status === "failure" || status === "warning") {
+	if (
+		status === "failure" ||
+		status === "warning" ||
+		status === "infra_failure"
+	) {
+		const detailsBlock = buildTextCodeBlock(detailsText);
 		lines.push(
 			"",
 			"<details><summary>Details</summary>",
 			"",
-			"```text",
-			detailsText,
-			"```",
+			...detailsBlock,
 			"</details>",
 		);
 	}
@@ -148,9 +159,24 @@ function renderReport({
 }
 
 function resolveDetails(
-	{ configPath, linterName, result, runnerTemp, sourceRepositoryPath, status },
+	{
+		configPath,
+		failureDetailsPath,
+		linterName,
+		result,
+		runnerTemp,
+		sourceRepositoryPath,
+		status,
+	},
 	fallback,
 ) {
+	if (status === "infra_failure") {
+		return normalizeDetailsText(
+			readFailureDetails(failureDetailsPath),
+			fallback,
+		);
+	}
+
 	const hookDetails = buildHookDetails({
 		configPath,
 		linterName,
@@ -188,6 +214,18 @@ function normalizeDetailsText(details, fallback) {
 	}
 
 	return details;
+}
+
+function readFailureDetails(filePath) {
+	if (typeof filePath !== "string" || filePath.length === 0) {
+		return "";
+	}
+
+	if (!fs.existsSync(filePath)) {
+		return "";
+	}
+
+	return fs.readFileSync(filePath, "utf8").trim();
 }
 
 function buildHookDetails({

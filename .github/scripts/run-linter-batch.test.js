@@ -274,8 +274,185 @@ printf '{"details":"beta ok","exit_code":0}\\n'
 			alphaSummary.comment_body,
 			/Matched 1 file, but the workflow failed before diagnostics were produced\./u,
 		);
+		assert.match(
+			alphaSummary.comment_body,
+			/<details><summary>Details<\/summary>\n\n```text\nalpha install step failed\./u,
+		);
+		assert.match(alphaSummary.details_text, /^alpha install step failed\./u);
+		assert.match(alphaSummary.details_text, /\nstderr:\ninstall boom$/u);
 		assert.equal(alphaSummary.status, "infra_failure");
 		assert.equal(betaSummary.conclusion, "success");
+	} finally {
+		cleanupTempWorkspace(workspace.tempDir);
+	}
+});
+
+test("runLinterBatch omits secret-like captured output from infrastructure failure summaries", () => {
+	const workspace = createTempWorkspace();
+	writeFile(path.join(workspace.sourceRepositoryPath, "alpha.txt"), "alpha\n");
+	writeLinterConfig(workspace.linterConfigPath, {
+		alpha: {
+			sarif: {
+				enabled: false,
+			},
+		},
+	});
+	writeFakeLinter(workspace.linterServicePath, {
+		name: "alpha",
+		installScript: `#!/usr/bin/env bash
+set -euo pipefail
+echo "GITHUB_TOKEN=ghp_123456789012345678901234567890123456" >&2
+echo "https://user:pass123@registry.example.com/pkg" >&2
+echo "Authorization: Bearer short_token_val" >&2
+echo "//registry.npmjs.org/:_authToken=npm_secret_value" >&2
+echo "npm_abcdefghijklmnopqrstuvwxyz012345678901234567890123456789" >&2
+echo "hvs.abcdefghijklmnopqrstuvwxyz012345678901234567890123456789" >&2
+exit 1
+`,
+		pattern: "^alpha\\.txt$",
+		runScript: `#!/usr/bin/env bash
+set -euo pipefail
+printf '{"details":"should-not-run","exit_code":0}\\n'
+`,
+	});
+
+	try {
+		runLinterBatch({
+			baseEnv: {
+				...process.env,
+				PATH: process.env.PATH || "",
+			},
+			contextPath: workspace.contextPath,
+			linterConfigPath: workspace.linterConfigPath,
+			linterNames: ["alpha"],
+			linterServicePath: workspace.linterServicePath,
+			runnerTemp: workspace.runnerTemp,
+			sourceRepositoryPath: workspace.sourceRepositoryPath,
+		});
+
+		const alphaSummary = JSON.parse(
+			fs.readFileSync(
+				path.join(workspace.runnerTemp, "linter-summary-alpha.json"),
+				"utf8",
+			),
+		);
+		assert.match(alphaSummary.details_text, /^alpha install step failed\./u);
+		assert.match(alphaSummary.details_text, /stderr omitted \(\d+ chars\)/u);
+		assert.doesNotMatch(alphaSummary.details_text, /GITHUB_TOKEN/u);
+		assert.doesNotMatch(alphaSummary.details_text, /ghp_/u);
+		assert.doesNotMatch(alphaSummary.details_text, /registry\.example\.com/u);
+		assert.doesNotMatch(alphaSummary.details_text, /Bearer short_token_val/u);
+		assert.doesNotMatch(alphaSummary.details_text, /_authToken/u);
+		assert.doesNotMatch(alphaSummary.details_text, /npm_abcdefghijklmnopqrstuvwxyz/u);
+		assert.doesNotMatch(alphaSummary.details_text, /hvs\./u);
+	} finally {
+		cleanupTempWorkspace(workspace.tempDir);
+	}
+});
+
+test("runLinterBatch keeps safe long-path diagnostics in infrastructure failure summaries", () => {
+	const workspace = createTempWorkspace();
+	writeFile(path.join(workspace.sourceRepositoryPath, "alpha.txt"), "alpha\n");
+	writeLinterConfig(workspace.linterConfigPath, {
+		alpha: {
+			sarif: {
+				enabled: false,
+			},
+		},
+	});
+	writeFakeLinter(workspace.linterServicePath, {
+		name: "alpha",
+		installScript: `#!/usr/bin/env bash
+set -euo pipefail
+echo "error: could not open /runner/work/project/linter-service/alpha/really/long/path/to/generated/output/file.txt" >&2
+exit 1
+`,
+		pattern: "^alpha\\.txt$",
+		runScript: `#!/usr/bin/env bash
+set -euo pipefail
+printf '{"details":"should-not-run","exit_code":0}\\n'
+`,
+	});
+
+	try {
+		runLinterBatch({
+			baseEnv: {
+				...process.env,
+				PATH: process.env.PATH || "",
+			},
+			contextPath: workspace.contextPath,
+			linterConfigPath: workspace.linterConfigPath,
+			linterNames: ["alpha"],
+			linterServicePath: workspace.linterServicePath,
+			runnerTemp: workspace.runnerTemp,
+			sourceRepositoryPath: workspace.sourceRepositoryPath,
+		});
+
+		const alphaSummary = JSON.parse(
+			fs.readFileSync(
+				path.join(workspace.runnerTemp, "linter-summary-alpha.json"),
+				"utf8",
+			),
+		);
+		assert.match(
+			alphaSummary.details_text,
+			/error: could not open \/runner\/work\/project\/linter-service\/alpha\/really\/long\/path\/to\/generated\/output\/file\.txt/u,
+		);
+		assert.doesNotMatch(alphaSummary.details_text, /stderr omitted/u);
+	} finally {
+		cleanupTempWorkspace(workspace.tempDir);
+	}
+});
+
+test("runLinterBatch keeps safe long package-name diagnostics in infrastructure failure summaries", () => {
+	const workspace = createTempWorkspace();
+	writeFile(path.join(workspace.sourceRepositoryPath, "alpha.txt"), "alpha\n");
+	writeLinterConfig(workspace.linterConfigPath, {
+		alpha: {
+			sarif: {
+				enabled: false,
+			},
+		},
+	});
+	writeFakeLinter(workspace.linterServicePath, {
+		name: "alpha",
+		installScript: `#!/usr/bin/env bash
+set -euo pipefail
+echo "error: package prettier-plugin-sort-imports-alphabetical not found" >&2
+exit 1
+`,
+		pattern: "^alpha\\.txt$",
+		runScript: `#!/usr/bin/env bash
+set -euo pipefail
+printf '{"details":"should-not-run","exit_code":0}\\n'
+`,
+	});
+
+	try {
+		runLinterBatch({
+			baseEnv: {
+				...process.env,
+				PATH: process.env.PATH || "",
+			},
+			contextPath: workspace.contextPath,
+			linterConfigPath: workspace.linterConfigPath,
+			linterNames: ["alpha"],
+			linterServicePath: workspace.linterServicePath,
+			runnerTemp: workspace.runnerTemp,
+			sourceRepositoryPath: workspace.sourceRepositoryPath,
+		});
+
+		const alphaSummary = JSON.parse(
+			fs.readFileSync(
+				path.join(workspace.runnerTemp, "linter-summary-alpha.json"),
+				"utf8",
+			),
+		);
+		assert.match(
+			alphaSummary.details_text,
+			/error: package prettier-plugin-sort-imports-alphabetical not found/u,
+		);
+		assert.doesNotMatch(alphaSummary.details_text, /stderr omitted/u);
 	} finally {
 		cleanupTempWorkspace(workspace.tempDir);
 	}

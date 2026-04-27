@@ -374,6 +374,66 @@ test("renders Biome detail blocks from per-linter summary details", () => {
 	}
 });
 
+test("renders infra failure detail blocks from per-linter summary details", () => {
+	const tempDir = fs.mkdtempSync(
+		path.join(os.tmpdir(), "render-combined-report-infra-"),
+	);
+	const runnerTemp = path.join(tempDir, "runner-temp");
+	const summaryRoot = path.join(tempDir, "summaries");
+
+	fs.mkdirSync(runnerTemp, { recursive: true });
+	fs.mkdirSync(summaryRoot, { recursive: true });
+	fs.writeFileSync(
+		path.join(summaryRoot, "linter-summary-spectral.json"),
+		JSON.stringify(
+			{
+				comment_body:
+					"### spectral\n\n❌ Matched 1 file, but the workflow failed before diagnostics were produced.\n\n<details><summary>Details</summary>\n\n````text\nspectral run step failed.\n```\nspawnSync bash ENOBUFS\n````\n</details>\n",
+				checked_project_count: 0,
+				checked_projects: [],
+				conclusion: "failure",
+				counts_known: false,
+				details_text: "spectral run step failed.\n```\nspawnSync bash ENOBUFS",
+				issue_count: null,
+				issue_target_count: null,
+				linter_name: "spectral",
+				passed_target_count: null,
+				selected_files: ["openapi/spec.yaml"],
+				selected_file_count: 1,
+				status: "infra_failure",
+				summary_text:
+					"❌ Matched 1 file, but the workflow failed before diagnostics were produced.",
+				target_count: 1,
+				target_kind: "file",
+			},
+			null,
+			2,
+		),
+		"utf8",
+	);
+
+	try {
+		const report = runFromEnv({
+			DECRYPT_SUMMARIES_OUTCOME: "success",
+			LINTER_SUMMARY_PATH: summaryRoot,
+			RUNNER_TEMP: runnerTemp,
+			SELECTED_LINTERS_JSON: JSON.stringify(["spectral"]),
+		});
+		const commentBody = fs.readFileSync(
+			path.join(runnerTemp, "combined-linter-comment.md"),
+			"utf8",
+		);
+
+		assert.equal(report.overallConclusion, "failure");
+		assert.match(
+			commentBody,
+			/### spectral\n\n````text\nspectral run step failed\.\n```\nspawnSync bash ENOBUFS\n````/,
+		);
+	} finally {
+		fs.rmSync(tempDir, { force: true, recursive: true });
+	}
+});
+
 test("falls back to decrypt failure messaging when detailed summaries are unavailable", () => {
 	const tempDir = fs.mkdtempSync(
 		path.join(os.tmpdir(), "render-combined-report-missing-"),

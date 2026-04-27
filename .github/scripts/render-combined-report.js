@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const requireEnv = require("./lib/require-env.js");
+const { buildTextCodeBlock } = require("./lib/markdown-code-block.js");
 const {
 	deriveTargetCount,
 	escapeHtml,
@@ -285,10 +286,12 @@ function buildDetailSection(summary) {
 	const lines = [`### ${summary.linterName}`, ""];
 
 	if (
-		(summary.status === "warning" || summary.status === "failure") &&
+		(summary.status === "warning" ||
+			summary.status === "failure" ||
+			summary.status === "infra_failure") &&
 		summary.detailsText.length > 0
 	) {
-		lines.push("```text", summary.detailsText, "```");
+		lines.push(...buildTextCodeBlock(summary.detailsText));
 		return lines.join("\n");
 	}
 

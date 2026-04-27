@@ -12,6 +12,8 @@ const { runFromEnv: selectLintTargets } = require("./select-lint-targets.js");
 const { applyWorkflowEnvironment } = require("./workflow-command-env.js");
 
 const RUN_LINTER_MAX_BUFFER = 16 * 1024 * 1024;
+const STEP_FAILURE_OUTPUT_LIMIT = 600;
+const STEP_FAILURE_OUTPUT_LINE_LIMIT = 4;
 
 function runFromEnv(env = process.env) {
 	const result = runLinterBatch({
@@ -121,6 +123,11 @@ function runSingleLinter({
 		selectOutcome = "failure";
 		infrastructureFailures += 1;
 		logStepFailure("select", linterName, error);
+		writeStepFailureDetails(paths.failureDetailsPath, {
+			error,
+			linterName,
+			stepName: "select",
+		});
 	}
 
 	const selectedFiles = readLines(paths.selectedFilesPath);
@@ -139,6 +146,11 @@ function runSingleLinter({
 			installOutcome = "failure";
 			infrastructureFailures += 1;
 			logStepFailure("install", linterName, error);
+			writeStepFailureDetails(paths.failureDetailsPath, {
+				error,
+				linterName,
+				stepName: "install",
+			});
 		}
 	}
 
@@ -158,6 +170,11 @@ function runSingleLinter({
 			runOutcome = "failure";
 			infrastructureFailures += 1;
 			logStepFailure("run", linterName, error);
+			writeStepFailureDetails(paths.failureDetailsPath, {
+				error,
+				linterName,
+				stepName: "run",
+			});
 		}
 	}
 
@@ -211,6 +228,7 @@ function createLinterPaths({ linterName, runnerTemp }) {
 	const workDir = path.join(runnerTemp, "linter-batch", linterName);
 
 	return {
+		failureDetailsPath: path.join(workDir, "step-failure.txt"),
 		patternPath: path.join(workDir, "patterns.txt"),
 		resultPath: path.join(workDir, "linter-result.json"),
 		sarifPath: path.join(runnerTemp, `linter-sarif-${linterName}.sarif`),
@@ -223,6 +241,7 @@ function createLinterPaths({ linterName, runnerTemp }) {
 function resetLinterWorkspace(paths) {
 	fs.rmSync(paths.workDir, { force: true, recursive: true });
 	fs.mkdirSync(paths.workDir, { recursive: true });
+	fs.rmSync(paths.failureDetailsPath, { force: true });
 	fs.rmSync(paths.summaryPath, { force: true });
 	fs.rmSync(paths.sarifPath, { force: true });
 }
@@ -319,6 +338,7 @@ function renderLinterArtifacts({
 	const report = renderReportImpl({
 		configPath,
 		exitCodeRaw,
+		failureDetailsPath: paths.failureDetailsPath,
 		installOutcome,
 		linterName,
 		resultPath: paths.resultPath,
@@ -435,6 +455,16 @@ function logStepFailure(stepName, linterName, error) {
 	console.error(`::warning::${linterName} ${stepName} step failed${details}`);
 }
 
+function writeStepFailureDetails(filePath, { error, linterName, stepName }) {
+	const details = formatStepFailureDetails({ error, linterName, stepName });
+
+	if (details.length === 0) {
+		return;
+	}
+
+	fs.writeFileSync(filePath, details, "utf8");
+}
+
 function formatExecError(error) {
 	if (!error || typeof error !== "object") {
 		return "";
@@ -456,6 +486,27 @@ function formatExecError(error) {
 	return details.length > 0 ? `\n${details.join("\n")}` : "";
 }
 
+function formatStepFailureDetails({ error, linterName, stepName }) {
+	const message = sanitizeErrorMessage(error?.message);
+	const lines = [`${linterName} ${stepName} step failed.`];
+	const stdoutSection = buildCapturedOutputSection("stdout", error?.stdout);
+	const stderrSection = buildCapturedOutputSection("stderr", error?.stderr);
+
+	if (message.length > 0) {
+		lines.push(message);
+	}
+
+	if (stdoutSection.length > 0) {
+		lines.push("", ...stdoutSection);
+	}
+
+	if (stderrSection.length > 0) {
+		lines.push("", ...stderrSection);
+	}
+
+	return lines.join("\n").trim();
+}
+
 function sanitizeErrorMessage(value) {
 	if (typeof value !== "string") {
 		return "";
@@ -466,6 +517,96 @@ function sanitizeErrorMessage(value) {
 
 function summarizeCapturedOutput(value) {
 	return typeof value === "string" ? value.trim().length : 0;
+}
+
+function formatCapturedOutputPreview(value) {
+	if (typeof value !== "string") {
+		return "";
+	}
+
+	const normalizedLines = stripAnsiControl(value)
+		.split(/\r?\n/u)
+		.map((line) => line.trim())
+		.filter(Boolean)
+		.filter(isSafeDiagnosticLine);
+	if (normalizedLines.length === 0) {
+		return "";
+	}
+
+	const previewLines = [];
+	let remaining = STEP_FAILURE_OUTPUT_LIMIT;
+
+	for (const line of normalizedLines) {
+		if (previewLines.length >= STEP_FAILURE_OUTPUT_LINE_LIMIT || remaining <= 0) {
+			break;
+		}
+
+		if (line.length <= remaining) {
+			previewLines.push(line);
+			remaining -= line.length;
+			continue;
+		}
+
+		if (remaining > 16) {
+			previewLines.push(`${line.slice(0, remaining - 16)}... truncated ...`);
+		}
+		break;
+	}
+
+	return previewLines.join("\n");
+}
+
+function buildCapturedOutputSection(label, value) {
+	const outputLength = summarizeCapturedOutput(value);
+	if (outputLength === 0) {
+		return [];
+	}
+
+	const preview = formatCapturedOutputPreview(value);
+	if (preview.length === 0) {
+		return [`${label} omitted (${outputLength} chars)`];
+	}
+
+	return [`${label}:`, preview];
+}
+
+function isSafeDiagnosticLine(line) {
+	if (typeof line !== "string" || line.length === 0 || line.length > 200) {
+		return false;
+	}
+
+	return (
+		![
+			/^[A-Z0-9_]{2,}\s*=/u,
+			/(?:^|[\s"'`])(bearer|token|password|passwd|secret|apikey|api_key|access[_-]?key|session|cookie)\s*[:=]/iu,
+			/(?:_authToken|_auth|_password|authToken)\s*=/iu,
+			/\bnpm_[A-Za-z0-9_]{20,}\b/u,
+			/\bauthorization\s*:\s*bearer\s+\S+/iu,
+			/\bbearer\s+\S+/iu,
+			/(ghp_|github_pat_|glpat-|AKIA|AIza|xox[pboa]-|-----BEGIN)/u,
+			/[a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:[^/\s@]+@/iu,
+			/https?:\/\/\S+[?&](token|sig|signature|x-amz-signature|x-amz-credential|x-amz-security-token)=/iu,
+			/\b[a-f0-9]{32,}\b/iu,
+		].some((pattern) => pattern.test(line)) &&
+		!containsOpaqueCredentialLikeToken(line)
+	);
+}
+
+function containsOpaqueCredentialLikeToken(line) {
+	return line
+		.split(/[^A-Za-z0-9+_-]+/u)
+		.filter((token) => token.length >= 40)
+		.some(
+			(token) =>
+				!token.includes("-") && (/\d/u.test(token) || /[_+]/u.test(token)),
+		);
+}
+
+function stripAnsiControl(value) {
+	return value.replace(
+		/[\u001B\u009B][[\]()#;?]*(?:(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><])/gu,
+		"",
+	);
 }
 
 if (require.main === module) {

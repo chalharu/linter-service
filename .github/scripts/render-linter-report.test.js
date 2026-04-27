@@ -307,6 +307,55 @@ test("includes checked targets before diagnostic details on failure", () => {
 	}
 });
 
+test("renders infra failure details captured before diagnostics were produced", () => {
+	const context = makeTempRepo("render-linter-report-infra-failure-");
+	const failureDetailsPath = path.join(context.runnerTemp, "step-failure.txt");
+
+	try {
+		fs.writeFileSync(
+			path.join(context.runnerTemp, "selected-files.txt"),
+			"openapi/spec.yaml\n",
+			"utf8",
+		);
+		fs.writeFileSync(
+			failureDetailsPath,
+			"spectral run step failed.\n```\nspawnSync bash ENOBUFS\nstdout:\nlarge output omitted",
+			"utf8",
+		);
+
+		const report = runFromEnv(
+			createReportEnv(context, {
+				FAILURE_DETAILS_PATH: failureDetailsPath,
+				LINTER_NAME: "spectral",
+				RUN_LINTER_OUTCOME: "failure",
+			}),
+		);
+		const summary = readSummary(context.runnerTemp, "spectral");
+
+		assert.equal(report.conclusion, "failure");
+		assert.equal(report.status, "infra_failure");
+		assert.equal(
+			report.detailsText,
+			"spectral run step failed.\n```\nspawnSync bash ENOBUFS\nstdout:\nlarge output omitted",
+		);
+		assert.match(
+			report.body,
+			/Matched 1 file, but the workflow failed before diagnostics were produced\./,
+		);
+		assert.match(
+			report.body,
+			/````text\nspectral run step failed\.\n```\nspawnSync bash ENOBUFS\nstdout:\nlarge output omitted\n````/,
+		);
+		assert.equal(summary.status, "infra_failure");
+		assert.equal(
+			summary.details_text,
+			"spectral run step failed.\n```\nspawnSync bash ENOBUFS\nstdout:\nlarge output omitted",
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
 test("uses embedded SARIF for failure details and summary output", () => {
 	const context = makeTempRepo("render-linter-report-biome-");
 	const sparseDetails =
