@@ -11,11 +11,11 @@ const { runFromEnv } = require("../.github/scripts/render-linter-sarif.js");
 
 const configPath = path.join(__dirname, "..", "linters.json");
 
-test("emits SARIF for shellcheck diagnostics", () => {
-	const context = makeTempRepo("render-linter-sarif-shellcheck-");
+test("emits SARIF for embedded textlint diagnostics", () => {
+	const context = makeTempRepo("render-linter-sarif-textlint-");
 
-	writeFile(path.join(context.repoDir, "script.sh"), "echo $foo\n");
-	writeFile(path.join(context.runnerTemp, "selected-files.txt"), "script.sh\n");
+	writeFile(path.join(context.repoDir, "README.md"), "これはテストです！\n");
+	writeFile(path.join(context.runnerTemp, "selected-files.txt"), "README.md\n");
 	writeFile(
 		path.join(context.runnerTemp, "linter-result.json"),
 		JSON.stringify({
@@ -26,35 +26,34 @@ test("emits SARIF for shellcheck diagnostics", () => {
 					{
 						results: [
 							{
-								level: "note",
+								level: "error",
 								locations: [
 									{
 										physicalLocation: {
 											artifactLocation: {
-												uri: "script.sh",
+												uri: "README.md",
 											},
 											region: {
-												startColumn: 6,
-												startLine: 3,
+												startColumn: 9,
+												startLine: 1,
 											},
 										},
 									},
 								],
 								message: {
-									text: "Double quote to prevent globbing and word splitting.",
+									text: 'Disallow to use "！".',
 								},
-								ruleId: "SC2086",
+								ruleId: "ja-technical-writing/no-exclamation-question-mark",
 							},
 						],
 						tool: {
 							driver: {
 								rules: [
 									{
-										helpUri: "https://www.shellcheck.net/wiki/SC2086",
-										id: "SC2086",
-										name: "SC2086",
+										id: "ja-technical-writing/no-exclamation-question-mark",
+										name: "ja-technical-writing/no-exclamation-question-mark",
 										shortDescription: {
-											text: "SC2086",
+											text: "ja-technical-writing/no-exclamation-question-mark",
 										},
 									},
 								],
@@ -70,8 +69,8 @@ test("emits SARIF for shellcheck diagnostics", () => {
 		const report = runFromEnv({
 			INSTALL_TOOL_OUTCOME: "success",
 			LINTER_CONFIG_PATH: configPath,
-			LINTER_NAME: "shellcheck",
-			OUTPUT_PATH: path.join(context.runnerTemp, "shellcheck.sarif"),
+			LINTER_NAME: "textlint",
+			OUTPUT_PATH: path.join(context.runnerTemp, "textlint.sarif"),
 			RESULT_PATH: path.join(context.runnerTemp, "linter-result.json"),
 			RUNNER_TEMP: context.runnerTemp,
 			RUN_LINTER_OUTCOME: "success",
@@ -81,25 +80,14 @@ test("emits SARIF for shellcheck diagnostics", () => {
 		});
 
 		assert.equal(report.produced, true);
-		assert.ok(report.sarif.runs[0].results.length >= 1);
+		assert.equal(
+			report.sarif.runs[0].results[0].ruleId,
+			"ja-technical-writing/no-exclamation-question-mark",
+		);
 		assert.equal(
 			report.sarif.runs[0].results[0].locations[0].physicalLocation
 				.artifactLocation.uri,
-			"script.sh",
-		);
-		assert.equal(
-			report.sarif.runs[0].results[0].locations[0].physicalLocation.region
-				.startLine,
-			3,
-		);
-		assert.match(
-			report.sarif.runs[0].results[0].message.text,
-			/Double quote to prevent globbing and word splitting/,
-		);
-		assert.equal(report.sarif.runs[0].results[0].ruleId, "SC2086");
-		assert.equal(
-			report.sarif.runs[0].tool.driver.rules[0].helpUri,
-			"https://www.shellcheck.net/wiki/SC2086",
+			"README.md",
 		);
 	} finally {
 		cleanupTempRepo(context.tempDir);

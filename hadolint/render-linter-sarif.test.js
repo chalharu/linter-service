@@ -10,7 +10,6 @@ const {
 const { runFromEnv } = require("../.github/scripts/render-linter-sarif.js");
 
 const configPath = path.join(__dirname, "..", "linters.json");
-const details = "Dockerfile:2 DL3008 Pin versions in apt get install.";
 
 test("emits SARIF for hadolint diagnostics", () => {
 	const context = makeTempRepo("render-linter-sarif-hadolint-");
@@ -26,8 +25,41 @@ test("emits SARIF for hadolint diagnostics", () => {
 	writeFile(
 		path.join(context.runnerTemp, "linter-result.json"),
 		JSON.stringify({
-			details,
 			exit_code: 1,
+			sarif: {
+				version: "2.1.0",
+				runs: [
+					{
+						results: [
+							{
+								level: "warning",
+								locations: [
+									{
+										physicalLocation: {
+											artifactLocation: {
+												uri: "Dockerfile",
+											},
+											region: {
+												startColumn: 1,
+												startLine: 2,
+											},
+										},
+									},
+								],
+								message: {
+									text: "Pin versions in apt get install.",
+								},
+								ruleId: "DL3008",
+							},
+						],
+						tool: {
+							driver: {
+								rules: [],
+							},
+						},
+					},
+				],
+			},
 		}),
 	);
 
@@ -57,6 +89,8 @@ test("emits SARIF for hadolint diagnostics", () => {
 				.startLine,
 			2,
 		);
+		assert.equal(report.sarif.runs[0].tool.driver.rules.length, 1);
+		assert.equal(report.sarif.runs[0].tool.driver.rules[0].id, "DL3008");
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}

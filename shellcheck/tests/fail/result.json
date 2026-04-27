@@ -1,10 +1,59 @@
 {
-  "checked_projects": [],
-  "result": {
-    "details": "In script.sh line 4:\necho $name\n     ^---^ SC2086 (info): Double quote to prevent globbing and word splitting.\n\nDid you mean:\necho \"$name\"\n\nFor more information:\n  https://www.shellcheck.net/wiki/SC2086 -- Double quote to prevent globbing ...",
-    "exit_code": 1
-  },
-  "selected_files": [
-    "script.sh"
-  ]
+	"checked_projects": [],
+	"result": {
+		"exit_code": 1,
+		"sarif": {
+			"$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+			"runs": [
+				{
+					"automationDetails": {
+						"id": "linter-service/shellcheck"
+					},
+					"results": [
+						{
+							"level": "note",
+							"locations": [
+								{
+									"physicalLocation": {
+										"artifactLocation": {
+											"uri": "script.sh"
+										},
+										"region": {
+											"startColumn": 6,
+											"startLine": 4
+										}
+									}
+								}
+							],
+							"message": {
+								"text": "Double quote to prevent globbing and word splitting."
+							},
+							"properties": {
+								"linter_name": "shellcheck"
+							},
+							"ruleId": "SC2086"
+						}
+					],
+					"tool": {
+						"driver": {
+							"informationUri": "https://github.com/chalharu/linter-service",
+							"name": "linter-service/shellcheck",
+							"rules": [
+								{
+									"helpUri": "https://www.shellcheck.net/wiki/SC2086",
+									"id": "SC2086",
+									"name": "SC2086",
+									"shortDescription": {
+										"text": "SC2086"
+									}
+								}
+							]
+						}
+					}
+				}
+			],
+			"version": "2.1.0"
+		}
+	},
+	"selected_files": ["script.sh"]
 }

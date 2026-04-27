@@ -1,10 +1,58 @@
 {
-  "checked_projects": [],
-  "result": {
-    "details": "README.md:1:9: Disallow to use \"！\". [Error/ja-technical-writing/no-exclamation-question-mark]\n\n1 problem",
-    "exit_code": 1
-  },
-  "selected_files": [
-    "README.md"
-  ]
+	"checked_projects": [],
+	"result": {
+		"exit_code": 1,
+		"sarif": {
+			"$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+			"runs": [
+				{
+					"automationDetails": {
+						"id": "linter-service/textlint"
+					},
+					"results": [
+						{
+							"level": "error",
+							"locations": [
+								{
+									"physicalLocation": {
+										"artifactLocation": {
+											"uri": "README.md"
+										},
+										"region": {
+											"startColumn": 9,
+											"startLine": 1
+										}
+									}
+								}
+							],
+							"message": {
+								"text": "Disallow to use \"！\"."
+							},
+							"properties": {
+								"linter_name": "textlint"
+							},
+							"ruleId": "ja-technical-writing/no-exclamation-question-mark"
+						}
+					],
+					"tool": {
+						"driver": {
+							"informationUri": "https://github.com/chalharu/linter-service",
+							"name": "linter-service/textlint",
+							"rules": [
+								{
+									"id": "ja-technical-writing/no-exclamation-question-mark",
+									"name": "ja-technical-writing/no-exclamation-question-mark",
+									"shortDescription": {
+										"text": "ja-technical-writing/no-exclamation-question-mark"
+									}
+								}
+							]
+						}
+					}
+				}
+			],
+			"version": "2.1.0"
+		}
+	},
+	"selected_files": ["README.md"]
 }

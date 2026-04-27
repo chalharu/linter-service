@@ -1,10 +1,26 @@
 {
-  "checked_projects": [],
-  "result": {
-    "details": "",
-    "exit_code": 0
-  },
-  "selected_files": [
-    "scripts/api/script.sh"
-  ]
+	"checked_projects": [],
+	"result": {
+		"exit_code": 0,
+		"sarif": {
+			"$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+			"runs": [
+				{
+					"automationDetails": {
+						"id": "linter-service/shellcheck"
+					},
+					"results": [],
+					"tool": {
+						"driver": {
+							"informationUri": "https://github.com/chalharu/linter-service",
+							"name": "linter-service/shellcheck",
+							"rules": []
+						}
+					}
+				}
+			],
+			"version": "2.1.0"
+		}
+	},
+	"selected_files": ["scripts/api/script.sh"]
 }

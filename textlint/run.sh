@@ -8,12 +8,13 @@ source "$script_dir/common.sh"
 
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
 textlint_require_docker
-output_file="$RUNNER_TEMP/linter-output.txt"
 files=("$@")
 temp_root="$RUNNER_TEMP/textlint"
 temp_repo="$temp_root/repo"
 rules_dir="$temp_root/preset"
-raw_output_path="$temp_root/raw-output.txt"
+report_path="$temp_root/report.json"
+stderr_path="$temp_root/stderr.txt"
+result_json_path="$RUNNER_TEMP/textlint-result.json"
 container_bin=$(textlint_container_bin)
 image_ref=$(textlint_image_ref)
 user_id=$(id -u)
@@ -57,7 +58,7 @@ run_textlint() {
   local -a preset_specs=()
   safe_config_path="$temp_repo/.textlintrc"
 
-  rm -rf "$temp_repo" "$rules_dir" "$raw_output_path"
+  rm -rf "$temp_repo" "$rules_dir" "$report_path" "$stderr_path"
   mkdir -p "$temp_repo" "$rules_dir"
 
   runtime_json="$(
@@ -106,37 +107,23 @@ NODE
     "$image_ref" \
     textlint \
       --config .textlintrc \
-      --format unix \
-      --no-color \
+      --format json \
       --rules-base-directory /rules/node_modules \
       "${files[@]}" \
-    >"$raw_output_path" 2>&1; then
+    >"$report_path" 2>"$stderr_path"; then
     exit_code=0
   else
     exit_code=$?
   fi
 
-  node - "$raw_output_path" "$temp_repo" <<'NODE'
-const fs = require("node:fs");
+  node "$script_dir/textlint-result.js" \
+    "$report_path" \
+    "$stderr_path" \
+    "$temp_repo" \
+    "$exit_code"
 
-const [outputPath, tempRepo] = process.argv.slice(2);
-const source = fs.existsSync(outputPath)
-  ? fs.readFileSync(outputPath, "utf8")
-  : "";
-const prefixes = [
-  `${tempRepo.replace(/\\/gu, "/").replace(/\/$/u, "")}/`,
-  "/work/",
-];
-
-let normalized = source;
-for (const prefix of prefixes) {
-  normalized = normalized.split(prefix).join("");
+  return 0
 }
 
-process.stdout.write(normalized);
-NODE
-
-  return "$exit_code"
-}
-
-linter_lib::run_and_emit_json "$output_file" run_textlint
+run_textlint "$@" >"$result_json_path"
+cat "$result_json_path"
