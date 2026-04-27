@@ -1,5 +1,8 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const {
+	filterCargoProgressLines,
+} = require("../.github/scripts/lib/cargo-progress-lines.js");
 
 const {
 	normalizeCargoSymbolLengthConfig,
@@ -151,19 +154,10 @@ function buildDetails(preludeText, runs, config) {
 		]
 			.map((line) => line.trimEnd())
 			.filter((line) => line.trim().length > 0);
-		const progressLines = rawLines.filter((line) =>
-			/^\s*(?:Checking|Compiling|Finished)\b/u.test(line),
-		);
-		const trailingLines = rawLines.filter(
-			(line) => !/^\s*(?:Checking|Compiling|Finished)\b/u.test(line),
-		);
+		const trailingLines = filterCargoProgressLines(rawLines);
 
 		if (run.command) {
 			runLines.push(`==> ${run.command}`);
-		}
-
-		if (progressLines.length > 0) {
-			runLines.push(progressLines.join("\n"));
 		}
 
 		if (run.findings.length > 0) {
