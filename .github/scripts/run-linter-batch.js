@@ -11,6 +11,11 @@ const { renderSarif } = require("./render-linter-sarif.js");
 const { runFromEnv: selectLintTargets } = require("./select-lint-targets.js");
 const { applyWorkflowEnvironment } = require("./workflow-command-env.js");
 
+// biome-ignore lint/complexity/useRegexLiterals: this pattern must stay in string form to avoid noControlCharactersInRegex false positives.
+const ANSI_CONTROL_PATTERN = new RegExp(
+	"[\\u001B\\u009B][[\\]()#;?]*(?:(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><])",
+	"gu",
+);
 const RUN_LINTER_MAX_BUFFER = 16 * 1024 * 1024;
 const STEP_FAILURE_OUTPUT_LIMIT = 600;
 const STEP_FAILURE_OUTPUT_LINE_LIMIT = 4;
@@ -537,7 +542,10 @@ function formatCapturedOutputPreview(value) {
 	let remaining = STEP_FAILURE_OUTPUT_LIMIT;
 
 	for (const line of normalizedLines) {
-		if (previewLines.length >= STEP_FAILURE_OUTPUT_LINE_LIMIT || remaining <= 0) {
+		if (
+			previewLines.length >= STEP_FAILURE_OUTPUT_LINE_LIMIT ||
+			remaining <= 0
+		) {
 			break;
 		}
 
@@ -603,10 +611,7 @@ function containsOpaqueCredentialLikeToken(line) {
 }
 
 function stripAnsiControl(value) {
-	return value.replace(
-		/[\u001B\u009B][[\]()#;?]*(?:(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><])/gu,
-		"",
-	);
+	return value.replace(ANSI_CONTROL_PATTERN, "");
 }
 
 if (require.main === module) {
