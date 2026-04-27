@@ -27,6 +27,10 @@ function runFromEnv(env = process.env) {
 		linterServicePath,
 	});
 	const changedFiles = readChangedFiles(context);
+	const existingChangedFiles = filterExistingFiles({
+		changedFiles,
+		repositoryPath,
+	});
 	const candidatePaths = hasConfigTriggerMatch({
 		changedFiles,
 		configTriggerPatterns,
@@ -36,7 +40,7 @@ function runFromEnv(env = process.env) {
 		serviceConfig,
 	})
 		? listRepositoryFiles(repositoryPath)
-		: changedFiles;
+		: existingChangedFiles;
 	const selectedFiles = selectFiles({
 		candidatePaths,
 		linterName,
@@ -76,6 +80,19 @@ function readChangedFiles(context) {
 	}
 
 	return context.changed_files;
+}
+
+function filterExistingFiles({ changedFiles, repositoryPath }) {
+	const resolvedRepositoryPath = path.resolve(repositoryPath);
+
+	return changedFiles.filter((changedFile) => {
+		const normalizedPath = normalizeRelativePath(changedFile);
+		if (normalizedPath.length === 0) {
+			return false;
+		}
+
+		return fs.existsSync(path.join(resolvedRepositoryPath, normalizedPath));
+	});
 }
 
 function readConfigTriggerPatterns({
@@ -187,6 +204,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+	filterExistingFiles,
 	listRepositoryFiles,
 	readChangedFiles,
 	readConfigTriggerPatterns,
