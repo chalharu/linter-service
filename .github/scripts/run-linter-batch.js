@@ -11,6 +11,8 @@ const { renderSarif } = require("./render-linter-sarif.js");
 const { runFromEnv: selectLintTargets } = require("./select-lint-targets.js");
 const { applyWorkflowEnvironment } = require("./workflow-command-env.js");
 
+const RUN_LINTER_MAX_BUFFER = 16 * 1024 * 1024;
+
 function runFromEnv(env = process.env) {
 	const result = runLinterBatch({
 		baseEnv: env,
@@ -272,6 +274,7 @@ function runLinter({
 			cwd: sourceRepositoryPath,
 			encoding: "utf8",
 			env: executionEnv,
+			maxBuffer: RUN_LINTER_MAX_BUFFER,
 			stdio: ["ignore", "pipe", "pipe"],
 		},
 	);

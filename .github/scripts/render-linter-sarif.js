@@ -464,34 +464,6 @@ function readEmbeddedSarifRun(result) {
 	return readSarifRun(readEmbeddedSarif(result));
 }
 
-function buildEmbeddedSarifResults({
-	dedupeResults,
-	linterName,
-	normalizeReportedPath,
-	reportedPathRoots,
-	result,
-	sourceRepositoryPath,
-	targetPaths,
-}) {
-	const run = readEmbeddedSarifRun(result);
-	if (!run || !Array.isArray(run.results)) {
-		return [];
-	}
-
-	return dedupeResults(
-		run.results.map((entry) =>
-			normalizeEmbeddedSarifResult({
-				linterName,
-				normalizeReportedPath,
-				reportedPathRoots,
-				result: entry,
-				sourceRepositoryPath,
-				targetPaths,
-			}),
-		),
-	);
-}
-
 function normalizeEmbeddedSarifResult({
 	linterName,
 	normalizeReportedPath,

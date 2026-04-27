@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -331,6 +332,61 @@ printf '{"details":"warning[ALPHA1]: alpha warning","exit_code":0,"warning_count
 			alphaSummary.comment_body,
 			/⚠️ Checked 1 file; 1 file reported warnings\./u,
 		);
+	} finally {
+		cleanupTempWorkspace(workspace.tempDir);
+	}
+});
+
+test("runLinterBatch allows larger linter result payloads", () => {
+	const workspace = createTempWorkspace();
+	writeFile(path.join(workspace.sourceRepositoryPath, "alpha.txt"), "alpha\n");
+	writeLinterConfig(workspace.linterConfigPath, {
+		alpha: {
+			sarif: {
+				enabled: false,
+			},
+		},
+	});
+	writeFakeLinter(workspace.linterServicePath, {
+		name: "alpha",
+		installScript: `#!/usr/bin/env bash
+set -euo pipefail
+:`,
+		pattern: "^alpha\\.txt$",
+		runScript: `#!/usr/bin/env bash
+set -euo pipefail
+printf '{"details":"alpha ok","exit_code":0}\\n'
+`,
+	});
+	const realExecFileSync = execFileSync;
+	let recordedRunOptions = null;
+
+	try {
+		runLinterBatch({
+			baseEnv: {
+				...process.env,
+				PATH: process.env.PATH || "",
+			},
+			contextPath: workspace.contextPath,
+			execFileSyncImpl(command, args, options) {
+				if (
+					command === "bash" &&
+					Array.isArray(args) &&
+					args[0] === path.join(workspace.linterServicePath, "alpha", "run.sh")
+				) {
+					recordedRunOptions = options;
+				}
+
+				return realExecFileSync(command, args, options);
+			},
+			linterConfigPath: workspace.linterConfigPath,
+			linterNames: ["alpha"],
+			linterServicePath: workspace.linterServicePath,
+			runnerTemp: workspace.runnerTemp,
+			sourceRepositoryPath: workspace.sourceRepositoryPath,
+		});
+
+		assert.equal(recordedRunOptions?.maxBuffer, 16 * 1024 * 1024);
 	} finally {
 		cleanupTempWorkspace(workspace.tempDir);
 	}
