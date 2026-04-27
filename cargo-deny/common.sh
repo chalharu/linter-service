@@ -15,6 +15,21 @@ cargo_deny_prepare_env() {
   export CARGO_TERM_COLOR=never
 }
 
+cargo_deny_base_image() {
+  printf '%s\n' "${CARGO_DENY_BASE_IMAGE:-docker.io/library/rust:1-bookworm}"
+}
+
+cargo_deny_image_ref() {
+  printf '%s\n' "${CARGO_DENY_IMAGE_REF:-$(cargo_deny_base_image)}"
+}
+
+cargo_deny_require_docker() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "docker is required to run cargo-deny in an isolated container" >&2
+    return 1
+  fi
+}
+
 cargo_deny_persist_env() {
   if [ -n "${GITHUB_ENV:-}" ]; then
     printf 'CARGO_HOME=%s\n' "$CARGO_HOME" >> "$GITHUB_ENV"
@@ -150,24 +165,35 @@ cargo_deny_collect_manifests() {
 }
 
 cargo_deny_resolve_workspace_manifest() {
-  local source_root=$1
-  local manifest_path=$2
+  local manifest_path=$1
+  shift
 
-  (
-    cd "$source_root" &&
-      linter_lib::resolve_cargo_workspace_manifest "$source_root" "$manifest_path" cargo
-  )
+  linter_lib::resolve_cargo_workspace_manifest /work "$manifest_path" "$@"
 }
 
 cargo_deny_collect_run_targets() {
-  local source_root=$1
+  local cargo_cmd_prefix_var=$1
+  local image_ref=$2
+  local field_separator=$'\x1f'
+  shift
   shift
 
+  local -n cargo_cmd_prefix_ref="$cargo_cmd_prefix_var"
+
   local -A seen_targets=()
-  local original_manifest workspace_manifest config_path key
+  local original_manifest workspace_manifest config_path key cargo_config_key manifest_arg workdir
 
   for original_manifest in "$@"; do
-    workspace_manifest=$(cargo_deny_resolve_workspace_manifest "$source_root" "$original_manifest")
+    manifest_arg=$(linter_lib::relative_repo_path_from_manifest_dir "$original_manifest" "$original_manifest")
+    workdir=$(linter_lib::cargo_workdir_for_manifest "$original_manifest")
+    workspace_manifest=$(
+      cargo_deny_resolve_workspace_manifest \
+        "$manifest_arg" \
+        "${cargo_cmd_prefix_ref[@]}" \
+        --workdir "$workdir" \
+        "$image_ref" \
+        cargo
+    )
     config_path=""
     if config_path=$(cargo_deny_find_config "$original_manifest"); then
       :
@@ -175,12 +201,18 @@ cargo_deny_collect_run_targets() {
       config_path=""
     fi
 
-    key="$workspace_manifest"$'\t'"$config_path"
+    cargo_config_key=$(linter_lib::cargo_config_chain_key "$original_manifest")
+    key="$workspace_manifest"$'\t'"$config_path"$'\t'"$cargo_config_key"
     if [ -n "${seen_targets[$key]+x}" ]; then
       continue
     fi
 
     seen_targets["$key"]=1
-    printf '%s\t%s\n' "$workspace_manifest" "$config_path"
+    printf '%s%s%s%s%s\n' \
+      "$workspace_manifest" \
+      "$field_separator" \
+      "$config_path" \
+      "$field_separator" \
+      "$original_manifest"
   done
 }

@@ -114,102 +114,194 @@ esac
 	);
 }
 
-function createCargoStub(binDir) {
+function createCargoDenyStub(binDir) {
 	writeExecutable(
-		path.join(binDir, "cargo"),
+		path.join(binDir, "docker"),
 		`#!/usr/bin/env bash
 set -euo pipefail
-if [ "\${1-}" = "--version" ]; then
-  echo "cargo 0.0.0"
-  exit 0
-fi
-if [ "\${1-}" != "metadata" ]; then
-  echo "unexpected cargo command: $*" >&2
+command="$1"
+shift
+
+if [ "$command" != "run" ]; then
+  echo "unsupported docker command: $command" >&2
   exit 1
 fi
-shift
-manifest=""
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    --manifest-path|--format-version)
-      if [ "$1" = "--manifest-path" ]; then
-        manifest="$2"
-      fi
-      shift 2
+
+work_mount_src=""
+container_workdir="/work"
+image_ref=""
+command_args=()
+option_with_value=""
+for arg in "$@"; do
+  if [ -n "$option_with_value" ]; then
+    case "$option_with_value" in
+      --mount)
+        case "$arg" in
+          *"dst=/work"*|*"target=/work"*)
+            work_mount_src="\${arg#*src=}"
+            work_mount_src="\${work_mount_src%%,*}"
+            ;;
+        esac
+        ;;
+      --workdir)
+        container_workdir="$arg"
+        ;;
+    esac
+    option_with_value=""
+    continue
+  fi
+  case "$arg" in
+    --mount|--user|--workdir|--tmpfs|--security-opt|--cap-drop|--env|-e)
+      option_with_value="$arg"
+      continue
       ;;
-    --no-deps)
-      shift
-      ;;
-    *)
-      shift
+    --rm|--read-only|--network=*)
+      continue
       ;;
   esac
+  if [ -z "$image_ref" ]; then
+    image_ref="$arg"
+    continue
+  fi
+  command_args+=("$arg")
 done
-if [ -z "$manifest" ]; then
-  echo "missing --manifest-path" >&2
+
+if [ "\${command_args[0]:-}" != "cargo" ]; then
+  echo "unsupported docker cargo invocation: \${command_args[*]}" >&2
   exit 1
 fi
-current_dir=$(dirname "$manifest")
-workspace_dir="$current_dir"
-search_dir="$current_dir"
-while :; do
-  candidate="$search_dir/Cargo.toml"
-  if [ -f "$candidate" ] && grep -Eq '^\\[workspace\\]' "$candidate"; then
-    workspace_dir="$search_dir"
-    break
-  fi
-  if [ "$search_dir" = "." ] || [ "$search_dir" = "/" ]; then
-    break
-  fi
-  search_dir=$(dirname "$search_dir")
-done
-workspace_root=$(cd "$workspace_dir" && pwd)
-node - "$workspace_root" <<'NODE'
-const [workspaceRoot] = process.argv.slice(2);
-process.stdout.write(JSON.stringify({ workspace_root: workspaceRoot }));
-NODE
-`,
-	);
-}
 
-function createCargoDenyStub(binDir) {
-	createCargoStub(binDir);
-	writeExecutable(
-		path.join(binDir, "cargo-deny"),
-		`#!/usr/bin/env bash
-set -euo pipefail
-if [ "\${1-}" = "--version" ]; then
-  echo "cargo-deny 0.0.0"
-  exit 0
-fi
+cargo_config_args=()
+index=1
+while [ "$index" -lt "\${#command_args[@]}" ]; do
+  arg="\${command_args[$index]}"
+  if [ "$arg" = "--config" ]; then
+    cargo_config_args+=("\${command_args[$((index + 1))]}")
+    index=$((index + 2))
+    continue
+  fi
+  cargo_subcommand="$arg"
+  index=$((index + 1))
+  break
+done
+
+subcommand_args=("\${command_args[@]:$index}")
+
 manifest=""
 config=""
 audit_mode=0
-args=()
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    --manifest-path|--config|--format)
-      if [ "$1" = "--manifest-path" ]; then
-        manifest="$2"
-      fi
-      if [ "$1" = "--config" ]; then
-        config="$2"
-      fi
-      args+=("$1" "$2")
-      shift 2
+prev=""
+for arg in "\${subcommand_args[@]}"; do
+  case "$prev" in
+    --manifest-path)
+      manifest="$arg"
       ;;
-    --audit-compatible-output)
-      audit_mode=1
-      args+=("$1")
-      shift
-      ;;
-    *)
-      args+=("$1")
-      shift
+    --config)
+      config="$arg"
       ;;
   esac
+  if [ "$arg" = "--audit-compatible-output" ]; then
+    audit_mode=1
+  fi
+  prev="$arg"
 done
-printf '%s\\n' "\${args[*]}" >> "$CARGO_DENY_ARGS_LOG"
+
+if [ -n "$manifest" ]; then
+  manifest=$(node - "$container_workdir" "$manifest" <<'NODE'
+const path = require("node:path");
+const [workdir, manifest] = process.argv.slice(2);
+const absolute = manifest.startsWith("/work")
+  ? path.posix.normalize(manifest)
+  : path.posix.normalize(path.posix.join(workdir || "/work", manifest));
+process.stdout.write(
+  absolute === "/work"
+    ? ""
+    : absolute.startsWith("/work/")
+      ? absolute.slice("/work/".length)
+      : absolute,
+);
+NODE
+)
+  manifest_host_path=$(node - "$work_mount_src" "$manifest" <<'NODE'
+const path = require("node:path");
+const [sourceRoot, manifest] = process.argv.slice(2);
+process.stdout.write(path.join(sourceRoot, ...manifest.split("/")));
+NODE
+)
+else
+  manifest_host_path=""
+fi
+
+if [ -n "$config" ]; then
+  config=$(node - "$container_workdir" "$config" <<'NODE'
+const path = require("node:path");
+const [workdir, config] = process.argv.slice(2);
+const absolute = config.startsWith("/work")
+  ? path.posix.normalize(config)
+  : path.posix.normalize(path.posix.join(workdir || "/work", config));
+process.stdout.write(
+  absolute === "/work"
+    ? ""
+    : absolute.startsWith("/work/")
+      ? absolute.slice("/work/".length)
+      : absolute,
+);
+NODE
+)
+fi
+
+normalized_command_args=("\${command_args[@]}")
+normalized_prev=""
+for i in "\${!normalized_command_args[@]}"; do
+  case "$normalized_prev" in
+    --manifest-path)
+      normalized_command_args[$i]="$manifest"
+      ;;
+    --config)
+      normalized_command_args[$i]="$config"
+      ;;
+  esac
+  normalized_prev="\${normalized_command_args[$i]}"
+done
+
+if [ "$cargo_subcommand" = "metadata" ]; then
+  if [ -z "$manifest" ]; then
+    echo "missing --manifest-path" >&2
+    exit 1
+  fi
+  current_dir=$(dirname "$manifest_host_path")
+  workspace_dir="$current_dir"
+  search_dir="$current_dir"
+  while :; do
+    candidate="$search_dir/Cargo.toml"
+    if [ -f "$candidate" ] && grep -Eq '^\\[workspace\\]' "$candidate"; then
+      workspace_dir="$search_dir"
+      break
+    fi
+    if [ "$search_dir" = "$work_mount_src" ] || [ "$search_dir" = "/" ]; then
+      break
+    fi
+    search_dir=$(dirname "$search_dir")
+  done
+  node - "$work_mount_src" "$workspace_dir" <<'NODE'
+const path = require("node:path");
+const [sourceRoot, workspaceDir] = process.argv.slice(2);
+const relativeDir = path.relative(sourceRoot, workspaceDir);
+const workspaceRoot =
+  relativeDir.length === 0
+    ? "/work"
+    : path.posix.join("/work", ...relativeDir.split(path.sep));
+process.stdout.write(JSON.stringify({ workspace_root: workspaceRoot }));
+NODE
+  exit 0
+fi
+
+if [ "$cargo_subcommand" != "deny" ]; then
+  echo "unexpected cargo subcommand: $cargo_subcommand" >&2
+  exit 1
+fi
+
+printf '%s\\n' "\${normalized_command_args[*]}" >> "$CARGO_DENY_ARGS_LOG"
 if [ "$audit_mode" -eq 1 ] && {
   [ -n "\${AUDIT_REPORT_MANIFEST:-}" ] && [ "$manifest" = "$AUDIT_REPORT_MANIFEST" ] || \
   [ -n "\${FAIL_MANIFEST:-}" ] && [ "$manifest" = "$FAIL_MANIFEST" ];
@@ -378,12 +470,17 @@ test("cargo-deny.sh install downloads the pinned release archive and extracts ca
 		execFileSync("bash", [installPath], {
 			cwd: context.repoDir,
 			encoding: "utf8",
-			env: createEnv(context, {
-				CARGO_DENY_ASSET_SOURCE: assetPath,
-				CURL_URL_LOG: curlUrlLog,
-				RUSTUP_INIT_ARGS_LOG: rustupInitLog,
-				RUSTUP_INIT_SOURCE: rustupInitPath,
-			}),
+			env: {
+				...createEnv(context, {
+					CARGO_DENY_ASSET_SOURCE: assetPath,
+					CURL_URL_LOG: curlUrlLog,
+					RUSTUP_INIT_ARGS_LOG: rustupInitLog,
+					RUSTUP_INIT_SOURCE: rustupInitPath,
+				}),
+				CARGO_HOME: path.join(context.runnerTemp, "cargo"),
+				PATH: `${context.binDir}:/usr/bin:/bin`,
+				RUSTUP_HOME: path.join(context.runnerTemp, "rustup"),
+			},
 		});
 
 		assert.deepEqual(fs.readFileSync(curlUrlLog, "utf8").trim().split("\n"), [
@@ -457,16 +554,16 @@ edition = "2021"
 			["Cargo.toml", "crates/member/Cargo.toml"],
 		);
 		assert.deepEqual(fs.readFileSync(argsLog, "utf8").trim().split("\n"), [
-			"--format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output --config deny.toml",
-			"--format json --color never --log-level warn --all-features --manifest-path crates/member/Cargo.toml check --audit-compatible-output --config crates/member/deny.toml",
+			"cargo deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output --config deny.toml",
+			"cargo deny --format json --color never --log-level warn --all-features --manifest-path crates/member/Cargo.toml check --audit-compatible-output --config crates/member/deny.toml",
 		]);
 		assert.match(
 			result.details,
-			/cargo-deny --format json --color never --log-level warn --all-features --manifest-path Cargo\.toml check --audit-compatible-output --config deny\.toml/,
+			/cargo deny --format json --color never --log-level warn --all-features --manifest-path Cargo\.toml check --audit-compatible-output --config deny\.toml/,
 		);
 		assert.match(
 			result.details,
-			/cargo-deny --format json --color never --log-level warn --all-features --manifest-path crates\/member\/Cargo\.toml check --audit-compatible-output --config crates\/member\/deny\.toml/,
+			/cargo deny --format json --color never --log-level warn --all-features --manifest-path crates\/member\/Cargo\.toml check --audit-compatible-output --config crates\/member\/deny\.toml/,
 		);
 	} finally {
 		cleanupTempRepo(context.tempDir);
@@ -517,7 +614,7 @@ edition = "2021"
 		assert.equal(result.cargo_deny_runs.length, 1);
 		assert.equal(result.cargo_deny_runs[0].manifest_path, "Cargo.toml");
 		assert.deepEqual(fs.readFileSync(argsLog, "utf8").trim().split("\n"), [
-			"--format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output --config deny.toml",
+			"cargo deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output --config deny.toml",
 		]);
 		assert.doesNotMatch(
 			result.details,
@@ -572,11 +669,11 @@ edition = "2021"
 			"crates/member/deny.toml",
 		);
 		assert.deepEqual(fs.readFileSync(argsLog, "utf8").trim().split("\n"), [
-			"--format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output --config crates/member/deny.toml",
+			"cargo deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output --config crates/member/deny.toml",
 		]);
 		assert.match(
 			result.details,
-			/cargo-deny --format json --color never --log-level warn --all-features --manifest-path Cargo\.toml check --audit-compatible-output --config crates\/member\/deny\.toml/,
+			/cargo deny --format json --color never --log-level warn --all-features --manifest-path Cargo\.toml check --audit-compatible-output --config crates\/member\/deny\.toml/,
 		);
 		assert.doesNotMatch(
 			result.details,
@@ -618,11 +715,11 @@ edition = "2021"
 		assert.equal(result.exit_code, 0);
 		assert.equal(result.cargo_deny_runs.length, 1);
 		assert.deepEqual(fs.readFileSync(argsLog, "utf8").trim().split("\n"), [
-			"--format json --color never --log-level warn --all-features --manifest-path crates/member/Cargo.toml check --audit-compatible-output --config deny.toml",
+			"cargo deny --format json --color never --log-level warn --all-features --manifest-path crates/member/Cargo.toml check --audit-compatible-output --config deny.toml",
 		]);
 		assert.match(
 			result.details,
-			/cargo-deny --format json --color never --log-level warn --all-features --manifest-path crates\/member\/Cargo\.toml check --audit-compatible-output --config deny\.toml/,
+			/cargo deny --format json --color never --log-level warn --all-features --manifest-path crates\/member\/Cargo\.toml check --audit-compatible-output --config deny\.toml/,
 		);
 	} finally {
 		cleanupTempRepo(context.tempDir);
@@ -679,8 +776,8 @@ edition = "2021"
 			"rejected",
 		);
 		assert.deepEqual(fs.readFileSync(argsLog, "utf8").trim().split("\n"), [
-			"--format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output",
-			"--format json --color never --log-level warn --all-features --manifest-path crates/member/Cargo.toml check --audit-compatible-output",
+			"cargo deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output",
+			"cargo deny --format json --color never --log-level warn --all-features --manifest-path crates/member/Cargo.toml check --audit-compatible-output",
 		]);
 		assert.match(
 			result.details,
@@ -689,7 +786,7 @@ edition = "2021"
 		assert.match(result.details, /error\[rejected\]: issue in Cargo\.toml/);
 		assert.match(
 			result.details,
-			/cargo-deny --format json --color never --log-level warn --all-features --manifest-path crates\/member\/Cargo\.toml check --audit-compatible-output/,
+			/cargo deny --format json --color never --log-level warn --all-features --manifest-path crates\/member\/Cargo\.toml check --audit-compatible-output/,
 		);
 	} finally {
 		cleanupTempRepo(context.tempDir);
@@ -767,18 +864,29 @@ edition = "2021"
 			/warning\[duplicate\]: found 2 duplicate entries for crate 'demo'/,
 		);
 		assert.deepEqual(fs.readFileSync(argsLog, "utf8").trim().split("\n"), [
-			"--format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output --config deny.toml",
+			"cargo deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output --config deny.toml",
 		]);
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}
 });
 
-test("cargo-deny.sh rejects repository-supplied Cargo config on the shared path", () => {
-	const context = makeTempRepo("cargo-deny-unsupported-cargo-config-");
+test("cargo-deny.sh honors repo-local Cargo config while keeping workspace member runs distinct", () => {
+	const context = makeTempRepo("cargo-deny-cargo-config-");
 	const argsLog = path.join(context.tempDir, "cargo-deny-args.log");
 
 	createCargoDenyStub(context.binDir);
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		`[workspace]
+members = ["crates/member", "crates/other"]
+resolver = "2"
+`,
+	);
+	writeFile(
+		path.join(context.repoDir, ".cargo/config.toml"),
+		"[build]\ntarget-dir = 'target/root'\n",
+	);
 	writeFile(
 		path.join(context.repoDir, "crates/member/Cargo.toml"),
 		`[package]
@@ -788,12 +896,81 @@ edition = "2021"
 `,
 	);
 	writeFile(
-		path.join(context.repoDir, ".cargo/config.toml"),
-		"[build]\ntarget-dir = 'target'\n",
+		path.join(context.repoDir, "crates/member/deny.toml"),
+		"[graph]\nall-features = false\n",
+	);
+	writeFile(
+		path.join(context.repoDir, "crates/member/.cargo/config.toml"),
+		"[build]\ntarget-dir = 'target/member'\n",
+	);
+	writeFile(
+		path.join(context.repoDir, "crates/other/Cargo.toml"),
+		`[package]
+name = "other"
+version = "0.1.0"
+edition = "2021"
+`,
 	);
 
 	try {
-		const output = execFileSync("bash", [runPath, ".cargo/config.toml"], {
+		const output = execFileSync(
+			"bash",
+			[
+				runPath,
+				".cargo/config.toml",
+				"crates/member/deny.toml",
+				"crates/other/Cargo.toml",
+			],
+			{
+				cwd: context.repoDir,
+				encoding: "utf8",
+				env: createEnv(context, {
+					CARGO_DENY_ARGS_LOG: argsLog,
+				}),
+			},
+		);
+		const result = JSON.parse(output);
+
+		assert.equal(result.exit_code, 0);
+		assert.equal(result.cargo_deny_runs.length, 2);
+		assert.deepEqual(fs.readFileSync(argsLog, "utf8").trim().split("\n"), [
+			"cargo deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output",
+			"cargo deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output --config crates/member/deny.toml",
+		]);
+		assert.match(
+			result.details,
+			/cargo deny --format json --color never --log-level warn --all-features --manifest-path Cargo\.toml check --audit-compatible-output/,
+		);
+		assert.match(
+			result.details,
+			/cargo deny --format json --color never --log-level warn --all-features --manifest-path Cargo\.toml check --audit-compatible-output --config crates\/member\/deny\.toml/,
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("cargo-deny.sh rejects unsafe repo-local Cargo config before networked resolution", () => {
+	const context = makeTempRepo("cargo-deny-unsafe-cargo-config-");
+	const argsLog = path.join(context.tempDir, "cargo-deny-args.log");
+
+	createCargoDenyStub(context.binDir);
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		`[package]
+name = "root"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+	writeFile(path.join(context.repoDir, "Cargo.lock"), "version = 3\n");
+	writeFile(
+		path.join(context.repoDir, ".cargo/config.toml"),
+		"[net]\nretry = 3\n",
+	);
+
+	try {
+		const output = execFileSync("bash", [runPath, "Cargo.lock"], {
 			cwd: context.repoDir,
 			encoding: "utf8",
 			env: createEnv(context, {
@@ -803,12 +980,54 @@ edition = "2021"
 		const result = JSON.parse(output);
 
 		assert.equal(result.exit_code, 1);
+		assert.equal(result.cargo_deny_runs.length, 1);
 		assert.match(
 			result.details,
-			/Repository-supplied `.cargo\/config\.toml` is not supported/,
+			/repo-local Cargo config for networked resolution is restricted on the shared runner\./,
 		);
-		assert.match(result.details, /cargo metadata/);
-		assert.doesNotMatch(result.details, /No Cargo\.toml found for:/);
+		assert.match(result.details, /unsupported top-level section\(s\): net/);
+		assert.equal(fs.existsSync(argsLog), false);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("cargo-deny.sh rejects alias-based cargo subcommand shadowing before networked resolution", () => {
+	const context = makeTempRepo("cargo-deny-unsafe-cargo-alias-");
+	const argsLog = path.join(context.tempDir, "cargo-deny-args.log");
+
+	createCargoDenyStub(context.binDir);
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		`[package]
+name = "root"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+	writeFile(path.join(context.repoDir, "Cargo.lock"), "version = 3\n");
+	writeFile(
+		path.join(context.repoDir, ".cargo/config.toml"),
+		'[alias]\ndeny = ["run", "--"]\n',
+	);
+
+	try {
+		const output = execFileSync("bash", [runPath, "Cargo.lock"], {
+			cwd: context.repoDir,
+			encoding: "utf8",
+			env: createEnv(context, {
+				CARGO_DENY_ARGS_LOG: argsLog,
+			}),
+		});
+		const result = JSON.parse(output);
+
+		assert.equal(result.exit_code, 1);
+		assert.equal(result.cargo_deny_runs.length, 1);
+		assert.match(
+			result.details,
+			/repo-local Cargo config for networked resolution is restricted on the shared runner\./,
+		);
+		assert.match(result.details, /unsupported top-level section\(s\): alias/);
 		assert.equal(fs.existsSync(argsLog), false);
 	} finally {
 		cleanupTempRepo(context.tempDir);

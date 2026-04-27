@@ -104,6 +104,7 @@ case "$command" in
     ;;
   run)
     work_mount_src=""
+    container_workdir="/work"
     image_ref=""
     command_args=()
     option_with_value=""
@@ -117,6 +118,9 @@ case "$command" in
                 work_mount_src="\${work_mount_src%%,*}"
                 ;;
             esac
+            ;;
+          --workdir)
+            container_workdir="$arg"
             ;;
         esac
         option_with_value=""
@@ -144,7 +148,11 @@ case "$command" in
       echo "missing work mount" >&2
       exit 1
     fi
-    analysis_root="$work_mount_src/$analysis_path"
+    host_workdir="$work_mount_src"
+    if [ "$container_workdir" != "/work" ]; then
+      host_workdir="$work_mount_src/\${container_workdir#/work/}"
+    fi
+    analysis_root="$host_workdir/$analysis_path"
     if [ -f "$analysis_root" ]; then
       search_dir=$(dirname "$analysis_root")
     else
@@ -561,7 +569,7 @@ defineCommonCargoManifestTests({
 		assert.match(runArgs, /--tmpfs \/tmp/);
 		assert.doesNotMatch(runArgs, /dst=\/work,ro/);
 		assert.match(runArgs, /coupling --json --no-git src/);
-		assert.match(runArgs, /coupling --json --no-git crates\/member\/src/);
+		assert.match(runArgs, /--workdir \/work\/crates\/member/);
 		assert.deepEqual(
 			fs.readFileSync(tooling.worktreeGitLog, "utf8").trim().split("\n"),
 			["absent", "absent"],
@@ -586,28 +594,44 @@ defineCommonCargoManifestTests({
 	},
 });
 
-test("cargo-coupling rejects repository-supplied Cargo config on the shared path", () => {
-	const context = makeTempRepo("cargo-coupling-unsafe-config-");
+test("cargo-coupling runs from the manifest scope so member-local Cargo config is honored", () => {
+	const context = makeTempRepo("cargo-coupling-cargo-config-");
 	const tooling = setupTooling(context);
 
 	writeFile(
 		path.join(context.repoDir, "Cargo.toml"),
+		`[workspace]
+members = ["crates/member"]
+resolver = "2"
+`,
+	);
+	writeFile(
+		path.join(context.repoDir, ".cargo/config.toml"),
+		`[build]
+target-dir = "target/root"
+`,
+	);
+	writeFile(
+		path.join(context.repoDir, "crates/member/Cargo.toml"),
 		`[package]
-name = "root"
+name = "member"
 version = "0.1.0"
 edition = "2021"
 `,
 	);
-	writeFile(path.join(context.repoDir, "src/lib.rs"), "pub fn root_lib() {}\n");
 	writeFile(
-		path.join(context.repoDir, ".cargo/config.toml"),
-		`[registries.private]
-index = "sparse+https://example.invalid/index/"
+		path.join(context.repoDir, "crates/member/src/lib.rs"),
+		"pub fn member_lib() {}\n",
+	);
+	writeFile(
+		path.join(context.repoDir, "crates/member/.cargo/config.toml"),
+		`[build]
+target-dir = "target/member"
 `,
 	);
 
 	try {
-		const output = execFileSync("bash", [runPath, "src/lib.rs"], {
+		const output = execFileSync("bash", [runPath, "crates/member/src/lib.rs"], {
 			cwd: context.repoDir,
 			encoding: "utf8",
 			env: {
@@ -618,13 +642,15 @@ index = "sparse+https://example.invalid/index/"
 			},
 		});
 		const result = JSON.parse(output);
+		const runArgs = fs.readFileSync(tooling.dockerRunArgsLog, "utf8");
 
-		assert.equal(result.exit_code, 1);
-		assert.match(
-			result.details,
-			/Repository-supplied `\.cargo\/config\.toml` is not supported/,
+		assert.equal(result.exit_code, 0);
+		assert.match(runArgs, /--workdir \/work\/crates\/member/);
+		assert.match(runArgs, /coupling --json --no-git src/);
+		assert.deepEqual(
+			fs.readFileSync(tooling.dockerManifestLog, "utf8").trim().split("\n"),
+			["crates/member/Cargo.toml"],
 		);
-		assert.equal(fs.existsSync(tooling.dockerRunArgsLog), false);
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}
@@ -725,8 +751,8 @@ edition = "2021"
 
 		assert.equal(result.exit_code, 0);
 		assert.doesNotMatch(runArgs, /dst=\/work,ro/u);
-		assert.doesNotMatch(runArgs, /coupling --json --no-git src/u);
-		assert.match(runArgs, /coupling --json --no-git crates\/member\/src/u);
+		assert.match(runArgs, /--workdir \/work\/crates\/member/u);
+		assert.match(runArgs, /coupling --json --no-git src/u);
 		assert.deepEqual(
 			fs.readFileSync(tooling.dockerManifestLog, "utf8").trim().split("\n"),
 			["crates/member/Cargo.toml"],

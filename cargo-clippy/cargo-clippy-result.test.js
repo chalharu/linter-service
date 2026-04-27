@@ -11,7 +11,7 @@ test("buildCargoClippyResult preserves details and extracts structured diagnosti
 		runs: [
 			{
 				command:
-					"docker run cargo clippy --manifest-path Cargo.toml --all-targets -- -D warnings",
+					"cargo clippy --message-format=json --manifest-path Cargo.toml --all-targets -- -D warnings",
 				exit_code: 1,
 				manifest_path: "Cargo.toml",
 				stderr:
@@ -64,7 +64,7 @@ test("buildCargoClippyResult preserves details and extracts structured diagnosti
 	);
 	assert.match(
 		result.details,
-		/==> docker run cargo clippy --manifest-path Cargo\.toml --all-targets -- -D warnings/,
+		/==> cargo clippy --message-format=json --manifest-path Cargo\.toml --all-targets -- -D warnings/,
 	);
 	assert.match(
 		result.details,
@@ -82,7 +82,7 @@ test("buildCargoClippyResult omits structured runs when no compiler diagnostics 
 		runs: [
 			{
 				command:
-					"docker run cargo clippy --manifest-path Cargo.toml --all-targets -- -D warnings",
+					"cargo clippy --message-format=json --manifest-path Cargo.toml --all-targets -- -D warnings",
 				exit_code: 0,
 				manifest_path: "Cargo.toml",
 				stderr:
@@ -99,7 +99,7 @@ test("buildCargoClippyResult omits structured runs when no compiler diagnostics 
 	assert.equal("cargo_clippy_runs" in result, false);
 	assert.match(
 		result.details,
-		/==> docker run cargo clippy --manifest-path Cargo\.toml --all-targets -- -D warnings/,
+		/==> cargo clippy --message-format=json --manifest-path Cargo\.toml --all-targets -- -D warnings/,
 	);
 	assert.doesNotMatch(result.details, /Finished `dev` profile/);
 });
@@ -143,7 +143,7 @@ test("buildCargoClippyResult dedupes repeated compiler diagnostics", () => {
 		runs: [
 			{
 				command:
-					"docker run cargo clippy --manifest-path Cargo.toml --all-targets -- -D warnings",
+					"cargo clippy --message-format=json --manifest-path Cargo.toml --all-targets -- -D warnings",
 				exit_code: 1,
 				manifest_path: "Cargo.toml",
 				stderr:

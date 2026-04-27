@@ -14,8 +14,6 @@ manifest_list_file="$RUNNER_TEMP/cargo-coupling-manifests.txt"
 run_entries_dir="$RUNNER_TEMP/cargo-coupling-runs"
 manifests=()
 deduped_manifests=()
-relevant_dirs=()
-unsupported_config=""
 
 rm -f "$output_file" "$result_json_file" "$config_json_file" "$manifest_list_file"
 rm -rf "$run_entries_dir"
@@ -25,16 +23,6 @@ container_bin=$(cargo_coupling_container_bin)
 image_ref=$(cargo_coupling_image_ref)
 
 if ! linter_lib::collect_cargo_manifests "$output_file" "Cargo coupling" manifests "$@"; then
-  linter_lib::emit_json_result 1 "$output_file"
-  exit 0
-fi
-
-mapfile -t relevant_dirs < <(linter_lib::collect_cargo_relevant_dirs "${manifests[@]}")
-if unsupported_config="$(linter_lib::find_unsupported_cargo_config "${relevant_dirs[@]}")"; then
-  cat > "$output_file" <<EOF
-Repository-supplied \`$unsupported_config\` is not supported in this shared linter service because \`cargo metadata\` / \`cargo-coupling\` for untrusted pull requests cannot safely honor repository-controlled Cargo configuration.
-Use the default Cargo registry configuration for the shared \`cargo-coupling\` path.
-EOF
   linter_lib::emit_json_result 1 "$output_file"
   exit 0
 fi
@@ -74,10 +62,9 @@ mapfile -t deduped_manifests < <(cargo_coupling_dedupe_manifests)
 
 run_cargo_coupling() {
   local failure=0
-  local current_manifest analysis_path run_dir run_exit command_line stdout_file stderr_file
+  local current_manifest analysis_path workdir run_dir run_exit command_line stdout_file stderr_file
   local run_index=0
 
-  cd "$source_root"
   rm -rf "$run_entries_dir"
   mkdir -p "$run_entries_dir"
 
@@ -86,6 +73,7 @@ run_cargo_coupling() {
     run_dir=$(printf '%s/%04d' "$run_entries_dir" "$run_index")
     mkdir -p "$run_dir"
     analysis_path=$(cargo_coupling_analysis_path_for_manifest "$current_manifest")
+    workdir=$(cargo_coupling_workdir_for_manifest "$current_manifest")
     stdout_file="$run_dir/stdout.txt"
     stderr_file="$run_dir/stderr.txt"
     command_line="docker run cargo-coupling coupling --json --no-git $analysis_path"
@@ -99,7 +87,7 @@ run_cargo_coupling() {
       --read-only \
       --tmpfs /tmp \
       --user "$user_id:$group_id" \
-      --workdir /work \
+      --workdir "$workdir" \
       --mount "type=bind,src=$source_root,dst=/work" \
       --env HOME=/tmp \
       "$image_ref" \

@@ -202,22 +202,277 @@ linter_lib::collect_cargo_relevant_dirs() {
   done
 }
 
-linter_lib::find_unsupported_cargo_config() {
-  local dir candidate
+linter_lib::find_preferred_cargo_config_in_dir() {
+  local dir=$1
+  local candidate
 
-  for dir in "$@"; do
-    for candidate in \
-      "$dir/.cargo/config.toml" \
-      "$dir/.cargo/config"
-    do
-      if [ -f "$candidate" ]; then
-        printf '%s\n' "${candidate#./}"
-        return 0
-      fi
-    done
+  for candidate in \
+    "$dir/.cargo/config" \
+    "$dir/.cargo/config.toml"
+  do
+    if [ -f "$candidate" ]; then
+      printf '%s\n' "${candidate#./}"
+      return 0
+    fi
   done
 
   return 1
+}
+
+linter_lib::collect_cargo_config_paths() {
+  local manifest_path=$1
+  local current_dir config_path
+  local collected_paths=()
+  local index
+
+  current_dir=$(dirname "$manifest_path")
+  while :; do
+    if config_path=$(linter_lib::find_preferred_cargo_config_in_dir "$current_dir"); then
+      collected_paths+=("$config_path")
+    fi
+
+    if [ "$current_dir" = "." ] || [ "$current_dir" = "/" ]; then
+      break
+    fi
+
+    current_dir=$(dirname "$current_dir")
+  done
+
+  for ((index=${#collected_paths[@]} - 1; index >= 0; index--)); do
+    printf '%s\n' "${collected_paths[$index]}"
+  done
+}
+
+linter_lib::cargo_config_chain_key() {
+  local manifest_path=$1
+  local key=""
+  local config_path
+
+  while IFS= read -r config_path; do
+    if [ -n "$config_path" ]; then
+      key+="${key:+$'\x1f'}$config_path"
+    fi
+  done < <(linter_lib::collect_cargo_config_paths "$manifest_path")
+
+  printf '%s\n' "$key"
+}
+
+linter_lib::cargo_workdir_for_manifest() {
+  local manifest_path=$1
+  local manifest_dir
+
+  manifest_dir=$(dirname "$manifest_path")
+  if [ "$manifest_dir" = "." ]; then
+    printf '%s\n' /work
+    return 0
+  fi
+
+  printf '/work/%s\n' "$manifest_dir"
+}
+
+linter_lib::relative_repo_path() {
+  local from_dir=$1
+  local target_path=$2
+
+  node - "$from_dir" "$target_path" <<'NODE'
+const path = require("node:path");
+
+const [fromDir, targetPath] = process.argv.slice(2);
+process.stdout.write(path.relative(fromDir, targetPath).split(path.sep).join("/"));
+NODE
+}
+
+linter_lib::relative_repo_path_from_manifest_dir() {
+  local manifest_path=$1
+  local target_path=$2
+
+  linter_lib::relative_repo_path "$(dirname "$manifest_path")" "$target_path"
+}
+
+linter_lib::validate_network_safe_cargo_config() {
+  local manifest_path=$1
+  local python_bin
+  local config_paths=()
+
+  mapfile -t config_paths < <(linter_lib::collect_cargo_config_paths "$manifest_path")
+  if [ "${#config_paths[@]}" -eq 0 ]; then
+    return 0
+  fi
+
+  if [ -x /usr/bin/python3 ]; then
+    python_bin=/usr/bin/python3
+  else
+    python_bin=$(linter_lib::python_cmd) || return 1
+  fi
+  "$python_bin" - "${config_paths[@]}" <<'PY'
+import sys
+from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError as exc:
+    print(f"error: {exc}", file=sys.stderr)
+    print(
+        "python 3.11+ with tomllib is required to validate repo-local Cargo config safely",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+ALLOWED_TOP_LEVEL_KEYS = {
+    "build",
+    "doc",
+    "future-incompat-report",
+    "profile",
+    "term",
+}
+
+ALLOWED_BUILD_KEYS = {
+    "build-dir",
+    "dep-info-basedir",
+    "incremental",
+    "jobs",
+    "target-dir",
+}
+ALLOWED_DOC_KEYS = {"browser"}
+ALLOWED_FUTURE_INCOMPAT_REPORT_KEYS = {"frequency"}
+ALLOWED_TERM_KEYS = {
+    "color",
+    "hyperlinks",
+    "progress",
+    "quiet",
+    "unicode",
+    "verbose",
+}
+ALLOWED_TERM_PROGRESS_KEYS = {"term-integration", "when", "width"}
+
+top_level_violations = []
+nested_violations = []
+
+
+def record_nested_violations(raw_path: str, names: list[str]) -> None:
+    if names:
+        nested_violations.append((raw_path, sorted(names)))
+
+
+def validate_build_table(raw_path: str, table: object) -> None:
+    if not isinstance(table, dict):
+        record_nested_violations(raw_path, ["build"])
+        return
+    record_nested_violations(
+        raw_path,
+        [f"build.{key}" for key in table.keys() if key not in ALLOWED_BUILD_KEYS],
+    )
+
+
+def validate_doc_table(raw_path: str, table: object) -> None:
+    if not isinstance(table, dict):
+        record_nested_violations(raw_path, ["doc"])
+        return
+    record_nested_violations(
+        raw_path,
+        [f"doc.{key}" for key in table.keys() if key not in ALLOWED_DOC_KEYS],
+    )
+
+
+def validate_future_incompat_report_table(raw_path: str, table: object) -> None:
+    if not isinstance(table, dict):
+        record_nested_violations(raw_path, ["future-incompat-report"])
+        return
+    record_nested_violations(
+        raw_path,
+        [
+            f"future-incompat-report.{key}"
+            for key in table.keys()
+            if key not in ALLOWED_FUTURE_INCOMPAT_REPORT_KEYS
+        ],
+    )
+
+
+def validate_term_table(raw_path: str, table: object) -> None:
+    if not isinstance(table, dict):
+        record_nested_violations(raw_path, ["term"])
+        return
+
+    violations = []
+    for key, value in table.items():
+        if key not in ALLOWED_TERM_KEYS:
+            violations.append(f"term.{key}")
+            continue
+        if key != "progress":
+            continue
+        if not isinstance(value, dict):
+            violations.append("term.progress")
+            continue
+        for nested_key in value.keys():
+            if nested_key not in ALLOWED_TERM_PROGRESS_KEYS:
+                violations.append(f"term.progress.{nested_key}")
+    record_nested_violations(raw_path, violations)
+
+for raw_path in sys.argv[1:]:
+    path = Path(raw_path)
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # pragma: no cover - surfaced in shell tests
+        print(
+            f"repo-local Cargo config cannot be used for networked resolution because {raw_path} could not be parsed: {exc}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    unsupported = sorted(
+        key
+        for key in data.keys()
+        if key not in ALLOWED_TOP_LEVEL_KEYS
+    )
+    if unsupported:
+        top_level_violations.append((raw_path, unsupported))
+        continue
+
+    if "build" in data:
+        validate_build_table(raw_path, data["build"])
+    if "doc" in data:
+        validate_doc_table(raw_path, data["doc"])
+    if "future-incompat-report" in data:
+        validate_future_incompat_report_table(
+            raw_path,
+            data["future-incompat-report"],
+        )
+    if "term" in data:
+        validate_term_table(raw_path, data["term"])
+
+if top_level_violations or nested_violations:
+    allowed = ", ".join(sorted(ALLOWED_TOP_LEVEL_KEYS))
+    print(
+        "repo-local Cargo config for networked resolution is restricted on the shared runner.",
+        file=sys.stderr,
+    )
+    print(
+        f"Allowed top-level sections: {allowed}",
+        file=sys.stderr,
+    )
+    print(
+        "Allowed nested settings: build.{build-dir,dep-info-basedir,incremental,jobs,target-dir}, "
+        "doc.browser, future-incompat-report.frequency, "
+        "term.{color,hyperlinks,quiet,unicode,verbose}, "
+        "term.progress.{term-integration,when,width}",
+        file=sys.stderr,
+    )
+    for raw_path, unsupported in top_level_violations:
+        print(
+            f" - {raw_path}: unsupported top-level section(s): {', '.join(unsupported)}",
+            file=sys.stderr,
+        )
+    for raw_path, unsupported in nested_violations:
+        print(
+            f" - {raw_path}: unsupported setting(s): {', '.join(unsupported)}",
+            file=sys.stderr,
+        )
+    print(
+        "Network, source, registry, and credential-related repo config must not be trusted during shared cargo resolution.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+PY
 }
 
 linter_lib::emit_json_result() {
