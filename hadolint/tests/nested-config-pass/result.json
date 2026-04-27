@@ -1,12 +1,33 @@
 {
-  "checked_projects": [],
-  "result": {
-    "details": "==> hadolint --no-color --config .hadolint.yml Dockerfile\n\n==> hadolint --no-color --config .hadolint.yml containers/base.containerfile\n\n==> hadolint --no-color --config services/api/.hadolint.yaml services/api/Dockerfile.dev",
-    "exit_code": 0
-  },
-  "selected_files": [
-    "Dockerfile",
-    "containers/base.containerfile",
-    "services/api/Dockerfile.dev"
-  ]
+	"checked_projects": [],
+	"result": {
+		"exit_code": 0,
+		"sarif": {
+			"$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+			"runs": [
+				{
+					"defaultSourceLanguage": "dockerfile",
+					"results": [],
+					"tool": {
+						"driver": {
+							"downloadUri": "https://github.com/hadolint/hadolint",
+							"fullName": "Haskell Dockerfile Linter",
+							"name": "Hadolint",
+							"rules": [],
+							"shortDescription": {
+								"text": "Dockerfile linter, validate inline bash, written in Haskell"
+							},
+							"version": "2.14.0"
+						}
+					}
+				}
+			],
+			"version": "2.1.0"
+		}
+	},
+	"selected_files": [
+		"Dockerfile",
+		"containers/base.containerfile",
+		"services/api/Dockerfile.dev"
+	]
 }

@@ -16,15 +16,52 @@ function createJsonPythonStub(binDir) {
 		`#!/usr/bin/env bash
 set -euo pipefail
 cat >/dev/null
-exit_code="$2"
-output_file="$3"
-node - "$exit_code" "$output_file" <<'NODE'
+node - "$@" <<'NODE'
 const fs = require("node:fs");
-const [exitCode, outputFile] = process.argv.slice(2);
-const details = fs.existsSync(outputFile)
-\t? fs.readFileSync(outputFile, "utf8").trim()
-\t: "";
-process.stdout.write(JSON.stringify({ details, exit_code: Number(exitCode) }));
+
+const args = process.argv.slice(2);
+
+if (args.length === 3) {
+\tconst [, exitCode, outputFile] = args;
+\tconst details = fs.existsSync(outputFile)
+\t\t? fs.readFileSync(outputFile, "utf8").trim()
+\t\t: "";
+\tprocess.stdout.write(
+\t\tJSON.stringify({ details, exit_code: Number.parseInt(exitCode, 10) }),
+\t);
+\tprocess.exit(0);
+}
+
+if (args.length === 4) {
+\tconst [, exitCode, resultKey, jsonFile] = args;
+\tprocess.stdout.write(
+\t\tJSON.stringify({
+\t\t\texit_code: Number.parseInt(exitCode, 10),
+\t\t\t[resultKey]: JSON.parse(fs.readFileSync(jsonFile, "utf8")),
+\t\t}),
+\t);
+\tprocess.exit(0);
+}
+
+if (args.length === 2) {
+\tconst [, sarifFile] = args;
+\tconst sarif = JSON.parse(fs.readFileSync(sarifFile, "utf8"));
+\tconst hasResults = (sarif.runs ?? []).some(
+\t\t(run) => (run?.results?.length ?? 0) > 0,
+\t);
+\tprocess.stdout.write(
+\t\tJSON.stringify({
+\t\t\texit_code: hasResults ? 1 : 0,
+\t\t\tsarif,
+\t\t}),
+\t);
+\tprocess.exit(0);
+}
+
+process.stderr.write(
+\t'unsupported python stub invocation: ' + JSON.stringify(args) + '\\n',
+);
+process.exit(1);
 NODE
 `,
 	);

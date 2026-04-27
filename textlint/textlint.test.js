@@ -17,6 +17,7 @@ const {
 	getTextlintPresetRuleKey,
 	resolveTextlintRuntime,
 } = require("./textlint-config.js");
+const { collectTextlintDiagnostics } = require("./textlint-result.js");
 
 const installPath = path.join(__dirname, "install.sh");
 const runPath = path.join(__dirname, "run.sh");
@@ -204,6 +205,38 @@ test("loadStaticTextlintConfig rejects non-JSON .textlintrc content", () => {
 	}
 });
 
+test("collectTextlintDiagnostics strips only leading runtime path prefixes", () => {
+	assert.deepEqual(
+		collectTextlintDiagnostics(
+			[
+				{
+					filePath: "/work/docs/work/guide.md",
+					messages: [
+						{
+							column: 3,
+							line: 2,
+							message: "sample diagnostic",
+							ruleId: "textlint/demo",
+							severity: 2,
+						},
+					],
+				},
+			],
+			"/tmp/runtime/repo",
+		),
+		[
+			{
+				column: 3,
+				file_path: "docs/work/guide.md",
+				level: "error",
+				line: 2,
+				message: "sample diagnostic",
+				rule_id: "textlint/demo",
+			},
+		],
+	);
+});
+
 test("textlint install builds a dedicated container image when missing", () => {
 	const context = makeTempRepo("textlint-install-");
 	const version = readPinnedVersion(installPath, "textlint_version");
@@ -333,14 +366,35 @@ test("textlint run installs hardened preset packages and uses the merged safe co
 				DOCKER_TEXTLINT_ARGS_LOG: dockerTextlintArgsLog,
 				DOCKERFILE_COPY: dockerfileCopy,
 				TEXTLINT_EXIT_CODE: "1",
-				TEXTLINT_STDOUT:
-					"/work/README.md:1:1: sample diagnostic [Error/example]\\n",
+				TEXTLINT_STDOUT: JSON.stringify([
+					{
+						filePath: "/work/README.md",
+						messages: [
+							{
+								column: 1,
+								line: 1,
+								message: "sample diagnostic",
+								ruleId: "Error/example",
+								severity: 2,
+							},
+						],
+					},
+				]),
 			}),
 		});
 		const result = JSON.parse(output);
 
 		assert.equal(result.exit_code, 1);
-		assert.match(result.details, /^README\.md:1:1: sample diagnostic/mu);
+		assert.equal(
+			result.sarif.runs[0].results[0].locations[0].physicalLocation
+				.artifactLocation.uri,
+			"README.md",
+		);
+		assert.equal(result.sarif.runs[0].results[0].ruleId, "Error/example");
+		assert.equal(
+			result.sarif.runs[0].results[0].message.text,
+			"sample diagnostic",
+		);
 		assert.match(
 			fs.readFileSync(dockerNpmInstallLog, "utf8"),
 			/npm install --prefix \/rules --ignore-scripts --loglevel=error --no-audit --no-fund --no-save --package-lock=false --update-notifier=false --min-release-age 3 textlint-rule-preset-ja-technical-writing@12\.0\.2 @textlint-ja\/textlint-rule-preset-ai-writing@1\.6\.1/u,
@@ -371,6 +425,10 @@ test("textlint run installs hardened preset packages and uses the merged safe co
 		assert.match(
 			fs.readFileSync(dockerTextlintArgsLog, "utf8"),
 			/--rules-base-directory \/rules\/node_modules/u,
+		);
+		assert.match(
+			fs.readFileSync(dockerTextlintArgsLog, "utf8"),
+			/--format json/u,
 		);
 	} finally {
 		cleanupTempRepo(context.tempDir);

@@ -8,10 +8,9 @@ source "$script_dir/common.sh"
 
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
 trivy_require_container_runtime
-output_file="$RUNNER_TEMP/linter-output.txt"
 workspace_root="$RUNNER_TEMP/trivy-workspace"
 source_root="$workspace_root/source"
-report_path="$workspace_root/trivy-report.json"
+report_path="$workspace_root/trivy-report.sarif"
 stderr_path="$workspace_root/trivy-stderr.txt"
 container_bin=$(trivy_container_bin)
 image_ref=$(trivy_image_ref)
@@ -63,7 +62,7 @@ run_trivy() {
       --skip-version-check \
       --disable-telemetry \
       --quiet \
-      --format json \
+      --format sarif \
       --exit-code 1 \
       "${trivy_args[@]}" \
       /work >"$report_path" 2>"$stderr_path"; then
@@ -72,8 +71,20 @@ run_trivy() {
     exit_code=$?
   fi
 
-  node "$script_dir/trivy-result.js" "$report_path" "$stderr_path" "$exit_code"
-  return "$exit_code"
+  if [ ! -s "$report_path" ]; then
+    echo "trivy native SARIF output was empty or missing" >&2
+    if [ -s "$stderr_path" ]; then
+      cat "$stderr_path" >&2
+    fi
+    return 1
+  fi
+
+  if [ -s "$stderr_path" ]; then
+    cat "$stderr_path" >&2
+  fi
+
+  linter_lib::emit_json_result_with_sarif "$exit_code" "$report_path"
+  return 0
 }
 
-linter_lib::run_and_emit_json "$output_file" run_trivy "$@"
+run_trivy "$@"

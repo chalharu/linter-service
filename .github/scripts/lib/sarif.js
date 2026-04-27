@@ -2,12 +2,21 @@ const path = require("node:path");
 
 const TOOL_URI = "https://github.com/chalharu/linter-service";
 
-function buildSarifEnvelope({ category, results, rules, toolName }) {
+function buildSarifEnvelope({
+	category,
+	results,
+	rules,
+	runMetadata,
+	toolName,
+}) {
 	return {
 		$schema: "https://json.schemastore.org/sarif-2.1.0.json",
 		version: "2.1.0",
 		runs: [
 			{
+				...(runMetadata && typeof runMetadata === "object"
+					? structuredClone(runMetadata)
+					: {}),
 				automationDetails: {
 					id: category,
 				},

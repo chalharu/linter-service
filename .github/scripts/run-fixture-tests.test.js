@@ -248,6 +248,133 @@ test("normalizeFixtureResult stabilizes cargo-clippy compile error ordering", ()
 	});
 });
 
+test("normalizeFixtureResult canonicalizes embedded SARIF results", () => {
+	const actual = normalizeFixtureResult({
+		report: {
+			checkedProjects: [],
+			selectedFiles: ["src/index.js"],
+		},
+		repositoryPath: "/tmp/fixture-run/repo",
+		result: {
+			exit_code: 1,
+			sarif: {
+				$schema: "https://json.schemastore.org/sarif-2.1.0.json",
+				runs: [
+					{
+						results: [
+							{
+								level: "warning",
+								locations: [
+									{
+										physicalLocation: {
+											artifactLocation: {
+												uri: "/tmp/fixture-run/repo/src/index.js",
+											},
+										},
+									},
+								],
+								message: {
+									text: "second",
+								},
+								partialFingerprints: {
+									primaryLocationLineHash: "def",
+								},
+								ruleId: "b",
+							},
+							{
+								level: "error",
+								locations: [
+									{
+										physicalLocation: {
+											artifactLocation: {
+												uri: "/tmp/fixture-run/repo/src/index.js",
+											},
+										},
+									},
+								],
+								message: {
+									text: "first",
+								},
+								partialFingerprints: {
+									primaryLocationLineHash: "abc",
+								},
+								ruleId: "a",
+							},
+						],
+						tool: {
+							driver: {
+								rules: [
+									{ id: "b", name: "b" },
+									{ id: "a", name: "a" },
+								],
+							},
+						},
+					},
+				],
+				version: "2.1.0",
+			},
+		},
+	});
+
+	assert.deepEqual(actual, {
+		checked_projects: [],
+		result: {
+			exit_code: 1,
+			sarif: {
+				$schema: "https://json.schemastore.org/sarif-2.1.0.json",
+				runs: [
+					{
+						results: [
+							{
+								level: "error",
+								locations: [
+									{
+										physicalLocation: {
+											artifactLocation: {
+												uri: "src/index.js",
+											},
+										},
+									},
+								],
+								message: {
+									text: "first",
+								},
+								ruleId: "a",
+							},
+							{
+								level: "warning",
+								locations: [
+									{
+										physicalLocation: {
+											artifactLocation: {
+												uri: "src/index.js",
+											},
+										},
+									},
+								],
+								message: {
+									text: "second",
+								},
+								ruleId: "b",
+							},
+						],
+						tool: {
+							driver: {
+								rules: [
+									{ id: "a", name: "a" },
+									{ id: "b", name: "b" },
+								],
+							},
+						},
+					},
+				],
+				version: "2.1.0",
+			},
+		},
+		selected_files: ["src/index.js"],
+	});
+});
+
 test("normalizeSarif removes volatile timestamps and partial fingerprints", () => {
 	const actual = normalizeSarif(
 		{

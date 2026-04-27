@@ -10,12 +10,7 @@ const {
 const { runFromEnv } = require("../.github/scripts/render-linter-sarif.js");
 
 const configPath = path.join(__dirname, "..", "linters.json");
-const details = [
-	"Dockerfile:1:1: warning DS-0001 (MEDIUM): Specify a tag in the 'FROM' statement for image 'ubuntu'",
-	"Dockerfile:2:1: error DS-0002 (HIGH): Last USER command in Dockerfile should not be 'root'",
-].join("\n");
-
-test("emits SARIF for Trivy diagnostics rendered as path diagnostics", () => {
+test("emits SARIF for embedded Trivy diagnostics", () => {
 	const context = makeTempRepo("render-linter-sarif-trivy-");
 
 	writeFile(
@@ -29,8 +24,83 @@ test("emits SARIF for Trivy diagnostics rendered as path diagnostics", () => {
 	writeFile(
 		path.join(context.runnerTemp, "linter-result.json"),
 		JSON.stringify({
-			details,
 			exit_code: 1,
+			sarif: {
+				version: "2.1.0",
+				runs: [
+					{
+						originalUriBaseIds: {
+							ROOTPATH: {
+								uri: "file:///work/",
+							},
+						},
+						results: [
+							{
+								level: "warning",
+								locations: [
+									{
+										physicalLocation: {
+											artifactLocation: {
+												uri: "Dockerfile",
+												uriBaseId: "ROOTPATH",
+											},
+											region: {
+												startColumn: 1,
+												startLine: 1,
+											},
+										},
+									},
+								],
+								message: {
+									text: "Specify a tag in the 'FROM' statement for image 'ubuntu'",
+								},
+								ruleId: "DS-0001",
+							},
+							{
+								level: "error",
+								locations: [
+									{
+										physicalLocation: {
+											artifactLocation: {
+												uri: "Dockerfile",
+												uriBaseId: "ROOTPATH",
+											},
+											region: {
+												startColumn: 1,
+												startLine: 2,
+											},
+										},
+									},
+								],
+								message: {
+									text: "Last USER command in Dockerfile should not be 'root'",
+								},
+								ruleId: "DS-0002",
+							},
+						],
+						tool: {
+							driver: {
+								rules: [
+									{
+										id: "DS-0001",
+										name: "DS-0001",
+										shortDescription: {
+											text: "DS-0001",
+										},
+									},
+									{
+										id: "DS-0002",
+										name: "DS-0002",
+										shortDescription: {
+											text: "DS-0002",
+										},
+									},
+								],
+							},
+						},
+					},
+				],
+			},
 		}),
 	);
 
@@ -54,20 +124,29 @@ test("emits SARIF for Trivy diagnostics rendered as path diagnostics", () => {
 				level: result.level,
 				line: result.locations[0].physicalLocation.region.startLine,
 				ruleId: result.ruleId,
+				uriBaseId:
+					result.locations[0].physicalLocation.artifactLocation.uriBaseId,
 			})),
 			[
 				{
 					level: "warning",
 					line: 1,
 					ruleId: "DS-0001",
+					uriBaseId: "ROOTPATH",
 				},
 				{
 					level: "error",
 					line: 2,
 					ruleId: "DS-0002",
+					uriBaseId: "ROOTPATH",
 				},
 			],
 		);
+		assert.deepEqual(report.sarif.runs[0].originalUriBaseIds, {
+			ROOTPATH: {
+				uri: "file:///work/",
+			},
+		});
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}

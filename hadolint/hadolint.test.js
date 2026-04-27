@@ -65,11 +65,15 @@ function createHadolintStub(binDir) {
 set -euo pipefail
 printf '%s\\n' "$*" >> "$HADOLINT_ARGS_LOG"
 target="\${*: -1}"
-printf 'checked %s\\n' "$target"
 if [ -n "\${FAIL_TARGET:-}" ] && [ "$target" = "$FAIL_TARGET" ]; then
-  printf 'issue in %s\\n' "$target" >&2
+  cat <<EOF
+{"version":"2.1.0","runs":[{"results":[{"level":"warning","locations":[{"physicalLocation":{"artifactLocation":{"uri":"$target"},"region":{"startColumn":1,"startLine":2}}}],"message":{"text":"issue in $target"},"ruleId":"DL3008"}],"tool":{"driver":{"name":"hadolint","rules":[{"id":"DL3008","name":"DL3008","shortDescription":{"text":"DL3008"}}]}}}]}
+EOF
   exit 1
 fi
+cat <<EOF
+{"version":"2.1.0","runs":[{"results":[],"tool":{"driver":{"name":"hadolint","rules":[]}}}]}
+EOF
 `,
 	);
 }
@@ -166,12 +170,13 @@ test("hadolint.sh selects the nearest hadolint config for each target file", () 
 		const result = JSON.parse(output);
 
 		assert.equal(result.exit_code, 0);
+		assert.deepEqual(result.sarif.runs[0].results, []);
 		assert.deepEqual(
 			fs.readFileSync(hadolintArgsLog, "utf8").trim().split("\n"),
 			[
-				"--no-color --config .hadolint.yml Dockerfile",
-				"--no-color --config services/api/.hadolint.yaml services/api/Dockerfile.dev",
-				"--no-color --config .hadolint.yml containers/base.containerfile",
+				"--no-color --format sarif --config .hadolint.yml Dockerfile",
+				"--no-color --format sarif --config services/api/.hadolint.yaml services/api/Dockerfile.dev",
+				"--no-color --format sarif --config .hadolint.yml containers/base.containerfile",
 			],
 		);
 	} finally {
@@ -197,9 +202,10 @@ test("hadolint.sh omits --config when no repository config is found", () => {
 		const result = JSON.parse(output);
 
 		assert.equal(result.exit_code, 0);
+		assert.deepEqual(result.sarif.runs[0].results, []);
 		assert.equal(
 			fs.readFileSync(hadolintArgsLog, "utf8").trim(),
-			"--no-color Dockerfile",
+			"--no-color --format sarif Dockerfile",
 		);
 	} finally {
 		cleanupTempRepo(context.tempDir);
@@ -238,15 +244,15 @@ test("hadolint.sh continues linting later files after one file fails", () => {
 		const result = JSON.parse(output);
 
 		assert.equal(result.exit_code, 1);
+		assert.equal(result.sarif.runs[0].results.length, 1);
+		assert.equal(result.sarif.runs[0].results[0].ruleId, "DL3008");
 		assert.deepEqual(
 			fs.readFileSync(hadolintArgsLog, "utf8").trim().split("\n"),
 			[
-				"--no-color --config .hadolint.yaml Dockerfile",
-				"--no-color --config .hadolint.yaml services/api/Containerfile",
+				"--no-color --format sarif --config .hadolint.yaml Dockerfile",
+				"--no-color --format sarif --config .hadolint.yaml services/api/Containerfile",
 			],
 		);
-		assert.match(result.details, /issue in Dockerfile/);
-		assert.match(result.details, /checked services\/api\/Containerfile/);
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}

@@ -180,20 +180,45 @@ test("trivy run scans a temp workspace with least-privilege container flags", ()
 				DOCKER_RUN_ARGS_LOG: runArgsLog,
 				TRIVY_EXIT_CODE: "1",
 				TRIVY_STDOUT: JSON.stringify({
-					Results: [
+					version: "2.1.0",
+					runs: [
 						{
-							Target: "Dockerfile",
-							Misconfigurations: [
+							results: [
 								{
-									ID: "DS-0001",
-									Message:
-										"Specify a tag in the 'FROM' statement for image 'ubuntu'",
-									Severity: "MEDIUM",
-									CauseMetadata: {
-										StartLine: 1,
+									level: "warning",
+									locations: [
+										{
+											physicalLocation: {
+												artifactLocation: {
+													uri: "Dockerfile",
+												},
+												region: {
+													startColumn: 1,
+													startLine: 1,
+												},
+											},
+										},
+									],
+									message: {
+										text: "Specify a tag in the 'FROM' statement for image 'ubuntu'",
 									},
+									ruleId: "DS-0001",
 								},
 							],
+							tool: {
+								driver: {
+									name: "Trivy",
+									rules: [
+										{
+											id: "DS-0001",
+											name: "DS-0001",
+											shortDescription: {
+												text: "DS-0001",
+											},
+										},
+									],
+								},
+							},
 						},
 					],
 				}),
@@ -203,10 +228,8 @@ test("trivy run scans a temp workspace with least-privilege container flags", ()
 		const runArgs = fs.readFileSync(runArgsLog, "utf8");
 
 		assert.equal(result.exit_code, 1);
-		assert.match(
-			result.details,
-			/Dockerfile:1:1: warning DS-0001 \(MEDIUM\): Specify a tag/u,
-		);
+		assert.equal(result.sarif.runs[0].results.length, 1);
+		assert.equal(result.sarif.runs[0].results[0].ruleId, "DS-0001");
 		assert.match(runArgs, /--platform linux\/amd64/u);
 		assert.match(runArgs, /--cap-drop ALL/u);
 		assert.match(runArgs, /--security-opt no-new-privileges/u);
@@ -215,7 +238,7 @@ test("trivy run scans a temp workspace with least-privilege container flags", ()
 		assert.match(runArgs, /--network=none/u);
 		assert.match(runArgs, /--config trivy\.yml/u);
 		assert.match(runArgs, /--skip-check-update/u);
-		assert.match(runArgs, /--format json/u);
+		assert.match(runArgs, /--format sarif/u);
 		assert.match(runArgs, /\/work/u);
 		assert.equal(
 			fs.existsSync(

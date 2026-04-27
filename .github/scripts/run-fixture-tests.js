@@ -293,11 +293,25 @@ function runPatternScript({ executionEnv, linterName, repositoryPath }) {
 }
 
 function normalizeFixtureResult({ report, repositoryPath, result }) {
+	const normalizedResult = sanitizeFixtureValue(result, repositoryPath);
+
+	if (
+		normalizedResult &&
+		typeof normalizedResult === "object" &&
+		!Array.isArray(normalizedResult) &&
+		normalizedResult.sarif
+	) {
+		normalizedResult.sarif = normalizeSarif(
+			normalizedResult.sarif,
+			repositoryPath,
+		);
+	}
+
 	return sortKeysDeep({
 		checked_projects: [...report.checkedProjects]
 			.map((entry) => sanitizeFixtureString(entry, repositoryPath))
 			.sort(),
-		result: sanitizeFixtureValue(result, repositoryPath),
+		result: normalizedResult,
 		selected_files: [...report.selectedFiles]
 			.map((entry) => sanitizeFixtureString(entry, repositoryPath))
 			.sort(),

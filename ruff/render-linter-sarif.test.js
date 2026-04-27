@@ -10,7 +10,6 @@ const {
 const { runFromEnv } = require("../.github/scripts/render-linter-sarif.js");
 
 const configPath = path.join(__dirname, "..", "linters.json");
-const details = "src/app.py:12:3: RUF100 unused noqa directive";
 
 test("emits SARIF for ruff diagnostics", () => {
 	const context = makeTempRepo("render-linter-sarif-ruff-");
@@ -23,8 +22,49 @@ test("emits SARIF for ruff diagnostics", () => {
 	writeFile(
 		path.join(context.runnerTemp, "linter-result.json"),
 		JSON.stringify({
-			details,
 			exit_code: 1,
+			sarif: {
+				version: "2.1.0",
+				runs: [
+					{
+						results: [
+							{
+								level: "warning",
+								locations: [
+									{
+										physicalLocation: {
+											artifactLocation: {
+												uri: "src/app.py",
+											},
+											region: {
+												startColumn: 3,
+												startLine: 12,
+											},
+										},
+									},
+								],
+								message: {
+									text: "unused noqa directive",
+								},
+								ruleId: "RUF100",
+							},
+						],
+						tool: {
+							driver: {
+								rules: [
+									{
+										id: "RUF100",
+										name: "RUF100",
+										shortDescription: {
+											text: "RUF100",
+										},
+									},
+								],
+							},
+						},
+					},
+				],
+			},
 		}),
 	);
 

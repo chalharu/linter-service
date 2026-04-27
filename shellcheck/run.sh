@@ -7,5 +7,13 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$script_dir/common.sh"
 
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
-output_file="$RUNNER_TEMP/linter-output.txt"
-linter_lib::run_and_emit_json "$output_file" shellcheck -x -P SCRIPTDIR "$@"
+report_file="$RUNNER_TEMP/shellcheck-report.json"
+stderr_file="$RUNNER_TEMP/shellcheck-stderr.log"
+rm -f "$report_file" "$stderr_file"
+
+set +e
+shellcheck --format json1 -x -P SCRIPTDIR "$@" >"$report_file" 2>"$stderr_file"
+exit_code=$?
+set -e
+
+node "$script_dir/shellcheck-result.js" "$report_file" "$stderr_file" "$exit_code"

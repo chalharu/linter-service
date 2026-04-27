@@ -46,6 +46,19 @@ test("writes selected pull request files and the count output", () => {
 		context.repoDir,
 		'global:\n  exclude_paths:\n    - "**/tests/*/target/**"\n    - "**/tests/*/sarif.json"\n',
 	);
+	fs.mkdirSync(path.join(context.repoDir, ".github", "workflows"), {
+		recursive: true,
+	});
+	fs.writeFileSync(
+		path.join(context.repoDir, ".github", "workflows", "pass.yml"),
+		"name: pass\n",
+		"utf8",
+	);
+	fs.writeFileSync(
+		path.join(context.repoDir, "README.md"),
+		"# README\n",
+		"utf8",
+	);
 	fs.writeFileSync(
 		contextPath,
 		JSON.stringify({
@@ -85,6 +98,42 @@ test("writes selected pull request files and the count output", () => {
 	}
 });
 
+test("ignores deleted changed files when selecting linter targets", () => {
+	const context = makeTempRepo();
+	const contextPath = path.join(context.runnerTemp, "context.json");
+	const outputPath = path.join(context.runnerTemp, "selected-files.txt");
+	const patternPath = path.join(context.runnerTemp, "patterns.txt");
+
+	fs.mkdirSync(path.join(context.repoDir, "src"), { recursive: true });
+	fs.writeFileSync(
+		path.join(context.repoDir, "src", "app.js"),
+		"console.log(1);\n",
+	);
+	fs.writeFileSync(
+		contextPath,
+		JSON.stringify({
+			changed_files: ["src/app.js", "src/deleted.js"],
+		}),
+		"utf8",
+	);
+	fs.writeFileSync(patternPath, "\\.js$\n", "utf8");
+
+	try {
+		const result = runFromEnv({
+			CONTEXT_PATH: contextPath,
+			LINTER_NAME: "biome",
+			OUTPUT_PATH: outputPath,
+			PATTERN_PATH: patternPath,
+			SOURCE_REPOSITORY_PATH: context.repoDir,
+		});
+
+		assert.deepEqual(result.selectedFiles, ["src/app.js"]);
+		assert.equal(fs.readFileSync(outputPath, "utf8"), "src/app.js\n");
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
 test("writes selected push files from the full tracked file list", () => {
 	const context = makeTempRepo();
 	const contextPath = path.join(context.runnerTemp, "context.json");
@@ -95,6 +144,24 @@ test("writes selected push files from the full tracked file list", () => {
 	writeLinterServiceConfig(
 		context.repoDir,
 		'global:\n  exclude_paths:\n    - "**/tests/*/target/**"\n    - "**/tests/*/sarif.json"\n',
+	);
+	fs.mkdirSync(path.join(context.repoDir, "biome", "tests", "pass"), {
+		recursive: true,
+	});
+	fs.writeFileSync(
+		path.join(context.repoDir, "biome", "tests", "pass", "result.json"),
+		'{"ok":true}\n',
+		"utf8",
+	);
+	fs.writeFileSync(
+		path.join(context.repoDir, "README.md"),
+		"# README\n",
+		"utf8",
+	);
+	fs.writeFileSync(
+		path.join(context.repoDir, "package-lock.json"),
+		"{}\n",
+		"utf8",
 	);
 	fs.writeFileSync(
 		contextPath,

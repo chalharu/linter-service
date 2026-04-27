@@ -113,20 +113,26 @@ function renderSarif({
 		runnerTemp,
 		sourceRepositoryPath,
 	});
+	const buildSarifArgs = {
+		configPath,
+		defaultLevel: sarifConfig?.default_level || "warning",
+		details,
+		linterName,
+		normalizeReportedPath,
+		reportedPathRoots,
+		result,
+		runnerTemp,
+		sourceRepositoryPath,
+		targetPaths,
+	};
+	const embeddedSarif =
+		result.exit_code === 0 && !hasNonBlockingFindings(result)
+			? null
+			: buildEmbeddedSarifData(buildSarifArgs);
 	const results =
 		result.exit_code === 0 && !hasNonBlockingFindings(result)
 			? []
-			: buildSarifResults({
-					configPath,
-					runnerTemp,
-					result,
-					defaultLevel: sarifConfig?.default_level || "warning",
-					details,
-					linterName,
-					reportedPathRoots,
-					sourceRepositoryPath,
-					targetPaths,
-				});
+			: embeddedSarif?.results || buildFallbackSarifResults(buildSarifArgs);
 	const targetStats = buildTargetStats({
 		results,
 		targetKind,
@@ -137,12 +143,14 @@ function renderSarif({
 		return { outputPath, produced: false, sarif: null, targetStats };
 	}
 
-	const linterSpecificRules = buildLinterSpecificSarifRules({
-		configPath,
-		linterName,
-		result,
-		runnerTemp,
-	});
+	const linterSpecificRules =
+		embeddedSarif?.rules ||
+		buildLinterSpecificSarifRules({
+			configPath,
+			linterName,
+			result,
+			runnerTemp,
+		});
 	const rules =
 		linterSpecificRules === null
 			? buildRuleDescriptors(results)
@@ -153,7 +161,13 @@ function renderSarif({
 	return {
 		outputPath,
 		produced: true,
-		sarif: buildSarifEnvelope({ category, results, rules, toolName }),
+		sarif: buildSarifEnvelope({
+			category,
+			results,
+			rules,
+			runMetadata: embeddedSarif?.runMetadata || null,
+			toolName,
+		}),
 		targetStats,
 	};
 }
@@ -302,8 +316,7 @@ function buildSarifResults({
 	sourceRepositoryPath,
 	targetPaths,
 }) {
-	const embeddedResults = buildEmbeddedSarifResults({
-		dedupeResults,
+	const embeddedSarif = buildEmbeddedSarifData({
 		linterName,
 		normalizeReportedPath,
 		reportedPathRoots,
@@ -312,10 +325,71 @@ function buildSarifResults({
 		targetPaths,
 	});
 
-	if (embeddedResults.length > 0) {
-		return embeddedResults;
+	if (embeddedSarif) {
+		return embeddedSarif.results;
 	}
 
+	return buildFallbackSarifResults({
+		configPath,
+		defaultLevel,
+		details,
+		linterName,
+		result,
+		reportedPathRoots,
+		runnerTemp,
+		sourceRepositoryPath,
+		targetPaths,
+	});
+}
+
+function buildEmbeddedSarifData({
+	linterName,
+	normalizeReportedPath,
+	reportedPathRoots,
+	result,
+	sourceRepositoryPath,
+	targetPaths,
+}) {
+	const run = readEmbeddedSarifRun(result);
+	if (!run || !Array.isArray(run.results) || run.results.length === 0) {
+		return null;
+	}
+
+	const results = dedupeResults(
+		run.results.map((entry) =>
+			normalizeEmbeddedSarifResult({
+				linterName,
+				normalizeReportedPath,
+				reportedPathRoots,
+				result: entry,
+				sourceRepositoryPath,
+				targetPaths,
+			}),
+		),
+	);
+
+	if (results.length === 0) {
+		return null;
+	}
+
+	return {
+		results,
+		rules: buildEmbeddedSarifRulesFromRun(run),
+		runMetadata: buildEmbeddedSarifRunMetadata(run),
+	};
+}
+
+function buildFallbackSarifResults({
+	configPath,
+	defaultLevel,
+	details,
+	linterName,
+	result,
+	reportedPathRoots,
+	runnerTemp,
+	sourceRepositoryPath,
+	targetPaths,
+}) {
 	const linterSpecificResults = buildLinterSpecificSarifResults({
 		configPath,
 		createResult,
@@ -386,32 +460,8 @@ function buildSarifResults({
 	});
 }
 
-function buildEmbeddedSarifResults({
-	dedupeResults,
-	linterName,
-	normalizeReportedPath,
-	reportedPathRoots,
-	result,
-	sourceRepositoryPath,
-	targetPaths,
-}) {
-	const run = readSarifRun(readEmbeddedSarif(result));
-	if (!run || !Array.isArray(run.results)) {
-		return [];
-	}
-
-	return dedupeResults(
-		run.results.map((entry) =>
-			normalizeEmbeddedSarifResult({
-				linterName,
-				normalizeReportedPath,
-				reportedPathRoots,
-				result: entry,
-				sourceRepositoryPath,
-				targetPaths,
-			}),
-		),
-	);
+function readEmbeddedSarifRun(result) {
+	return readSarifRun(readEmbeddedSarif(result));
 }
 
 function normalizeEmbeddedSarifResult({
@@ -582,17 +632,34 @@ function buildLinterSpecificSarifRules({
 }
 
 function hasEmbeddedSarifResults(result) {
-	const run = readSarifRun(readEmbeddedSarif(result));
+	const run = readEmbeddedSarifRun(result);
 	return Array.isArray(run?.results) && run.results.length > 0;
 }
 
 function buildEmbeddedSarifRules(result) {
-	const rules = readSarifRun(readEmbeddedSarif(result))?.tool?.driver?.rules;
+	return buildEmbeddedSarifRulesFromRun(readEmbeddedSarifRun(result));
+}
+
+function buildEmbeddedSarifRulesFromRun(run) {
+	const rules = run?.tool?.driver?.rules;
 	if (!Array.isArray(rules)) {
 		return null;
 	}
 
-	return dedupeRules(rules.map((rule) => structuredClone(rule)));
+	const deduped = dedupeRules(rules.map((rule) => structuredClone(rule)));
+	return deduped.length > 0 ? deduped : null;
+}
+
+function buildEmbeddedSarifRunMetadata(run) {
+	if (!run || typeof run !== "object") {
+		return null;
+	}
+
+	const metadata = structuredClone(run);
+	delete metadata.automationDetails;
+	delete metadata.results;
+	delete metadata.tool;
+	return Object.keys(metadata).length > 0 ? metadata : null;
 }
 
 function parsePathDiagnostics({
