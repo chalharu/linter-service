@@ -101,7 +101,7 @@ test("buildCargoClippyResult omits structured runs when no compiler diagnostics 
 		result.details,
 		/==> docker run cargo clippy --manifest-path Cargo\.toml --all-targets -- -D warnings/,
 	);
-	assert.match(result.details, /Finished `dev` profile/);
+	assert.doesNotMatch(result.details, /Finished `dev` profile/);
 });
 
 test("buildCargoClippyResult dedupes repeated compiler diagnostics", () => {

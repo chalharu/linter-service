@@ -12,7 +12,7 @@
 				"target_src_path": "src/lib.rs"
 			}
 		],
-		"details": "==> cargo rustc --manifest-path Cargo.toml --lib -- --emit=obj=/cargo-target/symbol-scan-1.o\n   Compiling fixture-pass v0.1.0 (/work)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in <duration>",
+		"details": "==> cargo rustc --manifest-path Cargo.toml --lib -- --emit=obj=/cargo-target/symbol-scan-1.o",
 		"exit_code": 0
 	},
 	"selected_files": ["Cargo.toml", "src/lib.rs"]

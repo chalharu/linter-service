@@ -1,6 +1,9 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const {
+	filterCargoProgressLines,
+} = require("../.github/scripts/lib/cargo-progress-lines.js");
+const {
 	parseJsonLines,
 } = require("../.github/scripts/lib/parse-json-lines.js");
 
@@ -273,9 +276,10 @@ function hasCargoDenyActionableRun(run) {
 		run.audit_reports.some(hasCargoDenyAuditFindings) ||
 		run.diagnostics.length > 0 ||
 		run.stderr_other_items.some((item) => item?.type !== "summary") ||
-		[...run.stdout_raw_lines, ...run.stderr_raw_lines].some(
-			(line) => String(line).trim().length > 0,
-		)
+		filterCargoProgressLines([
+			...run.stdout_raw_lines,
+			...run.stderr_raw_lines,
+		]).some((line) => String(line).trim().length > 0)
 	);
 }
 
@@ -312,7 +316,10 @@ function renderCargoDenyRunDetails(run) {
 		lines.push(...formatCargoDenyDiagnostic(run, diagnostic));
 	}
 
-	for (const rawLine of [...run.stdout_raw_lines, ...run.stderr_raw_lines]) {
+	for (const rawLine of filterCargoProgressLines([
+		...run.stdout_raw_lines,
+		...run.stderr_raw_lines,
+	])) {
 		lines.push(rawLine);
 	}
 

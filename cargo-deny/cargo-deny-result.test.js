@@ -200,3 +200,51 @@ test("buildCargoDenyResult ignores warning-only duplicate diagnostics", () => {
 		/warning\[duplicate\]: found 2 duplicate entries/,
 	);
 });
+
+test("buildCargoDenyResult drops cargo progress lines but keeps failure output", () => {
+	const result = buildCargoDenyResult({
+		exitCode: 1,
+		runs: [
+			{
+				command:
+					"cargo-deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output",
+				config_path: "",
+				exit_code: 1,
+				manifest_path: "Cargo.toml",
+				stderr: [
+					"   Compiling demo v0.1.0 (/work)",
+					"    Finished `dev` profile [unoptimized + debuginfo] target(s)",
+					"error: failed to load Cargo.lock",
+				].join("\n"),
+				stdout: "",
+			},
+		],
+	});
+
+	assert.doesNotMatch(result.details, /Compiling demo/);
+	assert.doesNotMatch(result.details, /Finished `dev` profile/);
+	assert.match(result.details, /error: failed to load Cargo\.lock/);
+});
+
+test("buildCargoDenyResult treats progress-only output as non-actionable", () => {
+	const result = buildCargoDenyResult({
+		exitCode: 1,
+		runs: [
+			{
+				command: "cargo-deny check",
+				config_path: "",
+				exit_code: 1,
+				manifest_path: "Cargo.toml",
+				stderr: [
+					"   Compiling demo v0.1.0 (/work)",
+					"    Finished `dev` profile [unoptimized + debuginfo] target(s)",
+				].join("\n"),
+				stdout: "",
+			},
+		],
+	});
+
+	assert.equal(result.exit_code, 0);
+	assert.doesNotMatch(result.details, /Compiling demo/);
+	assert.doesNotMatch(result.details, /Finished `dev` profile/);
+});

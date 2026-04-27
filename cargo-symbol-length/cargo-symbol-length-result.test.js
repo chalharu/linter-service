@@ -177,7 +177,8 @@ test("buildCargoSymbolLengthResult includes finding details in details string", 
 
 	assert.match(result.details, /Found 1 symbol\(s\) with length >= 1024/);
 	assert.match(result.details, /length: 1025/);
-	assert.match(result.details, /Compiling mylib/);
+	assert.doesNotMatch(result.details, /Compiling mylib/);
+	assert.doesNotMatch(result.details, /Finished `dev` profile/);
 });
 
 test("buildCargoSymbolLengthResult handles multiple runs", () => {

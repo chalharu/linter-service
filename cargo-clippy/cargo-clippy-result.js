@@ -1,6 +1,9 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const {
+	filterCargoProgressLines,
+} = require("../.github/scripts/lib/cargo-progress-lines.js");
+const {
 	parseJsonLines,
 } = require("../.github/scripts/lib/parse-json-lines.js");
 
@@ -274,19 +277,10 @@ function renderCargoClippyRunDetails(run) {
 	const rawLines = [...run.stdout_raw_lines, ...run.stderr_raw_lines]
 		.map((line) => String(line).trimEnd())
 		.filter((line) => line.trim().length > 0);
-	const progressLines = rawLines.filter((line) =>
-		/^\s*(?:Checking|Compiling|Finished)\b/u.test(line),
-	);
-	const trailingLines = rawLines.filter(
-		(line) => !/^\s*(?:Checking|Compiling|Finished)\b/u.test(line),
-	);
+	const trailingLines = filterCargoProgressLines(rawLines);
 
 	if (run.command) {
 		blocks.push(`==> ${run.command}`);
-	}
-
-	if (progressLines.length > 0) {
-		blocks.push(progressLines.join("\n"));
 	}
 
 	for (const diagnostic of [...run.diagnostics, ...run.warning_diagnostics]) {
