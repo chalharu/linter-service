@@ -576,20 +576,29 @@ async function signDispatchPayload(
 
 function stableStringify(value: unknown): string {
 	if (Array.isArray(value)) {
-		return `[${value.map((entry) => stableStringify(entry)).join(",")}]`;
+		return stableStringifyArray(value);
 	}
 
-	if (value && typeof value === "object") {
-		return `{${Object.keys(value)
-			.sort()
-			.map(
-				(key) =>
-					`${JSON.stringify(key)}:${stableStringify((value as JsonRecord)[key])}`,
-			)
-			.join(",")}}`;
+	if (isJsonRecord(value)) {
+		return stableStringifyObject(value);
 	}
 
 	return JSON.stringify(value);
+}
+
+function stableStringifyArray(value: readonly unknown[]): string {
+	return `[${value.map((entry) => stableStringify(entry)).join(",")}]`;
+}
+
+function isJsonRecord(value: unknown): value is JsonRecord {
+	return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function stableStringifyObject(value: JsonRecord): string {
+	return `{${Object.keys(value)
+		.sort()
+		.map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+		.join(",")}}`;
 }
 
 async function tryNotifyQueuedProcessingCheck(

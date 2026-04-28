@@ -383,26 +383,60 @@ function buildResultLabel(status) {
 	}
 }
 
-function normalizeSummary(summary, linterName) {
-	const normalizedConclusion =
-		typeof summary?.conclusion === "string" && summary.conclusion.length > 0
-			? summary.conclusion
-			: "failure";
-	const summaryText =
+function normalizeConclusion(summary) {
+	return typeof summary?.conclusion === "string" && summary.conclusion.length > 0
+		? summary.conclusion
+		: "failure";
+}
+
+function normalizeStatus(summary, normalizedConclusion) {
+	if (typeof summary?.status === "string" && summary.status.length > 0) {
+		return summary.status;
+	}
+
+	return normalizedConclusion === "success" ? "success" : "failure";
+}
+
+function normalizeCountsKnown(summary, normalizedConclusion, status) {
+	if (typeof summary?.counts_known === "boolean") {
+		return summary.counts_known;
+	}
+
+	return normalizedConclusion === "success" || status === "no_targets";
+}
+
+function resolveSummaryText(summary) {
+	if (
 		typeof summary?.summary_text === "string" &&
 		summary.summary_text.trim().length > 0
-			? summary.summary_text.trim()
-			: extractSummaryText(summary?.comment_body);
-	const status =
-		typeof summary?.status === "string" && summary.status.length > 0
-			? summary.status
-			: normalizedConclusion === "success"
-				? "success"
-				: "failure";
-	const countsKnown =
-		typeof summary?.counts_known === "boolean"
-			? summary.counts_known
-			: normalizedConclusion === "success" || status === "no_targets";
+	) {
+		return summary.summary_text.trim();
+	}
+
+	return extractSummaryText(summary?.comment_body);
+}
+
+function normalizeIssueTargetCount(issueTargetCount, countsKnown) {
+	return issueTargetCount !== null ? issueTargetCount : countsKnown ? 0 : null;
+}
+
+function normalizePassedTargetCount(passedTargetCount, countsKnown, targetCount) {
+	if (passedTargetCount !== null) {
+		return passedTargetCount;
+	}
+
+	return countsKnown && targetCount !== null ? targetCount : null;
+}
+
+function normalizeSummary(summary, linterName) {
+	const normalizedConclusion = normalizeConclusion(summary);
+	const summaryText = resolveSummaryText(summary);
+	const status = normalizeStatus(summary, normalizedConclusion);
+	const countsKnown = normalizeCountsKnown(
+		summary,
+		normalizedConclusion,
+		status,
+	);
 	const targetCount = normalizeTargetCount(summary);
 	const issueTargetCount = normalizeOptionalCount(summary?.issue_target_count);
 	const passedTargetCount = normalizeOptionalCount(
@@ -417,15 +451,13 @@ function normalizeSummary(summary, linterName) {
 			typeof summary?.details_text === "string"
 				? summary.details_text.trim()
 				: "",
-		issueTargetCount:
-			issueTargetCount !== null ? issueTargetCount : countsKnown ? 0 : null,
+		issueTargetCount: normalizeIssueTargetCount(issueTargetCount, countsKnown),
 		linterName,
-		passedTargetCount:
-			passedTargetCount !== null
-				? passedTargetCount
-				: countsKnown && targetCount !== null
-					? targetCount
-					: null,
+		passedTargetCount: normalizePassedTargetCount(
+			passedTargetCount,
+			countsKnown,
+			targetCount,
+		),
 		selectedFiles: normalizeStringArray(summary?.selected_files),
 		status,
 		summaryText:
@@ -565,8 +597,13 @@ module.exports = {
 	buildFallbackSummary,
 	buildResultLabel,
 	extractSummaryText,
+	normalizeCountsKnown,
+	normalizeConclusion,
+	normalizeIssueTargetCount,
+	normalizePassedTargetCount,
 	parseSelectedLinters,
 	readLinterSummaries,
 	renderCombinedReport,
+	resolveSummaryText,
 	runFromEnv,
 };

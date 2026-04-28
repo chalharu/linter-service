@@ -33,7 +33,7 @@ const baseEnv: Env = {
 	GITHUB_DISPATCH_REPO: "linter-service",
 };
 
-describe("github webhook proxy worker", () => {
+describe("github webhook proxy worker", function githubWebhookProxyWorkerSuite() {
 	beforeEach(() => {
 		vi.stubGlobal("fetch", vi.fn());
 	});

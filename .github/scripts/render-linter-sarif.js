@@ -20,6 +20,11 @@ const { collectProjectTargets } = require("./render-linter-report.js");
 const DETAILS_LIMIT = 8000;
 const MAX_FALLBACK_RESULTS = 25;
 const RULE_ID_PATTERN = /\b[A-Z][A-Z0-9_-]{1,15}\d{1,5}\b/u;
+const PATH_DIAGNOSTIC_PATTERNS = Object.freeze([
+	/^(?<path>.+?):(?<line>\d+):(?<column>\d+):\s*(?<message>.+)$/u,
+	/^(?<path>.+?):(?<line>\d+)\s+(?<rule>[A-Z][A-Z0-9_-]{1,15}\d{1,5})\s+(?<message>.+)$/u,
+	/^(?<path>.+?):(?<line>\d+):\s*(?<message>.+)$/u,
+]);
 
 function runFromEnv(env = process.env) {
 	const linterName = requireEnv(env, "LINTER_NAME");
@@ -75,33 +80,18 @@ function renderSarif({
 		targetKind,
 	});
 
-	if (selectedFiles.length === 0) {
-		return {
-			outputPath,
-			produced: false,
-			sarif: null,
-			targetStats: buildTargetStats({
-				results: [],
-				targetKind,
-				targetPaths,
-			}),
-		};
-	}
-
-	if (
-		[selectOutcome, installOutcome, runOutcome].includes("failure") ||
-		!result ||
-		!Number.isInteger(result.exit_code)
-	) {
-		return {
-			outputPath,
-			produced: false,
-			sarif: null,
-			targetStats: buildUnknownTargetStats({
-				targetKind,
-				targetPaths,
-			}),
-		};
+	const incompleteReport = buildIncompleteSarifReport({
+		installOutcome,
+		outputPath,
+		result,
+		runOutcome,
+		selectOutcome,
+		selectedFiles,
+		targetKind,
+		targetPaths,
+	});
+	if (incompleteReport) {
+		return incompleteReport;
 	}
 
 	const details = resolveDiagnosticDetails(
@@ -139,10 +129,107 @@ function renderSarif({
 		targetPaths,
 	});
 
+	return buildProducedSarifReport({
+		configPath,
+		embeddedSarif,
+		linterName,
+		outputPath,
+		result,
+		results,
+		runnerTemp,
+		sarifConfig,
+		targetStats,
+	});
+}
+
+function buildIncompleteSarifReport({
+	installOutcome,
+	outputPath,
+	result,
+	runOutcome,
+	selectOutcome,
+	selectedFiles,
+	targetKind,
+	targetPaths,
+}) {
+	if (selectedFiles.length === 0) {
+		return {
+			outputPath,
+			produced: false,
+			sarif: null,
+			targetStats: buildTargetStats({
+				results: [],
+				targetKind,
+				targetPaths,
+			}),
+		};
+	}
+
+	if (
+		[selectOutcome, installOutcome, runOutcome].includes("failure") ||
+		!result ||
+		!Number.isInteger(result.exit_code)
+	) {
+		return {
+			outputPath,
+			produced: false,
+			sarif: null,
+			targetStats: buildUnknownTargetStats({
+				targetKind,
+				targetPaths,
+			}),
+		};
+	}
+
+	return null;
+}
+
+function buildProducedSarifReport({
+	configPath,
+	embeddedSarif,
+	linterName,
+	outputPath,
+	result,
+	results,
+	runnerTemp,
+	sarifConfig,
+	targetStats,
+}) {
 	if (!sarifConfig) {
 		return { outputPath, produced: false, sarif: null, targetStats };
 	}
 
+	const rules = resolveSarifRules({
+		configPath,
+		embeddedSarif,
+		linterName,
+		result,
+		results,
+		runnerTemp,
+	});
+
+	return {
+		outputPath,
+		produced: true,
+		sarif: buildSarifEnvelope({
+			category: sarifConfig.category || `linter-service/${linterName}`,
+			results,
+			rules,
+			runMetadata: embeddedSarif?.runMetadata || null,
+			toolName: sarifConfig.tool_name || `linter-service/${linterName}`,
+		}),
+		targetStats,
+	};
+}
+
+function resolveSarifRules({
+	configPath,
+	embeddedSarif,
+	linterName,
+	result,
+	results,
+	runnerTemp,
+}) {
 	const linterSpecificRules =
 		embeddedSarif?.rules ||
 		buildLinterSpecificSarifRules({
@@ -151,25 +238,10 @@ function renderSarif({
 			result,
 			runnerTemp,
 		});
-	const rules =
-		linterSpecificRules === null
-			? buildRuleDescriptors(results)
-			: linterSpecificRules;
-	const category = sarifConfig.category || `linter-service/${linterName}`;
-	const toolName = sarifConfig.tool_name || `linter-service/${linterName}`;
 
-	return {
-		outputPath,
-		produced: true,
-		sarif: buildSarifEnvelope({
-			category,
-			results,
-			rules,
-			runMetadata: embeddedSarif?.runMetadata || null,
-			toolName,
-		}),
-		targetStats,
-	};
+	return linterSpecificRules === null
+		? buildRuleDescriptors(results)
+		: linterSpecificRules;
 }
 
 function readSarifConfig(linterConfig) {
@@ -670,11 +742,6 @@ function parsePathDiagnostics({
 	sourceRepositoryPath,
 	targetPaths,
 }) {
-	const patterns = [
-		/^(?<path>.+?):(?<line>\d+):(?<column>\d+):\s*(?<message>.+)$/u,
-		/^(?<path>.+?):(?<line>\d+)\s+(?<rule>[A-Z][A-Z0-9_-]{1,15}\d{1,5})\s+(?<message>.+)$/u,
-		/^(?<path>.+?):(?<line>\d+):\s*(?<message>.+)$/u,
-	];
 	const results = [];
 
 	for (const rawLine of details.split(/\r?\n/u)) {
@@ -684,43 +751,86 @@ function parsePathDiagnostics({
 			continue;
 		}
 
-		for (const pattern of patterns) {
-			const match = pattern.exec(line);
-
-			if (!match?.groups) {
-				continue;
-			}
-
-			const filePath = normalizeReportedPath(
-				sourceRepositoryPath,
-				match.groups.path,
-				targetPaths,
-				reportedPathRoots,
-			);
-
-			if (!filePath) {
-				continue;
-			}
-
-			results.push(
-				createResult({
-					column: parseInteger(match.groups.column),
-					defaultLevel,
-					filePath,
-					line: parseInteger(match.groups.line),
-					linterName,
-					message: match.groups.message.trim(),
-					ruleId:
-						match.groups.rule ||
-						extractRuleId(match.groups.message, linterName) ||
-						`${linterName}/diagnostic`,
-				}),
-			);
-			break;
+		const diagnosticResult = buildPathDiagnosticResult({
+			defaultLevel,
+			line,
+			linterName,
+			reportedPathRoots,
+			sourceRepositoryPath,
+			targetPaths,
+		});
+		if (diagnosticResult) {
+			results.push(diagnosticResult);
 		}
 	}
 
 	return results;
+}
+
+function buildPathDiagnosticResult({
+	defaultLevel,
+	line,
+	linterName,
+	reportedPathRoots,
+	sourceRepositoryPath,
+	targetPaths,
+}) {
+	for (const pattern of PATH_DIAGNOSTIC_PATTERNS) {
+		const diagnosticResult = buildPatternDiagnosticResult({
+			defaultLevel,
+			line,
+			linterName,
+			pattern,
+			reportedPathRoots,
+			sourceRepositoryPath,
+			targetPaths,
+		});
+		if (diagnosticResult) {
+			return diagnosticResult;
+		}
+	}
+
+	return null;
+}
+
+function buildPatternDiagnosticResult({
+	defaultLevel,
+	line,
+	linterName,
+	pattern,
+	reportedPathRoots,
+	sourceRepositoryPath,
+	targetPaths,
+}) {
+	const match = pattern.exec(line);
+
+	if (!match?.groups) {
+		return null;
+	}
+
+	const filePath = normalizeReportedPath(
+		sourceRepositoryPath,
+		match.groups.path,
+		targetPaths,
+		reportedPathRoots,
+	);
+
+	if (!filePath) {
+		return null;
+	}
+
+	return createResult({
+		column: parseInteger(match.groups.column),
+		defaultLevel,
+		filePath,
+		line: parseInteger(match.groups.line),
+		linterName,
+		message: match.groups.message.trim(),
+		ruleId:
+			match.groups.rule ||
+			extractRuleId(match.groups.message, linterName) ||
+			`${linterName}/diagnostic`,
+	});
 }
 
 function parseRustStyleDiagnostics({
