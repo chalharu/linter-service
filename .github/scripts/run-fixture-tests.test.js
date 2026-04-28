@@ -6,6 +6,7 @@ const test = require("node:test");
 
 const {
 	applyWorkflowEnvironment,
+	normalizeFixtureAssertionValue,
 	normalizeFixtureResult,
 	normalizeSarif,
 	parseArgs,
@@ -97,6 +98,7 @@ cat > "$RUNNER_TEMP/fake-bin/fake-tool" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 status=0
+printf 'markdownlint-cli2 v1.2.3\\n'
 for file in "$@"; do
   if grep -q 'FAIL' "$file"; then
     printf '%s:1:1: fake failure\\n' "$file"
@@ -223,6 +225,37 @@ test("normalizeFixtureResult removes temp paths and volatile durations", () => {
 	});
 });
 
+test("normalizeFixtureResult removes linter tool versions", () => {
+	const actual = normalizeFixtureResult({
+		report: {
+			checkedProjects: [],
+			selectedFiles: ["README.md"],
+		},
+		repositoryPath: "/tmp/fixture-run/repo",
+		result: {
+			details:
+				"markdownlint-cli2 v0.22.1 (markdownlint v0.40.0)\n" +
+				"program=ghalint version=1.5.5\n" +
+				"https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#ptr_arg\n" +
+				"unrelated rust-1.95.0 text stays intact",
+			exit_code: 1,
+		},
+	});
+
+	assert.deepEqual(actual, {
+		checked_projects: [],
+		result: {
+			details:
+				"markdownlint-cli2 v<version> (markdownlint v<version>)\n" +
+				"program=ghalint version=<version>\n" +
+				"https://rust-lang.github.io/rust-clippy/rust-<version>/index.html#ptr_arg\n" +
+				"unrelated rust-1.95.0 text stays intact",
+			exit_code: 1,
+		},
+		selected_files: ["README.md"],
+	});
+});
+
 test("normalizeFixtureResult stabilizes cargo-clippy compile error ordering", () => {
 	const actual = normalizeFixtureResult({
 		report: {
@@ -307,7 +340,20 @@ test("normalizeFixtureResult canonicalizes embedded SARIF results", () => {
 									{ id: "b", name: "b" },
 									{ id: "a", name: "a" },
 								],
+								semanticVersion: "1.2.3",
+								version: "1.2.3",
 							},
+							extensions: [
+								{
+									name: "demo-extension",
+									properties: {
+										config: {
+											version: "preserved",
+										},
+									},
+									version: "1.2.3",
+								},
+							],
 						},
 					},
 				],
@@ -365,6 +411,16 @@ test("normalizeFixtureResult canonicalizes embedded SARIF results", () => {
 									{ id: "b", name: "b" },
 								],
 							},
+							extensions: [
+								{
+									name: "demo-extension",
+									properties: {
+										config: {
+											version: "preserved",
+										},
+									},
+								},
+							],
 						},
 					},
 				],
@@ -372,6 +428,137 @@ test("normalizeFixtureResult canonicalizes embedded SARIF results", () => {
 			},
 		},
 		selected_files: ["src/index.js"],
+	});
+});
+
+test("normalizeFixtureAssertionValue removes embedded SARIF tool versions", () => {
+	const actual = normalizeFixtureAssertionValue({
+		checked_projects: [],
+		result: {
+			exit_code: 1,
+			sarif: {
+				runs: [
+					{
+						tool: {
+							driver: {
+								name: "demo",
+								version: "1.2.3",
+							},
+							extensions: [
+								{
+									name: "demo-extension",
+									properties: {
+										config: {
+											version: "preserved",
+										},
+									},
+									version: "1.2.3",
+								},
+							],
+						},
+					},
+				],
+				version: "2.1.0",
+			},
+		},
+		selected_files: ["src/index.js"],
+	});
+
+	assert.deepEqual(actual, {
+		checked_projects: [],
+		result: {
+			exit_code: 1,
+			sarif: {
+				runs: [
+					{
+						tool: {
+							driver: {
+								name: "demo",
+							},
+							extensions: [
+								{
+									name: "demo-extension",
+									properties: {
+										config: {
+											version: "preserved",
+										},
+									},
+								},
+							],
+						},
+					},
+				],
+				version: "2.1.0",
+			},
+		},
+		selected_files: ["src/index.js"],
+	});
+});
+
+test("normalizeFixtureResult preserves non-SARIF tool version fields", () => {
+	const actual = normalizeFixtureResult({
+		report: {
+			checkedProjects: [],
+			selectedFiles: ["README.md"],
+		},
+		repositoryPath: "/tmp/fixture-run/repo",
+		result: {
+			tool: {
+				driver: {
+					name: "not-sarif",
+					version: "1.2.3",
+				},
+			},
+			audit: {
+				runs: [
+					{
+						tool: {
+							driver: {
+								name: "not-sarif",
+								version: "1.2.3",
+							},
+							extensions: [
+								{
+									name: "not-sarif-extension",
+									version: "1.2.3",
+								},
+							],
+						},
+					},
+				],
+			},
+		},
+	});
+
+	assert.deepEqual(actual, {
+		checked_projects: [],
+		result: {
+			tool: {
+				driver: {
+					name: "not-sarif",
+					version: "1.2.3",
+				},
+			},
+			audit: {
+				runs: [
+					{
+						tool: {
+							driver: {
+								name: "not-sarif",
+								version: "1.2.3",
+							},
+							extensions: [
+								{
+									name: "not-sarif-extension",
+									version: "1.2.3",
+								},
+							],
+						},
+					},
+				],
+			},
+		},
+		selected_files: ["README.md"],
 	});
 });
 
@@ -405,6 +592,7 @@ test("normalizeSarif removes volatile timestamps and partial fingerprints", () =
 					tool: {
 						driver: {
 							rules: [{ id: "demo/error", name: "demo/error" }],
+							version: "1.2.3",
 						},
 					},
 				},
@@ -489,6 +677,47 @@ test("runFixtureTests can write and then verify fake linter fixtures", () => {
 			),
 			true,
 		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("runFixtureTests compares version-normalized fixture outputs", () => {
+	const context = makeTempRepo();
+	scaffoldFakeLinterRepo(context.repoDir);
+
+	try {
+		runFixtureTests({
+			linterNames: ["fake-linter"],
+			repositoryPath: context.repoDir,
+			write: true,
+		});
+
+		const passResultPath = path.join(
+			context.repoDir,
+			"fake-linter",
+			"tests",
+			"pass",
+			"result.json",
+		);
+		const recorded = fs.readFileSync(passResultPath, "utf8");
+		assert.match(recorded, /markdownlint-cli2 v<version>/u);
+		fs.writeFileSync(
+			passResultPath,
+			recorded.replace(
+				"markdownlint-cli2 v<version>",
+				"markdownlint-cli2 v9.9.9",
+			),
+			"utf8",
+		);
+
+		const verifyReport = runFixtureTests({
+			linterNames: ["fake-linter"],
+			repositoryPath: context.repoDir,
+			write: false,
+		});
+
+		assert.equal(verifyReport.linters[0].fixtures.length, 2);
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}
