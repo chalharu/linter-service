@@ -131,6 +131,8 @@ work_mount_src=""
 container_workdir="/work"
 image_ref=""
 command_args=()
+has_rustup_runtime_mount=0
+is_rustup_seed=0
 option_with_value=""
 for arg in "$@"; do
   if [ -n "$option_with_value" ]; then
@@ -140,6 +142,9 @@ for arg in "$@"; do
           *"dst=/work"*|*"target=/work"*)
             work_mount_src="\${arg#*src=}"
             work_mount_src="\${work_mount_src%%,*}"
+            ;;
+          *"dst=/usr/local/rustup"*|*"target=/usr/local/rustup"*)
+            has_rustup_runtime_mount=1
             ;;
         esac
         ;;
@@ -165,6 +170,25 @@ for arg in "$@"; do
   fi
   command_args+=("$arg")
 done
+
+if [ -n "\${DOCKER_RUN_ARGS_LOG:-}" ]; then
+  printf '%s\\n' "$*" >> "$DOCKER_RUN_ARGS_LOG"
+fi
+case "$*" in
+  *"tar -C /usr/local/rustup -cf - . | tar -xf - -C /rustup-home"*)
+    is_rustup_seed=1
+    ;;
+esac
+if [ "$is_rustup_seed" -eq 1 ]; then
+  if [ -n "\${FAIL_RUSTUP_SEED:-}" ]; then
+    printf 'seed rustup failed\\n' >&2
+    exit 1
+  fi
+  if [ -n "\${RUSTUP_STATE_FILE:-}" ]; then
+    : > "$RUSTUP_STATE_FILE"
+  fi
+  exit 0
+fi
 
 if [ "\${command_args[0]:-}" != "cargo" ]; then
   echo "unsupported docker cargo invocation: \${command_args[*]}" >&2
@@ -263,6 +287,12 @@ for i in "\${!normalized_command_args[@]}"; do
   esac
   normalized_prev="\${normalized_command_args[$i]}"
 done
+
+if [ -n "\${REQUIRE_WRITABLE_RUSTUP_HOME:-}" ] && { [ "$has_rustup_runtime_mount" -ne 1 ] || [ ! -f "\${RUSTUP_STATE_FILE:-}" ]; }; then
+  printf 'info: syncing channel updates for 1.95.0-x86_64-unknown-linux-gnu\\n' >&2
+  printf 'error: could not create temp file /usr/local/rustup/tmp/test_file: Read-only file system (os error 30)\\n' >&2
+  exit 1
+fi
 
 if [ "$cargo_subcommand" = "metadata" ]; then
   if [ -z "$manifest" ]; then
@@ -565,6 +595,119 @@ edition = "2021"
 			result.details,
 			/cargo deny --format json --color never --log-level warn --all-features --manifest-path crates\/member\/Cargo\.toml check --audit-compatible-output --config crates\/member\/deny\.toml/,
 		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("cargo-deny.sh seeds writable rustup state before runtime cargo deny", () => {
+	const context = makeTempRepo("cargo-deny-rustup-home-");
+	const argsLog = path.join(context.tempDir, "cargo-deny-args.log");
+	const dockerRunArgsLog = path.join(context.tempDir, "docker-run-args.log");
+	const rustupStateFile = path.join(context.tempDir, "rustup-state");
+
+	createCargoDenyStub(context.binDir);
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		`[workspace]
+members = ["crates/member"]
+resolver = "2"
+`,
+	);
+	writeFile(path.join(context.repoDir, "Cargo.lock"), "version = 3\n");
+	writeFile(
+		path.join(context.repoDir, "crates/member/Cargo.toml"),
+		`[package]
+name = "member"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+	writeFile(
+		path.join(context.repoDir, "rust-toolchain.toml"),
+		`[toolchain]
+channel = "1.95.0"
+`,
+	);
+
+	try {
+		const output = execFileSync("bash", [runPath, "crates/member/Cargo.toml"], {
+			cwd: context.repoDir,
+			encoding: "utf8",
+			env: createEnv(context, {
+				CARGO_DENY_ARGS_LOG: argsLog,
+				DOCKER_RUN_ARGS_LOG: dockerRunArgsLog,
+				REQUIRE_WRITABLE_RUSTUP_HOME: "1",
+				RUSTUP_STATE_FILE: rustupStateFile,
+			}),
+		});
+		const result = JSON.parse(output);
+		const runArgs = fs.readFileSync(dockerRunArgsLog, "utf8");
+
+		assert.equal(result.exit_code, 0);
+		assert.equal(fs.existsSync(rustupStateFile), true);
+		assert.match(
+			runArgs,
+			/sh -ceu tar -C \/usr\/local\/rustup -cf - \. \| tar -xf - -C \/rustup-home/,
+		);
+		assert.match(runArgs, /dst=\/rustup-home/);
+		assert.match(runArgs, /dst=\/usr\/local\/rustup/);
+		assert.deepEqual(
+			result.cargo_deny_runs.map((run) => run.manifest_path),
+			["Cargo.toml"],
+		);
+		assert.deepEqual(fs.readFileSync(argsLog, "utf8").trim().split("\n"), [
+			"cargo deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output",
+		]);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("cargo-deny.sh reports rustup seed failures as linter JSON", () => {
+	const context = makeTempRepo("cargo-deny-rustup-seed-failure-");
+	const argsLog = path.join(context.tempDir, "cargo-deny-args.log");
+	const dockerRunArgsLog = path.join(context.tempDir, "docker-run-args.log");
+
+	createCargoDenyStub(context.binDir);
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		`[package]
+name = "root"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+
+	try {
+		const output = execFileSync("bash", [runPath, "Cargo.toml"], {
+			cwd: context.repoDir,
+			encoding: "utf8",
+			env: createEnv(context, {
+				CARGO_DENY_ARGS_LOG: argsLog,
+				DOCKER_RUN_ARGS_LOG: dockerRunArgsLog,
+				FAIL_RUSTUP_SEED: "1",
+			}),
+		});
+		const result = JSON.parse(output);
+		const dockerRuns = fs
+			.readFileSync(dockerRunArgsLog, "utf8")
+			.trim()
+			.split("\n");
+
+		assert.equal(result.exit_code, 1);
+		assert.equal(result.cargo_deny_runs.length, 1);
+		assert.equal(
+			result.cargo_deny_runs[0].command,
+			"docker run seed writable rustup home",
+		);
+		assert.match(result.details, /seed rustup failed/);
+		assert.equal(dockerRuns.length, 1);
+		assert.match(
+			dockerRuns[0],
+			/sh -ceu tar -C \/usr\/local\/rustup -cf - \. \| tar -xf - -C \/rustup-home/,
+		);
+		assert.equal(fs.existsSync(argsLog), false);
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}
