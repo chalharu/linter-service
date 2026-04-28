@@ -17,6 +17,18 @@ const { renderSarif } = require("./render-linter-sarif.js");
 const { selectFiles } = require("./linter-targeting.js");
 const { applyWorkflowEnvironment } = require("./workflow-command-env.js");
 
+const SARIF_TOOL_VERSION_KEYS = new Set([
+	"dottedQuadFileVersion",
+	"semanticVersion",
+	"version",
+]);
+const TOOL_VERSION_TEXT_PATTERN =
+	/\b((?:markdownlint-cli2|markdownlint) v)\d+(?:\.\d+)+(?:[-+][0-9A-Za-z.-]+)?\b/gu;
+const KEYED_TOOL_VERSION_TEXT_PATTERN =
+	/\b(program=[A-Za-z0-9_.-]+\s+version=)\d+(?:\.\d+)+(?:[-+][0-9A-Za-z.-]+)?\b/gu;
+const RUST_CLIPPY_DOC_VERSION_PATTERN =
+	/(https:\/\/rust-lang\.github\.io\/rust-clippy\/rust-)\d+(?:\.\d+)+(?:[-+][0-9A-Za-z.-]+)?(?=\/)/gu;
+
 function runCli(argv = process.argv.slice(2), env = process.env) {
 	const options = parseArgs(argv);
 	return runFixtureTests({
@@ -318,9 +330,11 @@ function normalizeFixtureResult({ report, repositoryPath, result }) {
 	});
 }
 
-function sanitizeFixtureValue(value, repositoryPath) {
+function sanitizeFixtureValue(value, repositoryPath, pathParts = []) {
 	if (Array.isArray(value)) {
-		return value.map((entry) => sanitizeFixtureValue(entry, repositoryPath));
+		return value.map((entry, index) =>
+			sanitizeFixtureValue(entry, repositoryPath, [...pathParts, index]),
+		);
 	}
 
 	if (!value || typeof value !== "object") {
@@ -330,11 +344,67 @@ function sanitizeFixtureValue(value, repositoryPath) {
 	}
 
 	return Object.fromEntries(
-		Object.entries(value).map(([key, entry]) => [
-			key,
-			sanitizeFixtureValue(entry, repositoryPath),
-		]),
+		Object.entries(value).flatMap(([key, entry]) =>
+			isSarifToolVersionField(key, pathParts)
+				? []
+				: [
+						[
+							key,
+							sanitizeFixtureValue(entry, repositoryPath, [...pathParts, key]),
+						],
+					],
+		),
 	);
+}
+
+function isSarifToolVersionField(key, pathParts) {
+	if (!SARIF_TOOL_VERSION_KEYS.has(key)) {
+		return false;
+	}
+
+	const parentKey = pathParts[pathParts.length - 1];
+	return (
+		isSarifToolDriverVersionField(parentKey, pathParts) ||
+		isSarifToolExtensionVersionField(parentKey, pathParts)
+	);
+}
+
+function isSarifToolDriverVersionField(parentKey, pathParts) {
+	if (parentKey !== "driver") {
+		return false;
+	}
+
+	const pathTail = pathParts.slice(-4);
+	return (
+		pathTail.length === 4 &&
+		pathTail[0] === "runs" &&
+		Number.isInteger(pathTail[1]) &&
+		pathTail[2] === "tool" &&
+		pathTail[3] === "driver" &&
+		hasSarifRootPrefix(pathParts, pathTail.length)
+	);
+}
+
+function isSarifToolExtensionVersionField(parentKey, pathParts) {
+	if (!Number.isInteger(parentKey)) {
+		return false;
+	}
+
+	const pathTail = pathParts.slice(-5);
+	return (
+		pathTail.length === 5 &&
+		pathTail[0] === "runs" &&
+		Number.isInteger(pathTail[1]) &&
+		pathTail[2] === "tool" &&
+		pathTail[3] === "extensions" &&
+		Number.isInteger(pathTail[4]) &&
+		hasSarifRootPrefix(pathParts, pathTail.length)
+	);
+}
+
+function hasSarifRootPrefix(pathParts, tailLength) {
+	const prefix = pathParts.slice(0, -tailLength);
+	return prefix.length === 0 || (prefix.length === 1 && prefix[0] === "sarif");
 }
 
 function sanitizeFixtureString(value, repositoryPath) {
@@ -356,6 +426,9 @@ function sanitizeFixtureString(value, repositoryPath) {
 				return `${orderedErrors[0]}\n${warningLine}\n${orderedErrors[1]}`;
 			},
 		)
+		.replace(TOOL_VERSION_TEXT_PATTERN, "$1<version>")
+		.replace(KEYED_TOOL_VERSION_TEXT_PATTERN, "$1<version>")
+		.replace(RUST_CLIPPY_DOC_VERSION_PATTERN, "$1<version>")
 		.replace(
 			/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+\d\d:\d\d:\d\d(?:\.\d+)?\b/gu,
 			"<timestamp>",
@@ -469,7 +542,14 @@ function assertJsonFixture(actualValue, expectedPath) {
 	}
 
 	const expectedValue = JSON.parse(fs.readFileSync(expectedPath, "utf8"));
-	assert.deepStrictEqual(actualValue, expectedValue);
+	assert.deepStrictEqual(
+		normalizeFixtureAssertionValue(actualValue),
+		normalizeFixtureAssertionValue(expectedValue),
+	);
+}
+
+function normalizeFixtureAssertionValue(value) {
+	return sanitizeFixtureValue(value, "");
 }
 
 function writeJsonFixture(outputPath, value) {

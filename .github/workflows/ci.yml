@@ -49,6 +49,7 @@ jobs:
             .github/scripts/run-linter-batch.test.js \
             .github/scripts/prune-renovate-cache-images.test.js \
             .github/scripts/repository-dispatch-workflow.test.js \
+            .github/scripts/run-fixture-tests.test.js \
             .github/scripts/validate-linters-config.test.js \
             .github/scripts/validate-linter-service-config.test.js \
             .github/scripts/linter-service-config.test.js \
