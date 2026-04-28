@@ -67,6 +67,7 @@ jobs:
           node-version: 24
       - name: Log in to GHCR for Renovate image cache
         if: ${{ env.RENOVATE_PUSH_IMAGE == 'true' }}
+        continue-on-error: true
         env:
           GHCR_TOKEN: ${{ github.token }}
           GHCR_USERNAME: ${{ github.actor }}

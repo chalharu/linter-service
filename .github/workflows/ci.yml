@@ -48,6 +48,7 @@ jobs:
             .github/scripts/render-linter-report.test.js \
             .github/scripts/run-linter-batch.test.js \
             .github/scripts/prune-renovate-cache-images.test.js \
+            .github/scripts/repository-dispatch-workflow.test.js \
             .github/scripts/validate-linters-config.test.js \
             .github/scripts/validate-linter-service-config.test.js \
             .github/scripts/linter-service-config.test.js \
@@ -112,6 +113,7 @@ jobs:
           persist-credentials: false
       - name: Log in to GHCR for Renovate image cache
         if: ${{ env.RENOVATE_PUSH_IMAGE == 'true' }}
+        continue-on-error: true
         env:
           GHCR_TOKEN: ${{ github.token }}
           GHCR_USERNAME: ${{ github.actor }}

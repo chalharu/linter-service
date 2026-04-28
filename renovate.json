@@ -2,11 +2,55 @@
 	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
 	"extends": [
 		"config:recommended",
-		"helpers:pinGitHubActionDigests",
-		":disableRateLimiting"
+		":disableRateLimiting",
+		":dependencyDashboard"
 	],
-	"enabledManagers": ["github-actions", "npm", "custom.regex"],
+	"timezone": "Asia/Tokyo",
+	"configMigration": true,
+	"configWarningReuseIssue": false,
+	"labels": [
+		"renovate"
+	],
+	"rebaseWhen": "behind-base-branch",
+	"pruneStaleBranches": true,
+	"separateMajorMinor": true,
+	"separateMinorPatch": true,
+	"separateMultipleMajor": true,
+	"separateMultipleMinor": true,
+	"automerge": true,
+	"automergeStrategy": "auto",
+	"platformAutomerge": false,
+	"pinDigests": true,
+	"internalChecksFilter": "none",
+	"prCreation": "immediate",
+	"vulnerabilityAlerts": {
+		"enabled": true,
+		"labels": [
+			"renovate",
+			"security"
+		],
+		"minimumReleaseAge": null
+	},
+	"lockFileMaintenance": {
+		"enabled": true
+	},
+	"rangeStrategy": "pin",
+	"minimumReleaseAge": "3 days",
+	"minimumReleaseAgeBehaviour": "timestamp-required",
 	"customManagers": [
+		{
+			"customType": "regex",
+			"description": "Update renovate-version in the Renovate workflow",
+			"managerFilePatterns": [
+				"/(^|/)\\.github/workflows/renovate\\.ya?ml$/"
+			],
+			"matchStrings": [
+				"(?:^|\\n)\\s+renovate-version:\\s*['\"]?(?<currentValue>[^\\s'\"]+)['\"]?\\s*(?:\\n|$)"
+			],
+			"datasourceTemplate": "docker",
+			"depNameTemplate": "ghcr.io/renovatebot/renovate",
+			"versioningTemplate": "docker"
+		},
 		{
 			"customType": "regex",
 			"description": "Update pinned linter installer versions and Renovate base image pins",
@@ -28,45 +72,6 @@
 			"matchStrings": [
 				"(?m)^\\s*-\\s*\"?(?<depName>(?:@[^/\\s\"#]+/)?textlint-rule-preset-[^@\\s\"#]+)@(?<currentValue>[^\"\\s#]+)\"?\\s*$"
 			]
-		}
-	],
-	"labels": ["dependencies", "renovate", "renovate-gate-wait-3d"],
-	"dependencyDashboard": true,
-	"lockFileMaintenance": {
-		"enabled": true
-	},
-	"prCreation": "immediate",
-	"rebaseWhen": "behind-base-branch",
-	"timezone": "Asia/Tokyo",
-	"automergeStrategy": "auto",
-	"pruneStaleBranches": false,
-	"separateMajorMinor": true,
-	"separateMinorPatch": true,
-	"separateMultipleMajor": true,
-	"separateMultipleMinor": true,
-	"automerge": true,
-	"platformAutomerge": false,
-	"vulnerabilityAlerts": {
-		"enabled": true,
-		"labels": ["dependencies", "renovate", "security"]
-	},
-	"packageRules": [
-		{
-			"description": "Give each target version or digest its own Renovate branch",
-			"matchUpdateTypes": [
-				"digest",
-				"major",
-				"minor",
-				"patch",
-				"pin",
-				"pinDigest"
-			],
-			"branchTopic": "{{{depNameSanitized}}}{{#if newVersion}}__v{{{newVersion}}}{{/if}}{{#if newDigestShort}}__d{{{newDigestShort}}}{{/if}}"
-		},
-		{
-			"description": "Hold pinned linter installer updates for three days",
-			"matchManagers": ["custom.regex"],
-			"minimumReleaseAge": "3 days"
 		}
 	]
 }

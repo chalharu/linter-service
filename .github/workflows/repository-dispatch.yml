@@ -25,9 +25,9 @@ jobs:
     timeout-minutes: 30
     outputs:
       pull-request-number: ${{ steps.collect.outputs.pull-request-number }}
+      publish-results: ${{ steps.collect.outputs.publish-results }}
       selected-linter-jobs-json: ${{ steps.collect.outputs.selected-linter-jobs-json }}
       selected-linters-json: ${{ steps.collect.outputs.selected-linters-json }}
-      skip-reason: ${{ steps.collect.outputs.skip-reason }}
     env:
       PULL_REQUEST_NUMBER: ${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.event_name == 'repository_dispatch' && github.event.client_payload.pull_request.number || '' }}
       ROUTED_EVENT_NAME: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.event_name || github.event_name }}
@@ -283,6 +283,7 @@ jobs:
               );
               core.setOutput("selected-linters-json", JSON.stringify(selectedLinters));
               core.setOutput("skip-reason", skipReason);
+              core.setOutput("publish-results", skipReason === "" ? "true" : "false");
             };
             const defaultServiceConfig = {
               exists: false,
@@ -530,7 +531,7 @@ jobs:
             echo "No configured linters matched the selected target files."
           fi
       - name: Mask source repository context
-        if: ${{ steps.collect.outputs.skip-reason == '' && steps.collect.outputs.selected-linters-json != '[]' }}
+        if: ${{ steps.collect.outputs.publish-results == 'true' && steps.collect.outputs.selected-linters-json != '[]' }}
         env:
           CONTEXT_PATH: ${{ steps.collect.outputs.context-path }}
           LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
@@ -542,7 +543,7 @@ jobs:
             source_repo \
             source_head_sha
       - name: Decode source repository context
-        if: ${{ steps.collect.outputs.skip-reason == '' && steps.collect.outputs.selected-linters-json != '[]' }}
+        if: ${{ steps.collect.outputs.publish-results == 'true' && steps.collect.outputs.selected-linters-json != '[]' }}
         id: decode_source_context
         env:
           CONTEXT_PATH: ${{ steps.collect.outputs.context-path }}
@@ -558,7 +559,7 @@ jobs:
             source_owner=source-owner \
             source_repo=source-repo
       - name: Derive artifact passphrase
-        if: ${{ steps.collect.outputs.skip-reason == '' }}
+        if: ${{ steps.collect.outputs.publish-results == 'true' }}
         env:
           CHECKER_PRIVATE_KEY: ${{ secrets.CHECKER_PRIVATE_KEY }}
           LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
@@ -567,7 +568,7 @@ jobs:
           echo "::add-mask::$passphrase"
           echo "ARTIFACT_PASSPHRASE=$passphrase" >> "$GITHUB_ENV"
       - name: Encrypt dispatch context artifact
-        if: ${{ steps.collect.outputs.skip-reason == '' }}
+        if: ${{ steps.collect.outputs.publish-results == 'true' }}
         env:
           CONTEXT_PATH: ${{ steps.collect.outputs.context-path }}
           LINTER_SERVICE_PATH: ${{ github.workspace }}/linter-service
@@ -579,7 +580,7 @@ jobs:
             "$encrypted_path"
           rm -f "$CONTEXT_PATH"
       - name: Upload dispatch context artifact
-        if: ${{ steps.collect.outputs.skip-reason == '' }}
+        if: ${{ steps.collect.outputs.publish-results == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: detect-targets-context
@@ -587,7 +588,7 @@ jobs:
           if-no-files-found: error
           retention-days: 1
       - name: Get source repository checker token
-        if: ${{ steps.collect.outputs.skip-reason == '' && steps.collect.outputs.selected-linters-json != '[]' }}
+        if: ${{ steps.collect.outputs.publish-results == 'true' && steps.collect.outputs.selected-linters-json != '[]' }}
         id: get_source_token
         uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
         with:
@@ -597,7 +598,7 @@ jobs:
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ steps.decode_source_context.outputs.source-repo }}
       - name: Notify processing start
-        if: ${{ steps.collect.outputs.skip-reason == '' && steps.collect.outputs.selected-linters-json != '[]' }}
+        if: ${{ steps.collect.outputs.publish-results == 'true' && steps.collect.outputs.selected-linters-json != '[]' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
           CHECK_RUN_EXTERNAL_ID: ${{ steps.decode_source_context.outputs.processing-check-external-id }}
@@ -657,7 +658,7 @@ jobs:
     needs:
       - detect-targets
       - run-linters
-    if: ${{ always() && needs.detect-targets.outputs.skip-reason == '' }}
+    if: ${{ always() && needs.detect-targets.outputs.publish-results == 'true' }}
     permissions:
       contents: read
     runs-on: ubuntu-latest
