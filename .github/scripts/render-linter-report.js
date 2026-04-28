@@ -373,21 +373,55 @@ const SUMMARY_TEXT_BUILDERS = Object.freeze({
 	warning: buildWarningSummaryText,
 });
 
-function normalizeProvidedTargetStats(targetStats, status) {
-	const targetKind =
-		targetStats.target_kind === "cargo-project" ||
+function resolveProvidedTargetKind(targetStats) {
+	return targetStats.target_kind === "cargo-project" ||
 		targetStats.targetKind === "cargo-project"
-			? "cargo-project"
-			: "file";
+		? "cargo-project"
+		: "file";
+}
+
+function resolveProvidedCountsKnown(targetStats, status) {
+	if (typeof targetStats.counts_known === "boolean") {
+		return targetStats.counts_known;
+	}
+
+	if (typeof targetStats.countsKnown === "boolean") {
+		return targetStats.countsKnown;
+	}
+
+	return status === "success" || status === "no_targets";
+}
+
+function normalizeProvidedIssueTargetCount({
+	countsKnown,
+	issueTargetCount,
+	status,
+}) {
+	if (countsKnown && issueTargetCount === null && status !== "infra_failure") {
+		return 0;
+	}
+
+	return issueTargetCount;
+}
+
+function normalizeProvidedPassedTargetCount({
+	countsKnown,
+	passedTargetCount,
+	targetCount,
+}) {
+	if (countsKnown && passedTargetCount === null && targetCount !== null) {
+		return targetCount;
+	}
+
+	return passedTargetCount;
+}
+
+function normalizeProvidedTargetStats(targetStats, status) {
+	const targetKind = resolveProvidedTargetKind(targetStats);
 	const targetCount = normalizeOptionalCount(
 		targetStats.target_count ?? targetStats.targetCount,
 	);
-	const countsKnown =
-		typeof targetStats.counts_known === "boolean"
-			? targetStats.counts_known
-			: typeof targetStats.countsKnown === "boolean"
-				? targetStats.countsKnown
-				: status === "success" || status === "no_targets";
+	const countsKnown = resolveProvidedCountsKnown(targetStats, status);
 	const issueTargetCount = normalizeOptionalCount(
 		targetStats.issue_target_count ?? targetStats.issueTargetCount,
 	);
@@ -400,14 +434,16 @@ function normalizeProvidedTargetStats(targetStats, status) {
 		issueCount: normalizeOptionalCount(
 			targetStats.issue_count ?? targetStats.issueCount,
 		),
-		issueTargetCount:
-			countsKnown && issueTargetCount === null && status !== "infra_failure"
-				? 0
-				: issueTargetCount,
-		passedTargetCount:
-			countsKnown && passedTargetCount === null && targetCount !== null
-				? targetCount
-				: passedTargetCount,
+		issueTargetCount: normalizeProvidedIssueTargetCount({
+			countsKnown,
+			issueTargetCount,
+			status,
+		}),
+		passedTargetCount: normalizeProvidedPassedTargetCount({
+			countsKnown,
+			passedTargetCount,
+			targetCount,
+		}),
 		targetCount,
 		targetKind,
 	};
