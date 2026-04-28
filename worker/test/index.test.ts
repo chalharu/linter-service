@@ -33,16 +33,16 @@ const baseEnv: Env = {
 	GITHUB_DISPATCH_REPO: "linter-service",
 };
 
-describe("github webhook proxy worker", () => {
-	beforeEach(() => {
-		vi.stubGlobal("fetch", vi.fn());
-	});
+beforeEach(() => {
+	vi.stubGlobal("fetch", vi.fn());
+});
 
-	afterEach(() => {
-		vi.unstubAllGlobals();
-		vi.restoreAllMocks();
-	});
+afterEach(() => {
+	vi.unstubAllGlobals();
+	vi.restoreAllMocks();
+});
 
+describe("github webhook proxy worker pull_request events", () => {
 	it("dispatches normalized pull_request payloads with the dispatcher app", async () => {
 		const fetchMock = vi.mocked(fetch);
 
@@ -703,7 +703,9 @@ describe("github webhook proxy worker", () => {
 		});
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
+});
 
+describe("github webhook proxy worker push events", () => {
 	it("dispatches default-branch push payloads with the dispatcher app", async () => {
 		const fetchMock = vi.mocked(fetch);
 
@@ -865,7 +867,9 @@ describe("github webhook proxy worker", () => {
 		});
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
+});
 
+describe("github webhook proxy worker check_run events", () => {
 	it("skips pull-request-associated check_run events to avoid duplicate lint runs", async () => {
 		const fetchMock = vi.mocked(fetch);
 
@@ -1065,7 +1069,9 @@ describe("github webhook proxy worker", () => {
 		});
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
+});
 
+describe("github webhook proxy worker error handling", () => {
 	it("sanitizes upstream GitHub API failures", async () => {
 		const fetchMock = vi.mocked(fetch);
 		const consoleError = vi

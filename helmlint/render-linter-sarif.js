@@ -18,57 +18,93 @@ function buildSarifResults({
 	for (const rawLine of details.split(/\r?\n/u)) {
 		const line = rawLine.trim();
 
-		if (line.length === 0 || line.startsWith("Error: ")) {
+		if (shouldSkipHelmLintLine(line)) {
 			continue;
 		}
 
-		const chartMatch = /^==>\s+(?:helm lint|Linting)\s+(?<chartRoot>.+)$/u.exec(
-			line,
-		);
-		if (chartMatch?.groups?.chartRoot) {
-			currentChartRoot = chartMatch.groups.chartRoot.trim();
+		const nextChartRoot = parseChartRoot(line);
+		if (nextChartRoot) {
+			currentChartRoot = nextChartRoot;
 			continue;
 		}
 
-		const diagnosticMatch =
-			/^\[(?<level>INFO|WARNING|ERROR)\]\s+(?<path>[^:]+):\s*(?<message>.+)$/u.exec(
-				line,
-			);
-		if (!diagnosticMatch?.groups) {
-			continue;
-		}
-
-		const filePath = resolveHelmLintPath({
+		const diagnosticResult = buildHelmLintDiagnosticResult({
+			createResult,
 			currentChartRoot,
+			defaultLevel,
+			line,
+			linterName,
 			normalizeReportedPath,
-			reportedPath: diagnosticMatch.groups.path.trim(),
+			parseInteger,
 			reportedPathRoots,
 			sourceRepositoryPath,
 			targetPaths,
 		});
-		const lineMatch = /\bline (?<line>\d+)\b/u.exec(
-			diagnosticMatch.groups.message,
-		);
-
-		results.push(
-			createResult({
-				defaultLevel,
-				filePath,
-				line: parseInteger(lineMatch?.groups?.line ?? null),
-				level:
-					{
-						ERROR: "error",
-						INFO: "note",
-						WARNING: "warning",
-					}[diagnosticMatch.groups.level] ?? defaultLevel,
-				linterName,
-				message: line,
-				ruleId: `${linterName}/diagnostic`,
-			}),
-		);
+		if (diagnosticResult) {
+			results.push(diagnosticResult);
+		}
 	}
 
 	return dedupeResults(results);
+}
+
+function shouldSkipHelmLintLine(line) {
+	return line.length === 0 || line.startsWith("Error: ");
+}
+
+function parseChartRoot(line) {
+	const chartMatch = /^==>\s+(?:helm lint|Linting)\s+(?<chartRoot>.+)$/u.exec(
+		line,
+	);
+	return chartMatch?.groups?.chartRoot?.trim() || null;
+}
+
+function buildHelmLintDiagnosticResult({
+	createResult,
+	currentChartRoot,
+	defaultLevel,
+	line,
+	linterName,
+	normalizeReportedPath,
+	parseInteger,
+	reportedPathRoots,
+	sourceRepositoryPath,
+	targetPaths,
+}) {
+	const diagnosticMatch =
+		/^\[(?<level>INFO|WARNING|ERROR)\]\s+(?<path>[^:]+):\s*(?<message>.+)$/u.exec(
+			line,
+		);
+	if (!diagnosticMatch?.groups) {
+		return null;
+	}
+
+	const filePath = resolveHelmLintPath({
+		currentChartRoot,
+		normalizeReportedPath,
+		reportedPath: diagnosticMatch.groups.path.trim(),
+		reportedPathRoots,
+		sourceRepositoryPath,
+		targetPaths,
+	});
+	const lineMatch = /\bline (?<line>\d+)\b/u.exec(
+		diagnosticMatch.groups.message,
+	);
+
+	return createResult({
+		defaultLevel,
+		filePath,
+		line: parseInteger(lineMatch?.groups?.line ?? null),
+		level:
+			{
+				ERROR: "error",
+				INFO: "note",
+				WARNING: "warning",
+			}[diagnosticMatch.groups.level] ?? defaultLevel,
+		linterName,
+		message: line,
+		ruleId: `${linterName}/diagnostic`,
+	});
 }
 
 function resolveHelmLintPath({

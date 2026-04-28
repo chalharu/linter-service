@@ -575,21 +575,27 @@ async function signDispatchPayload(
 }
 
 function stableStringify(value: unknown): string {
+	return JSON.stringify(normalizeStableJsonValue(value));
+}
+
+function isJsonRecord(value: unknown): value is JsonRecord {
+	return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeStableJsonValue(value: unknown): unknown {
 	if (Array.isArray(value)) {
-		return `[${value.map((entry) => stableStringify(entry)).join(",")}]`;
+		return value.map((entry) => normalizeStableJsonValue(entry));
 	}
 
-	if (value && typeof value === "object") {
-		return `{${Object.keys(value)
+	if (!isJsonRecord(value)) {
+		return value;
+	}
+
+	return Object.fromEntries(
+		Object.keys(value)
 			.sort()
-			.map(
-				(key) =>
-					`${JSON.stringify(key)}:${stableStringify((value as JsonRecord)[key])}`,
-			)
-			.join(",")}}`;
-	}
-
-	return JSON.stringify(value);
+			.map((key) => [key, normalizeStableJsonValue(value[key])]),
+	);
 }
 
 async function tryNotifyQueuedProcessingCheck(

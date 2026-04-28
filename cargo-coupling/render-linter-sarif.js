@@ -15,60 +15,99 @@ function buildSarifResults({
 	const runs = Array.isArray(result?.cargo_coupling_runs)
 		? result.cargo_coupling_runs
 		: [];
-	const results = [];
 
-	for (const run of runs) {
-		const modulePaths = buildModulePathMap({
-			jsonOutput: run?.json_output,
-			normalizeReportedPath,
-			reportedPathRoots,
-			sourceRepositoryPath,
-			targetPaths,
+	return dedupeResults(
+		runs.flatMap((run) =>
+			buildRunResults({
+				createResult,
+				linterName,
+				normalizeReportedPath,
+				reportedPathRoots,
+				run,
+				sourceRepositoryPath,
+				targetPaths,
+			}),
+		),
+	);
+}
+
+function buildRunResults({
+	createResult,
+	linterName,
+	normalizeReportedPath,
+	reportedPathRoots,
+	run,
+	sourceRepositoryPath,
+	targetPaths,
+}) {
+	const modulePaths = buildModulePathMap({
+		jsonOutput: run?.json_output,
+		normalizeReportedPath,
+		reportedPathRoots,
+		sourceRepositoryPath,
+		targetPaths,
+	});
+
+	return [
+		...buildIssueResults({ createResult, linterName, modulePaths, run }),
+		...buildCircularDependencyResults({
+			createResult,
+			linterName,
+			modulePaths,
+			run,
+		}),
+	];
+}
+
+function buildIssueResults({ createResult, linterName, modulePaths, run }) {
+	const issues = Array.isArray(run?.json_output?.issues)
+		? run.json_output.issues
+		: [];
+
+	return issues.map((issue) => {
+		const source = String(issue?.source || "").trim();
+		const target = String(issue?.target || "").trim();
+		const filePath = modulePaths.get(source) || modulePaths.get(target) || null;
+		return createResult({
+			column: filePath ? 1 : null,
+			filePath,
+			level: mapIssueLevel(issue?.severity),
+			line: filePath ? 1 : null,
+			linterName,
+			message: buildIssueMessage(issue),
+			ruleId: slugifyIssueType(issue?.issue_type),
 		});
+	});
+}
 
-		for (const issue of Array.isArray(run?.json_output?.issues)
-			? run.json_output.issues
-			: []) {
-			const source = String(issue?.source || "").trim();
-			const target = String(issue?.target || "").trim();
-			const filePath =
-				modulePaths.get(source) || modulePaths.get(target) || null;
-			results.push(
-				createResult({
-					column: filePath ? 1 : null,
-					filePath,
-					level: mapIssueLevel(issue?.severity),
-					line: filePath ? 1 : null,
-					linterName,
-					message: buildIssueMessage(issue),
-					ruleId: slugifyIssueType(issue?.issue_type),
-				}),
-			);
-		}
+function buildCircularDependencyResults({
+	createResult,
+	linterName,
+	modulePaths,
+	run,
+}) {
+	const circularDependencies = Array.isArray(
+		run?.json_output?.circular_dependencies,
+	)
+		? run.json_output.circular_dependencies
+		: [];
 
-		for (const cycle of Array.isArray(run?.json_output?.circular_dependencies)
-			? run.json_output.circular_dependencies
-			: []) {
-			const firstModule = Array.isArray(cycle) ? cycle[0] : null;
-			const filePath =
-				typeof firstModule === "string"
-					? modulePaths.get(firstModule) || null
-					: null;
-			results.push(
-				createResult({
-					column: filePath ? 1 : null,
-					filePath,
-					level: "error",
-					line: filePath ? 1 : null,
-					linterName,
-					message: `Circular dependency: ${cycle.map((entry) => String(entry)).join(" -> ")}`,
-					ruleId: "cargo-coupling/circular-dependency",
-				}),
-			);
-		}
-	}
-
-	return dedupeResults(results);
+	return circularDependencies.map((cycle) => {
+		const firstModule = Array.isArray(cycle) ? cycle[0] : null;
+		const filePath =
+			typeof firstModule === "string"
+				? modulePaths.get(firstModule) || null
+				: null;
+		return createResult({
+			column: filePath ? 1 : null,
+			filePath,
+			level: "error",
+			line: filePath ? 1 : null,
+			linterName,
+			message: `Circular dependency: ${cycle.map((entry) => String(entry)).join(" -> ")}`,
+			ruleId: "cargo-coupling/circular-dependency",
+		});
+	});
 }
 
 function buildModulePathMap({

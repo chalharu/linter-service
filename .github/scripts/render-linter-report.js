@@ -23,6 +23,39 @@ const MAX_INLINE_PATHS = 10;
 const MAX_RENDERED_PATHS = 100;
 const DETAILS_LIMIT = 60000;
 
+function resolveReportStatus({
+	exitCodeRaw,
+	hasStepFailure,
+	result,
+	selectedFiles,
+}) {
+	if (hasStepFailure && result === null) {
+		return "infra_failure";
+	}
+
+	if (selectedFiles.length === 0 && exitCodeRaw === "") {
+		return "no_targets";
+	}
+
+	if (
+		!hasStepFailure &&
+		exitCodeRaw === "0" &&
+		hasNonBlockingFindings(result)
+	) {
+		return "warning";
+	}
+
+	return !hasStepFailure && (selectedFiles.length === 0 || exitCodeRaw === "0")
+		? "success"
+		: "failure";
+}
+
+function shouldRenderDetails(status) {
+	return (
+		status === "failure" || status === "warning" || status === "infra_failure"
+	);
+}
+
 function runFromEnv(env = process.env) {
 	const linterName = requireEnv(env, "LINTER_NAME");
 	const runnerTemp = requireEnv(env, "RUNNER_TEMP");
@@ -77,27 +110,16 @@ function renderReport({
 		"failure",
 	);
 	let detailsText = "";
-	const status =
-		hasStepFailure && result === null
-			? "infra_failure"
-			: selectedFiles.length === 0 && exitCodeRaw === ""
-				? "no_targets"
-				: !hasStepFailure &&
-						exitCodeRaw === "0" &&
-						hasNonBlockingFindings(result)
-					? "warning"
-					: !hasStepFailure &&
-							(selectedFiles.length === 0 || exitCodeRaw === "0")
-						? "success"
-						: "failure";
+	const status = resolveReportStatus({
+		exitCodeRaw,
+		hasStepFailure,
+		result,
+		selectedFiles,
+	});
 	const conclusion =
 		status === "failure" || status === "infra_failure" ? "failure" : "success";
 
-	if (
-		status === "failure" ||
-		status === "warning" ||
-		status === "infra_failure"
-	) {
+	if (shouldRenderDetails(status)) {
 		detailsText = resolveDetails(
 			{
 				configPath,
@@ -130,11 +152,7 @@ function renderReport({
 		appendTargetLines(lines, targetLines);
 	}
 
-	if (
-		status === "failure" ||
-		status === "warning" ||
-		status === "infra_failure"
-	) {
+	if (shouldRenderDetails(status)) {
 		const detailsBlock = buildTextCodeBlock(detailsText);
 		lines.push(
 			"",
@@ -355,53 +373,88 @@ const SUMMARY_TEXT_BUILDERS = Object.freeze({
 	warning: buildWarningSummaryText,
 });
 
-function normalizeTargetStats({
+function resolveProvidedTargetKind(targetStats) {
+	return targetStats.target_kind === "cargo-project" ||
+		targetStats.targetKind === "cargo-project"
+		? "cargo-project"
+		: "file";
+}
+
+function resolveProvidedCountsKnown(targetStats, status) {
+	if (typeof targetStats.counts_known === "boolean") {
+		return targetStats.counts_known;
+	}
+
+	if (typeof targetStats.countsKnown === "boolean") {
+		return targetStats.countsKnown;
+	}
+
+	return status === "success" || status === "no_targets";
+}
+
+function normalizeProvidedIssueTargetCount({
+	countsKnown,
+	issueTargetCount,
+	status,
+}) {
+	if (countsKnown && issueTargetCount === null && status !== "infra_failure") {
+		return 0;
+	}
+
+	return issueTargetCount;
+}
+
+function normalizeProvidedPassedTargetCount({
+	countsKnown,
+	passedTargetCount,
+	targetCount,
+}) {
+	if (countsKnown && passedTargetCount === null && targetCount !== null) {
+		return targetCount;
+	}
+
+	return passedTargetCount;
+}
+
+function normalizeProvidedTargetStats(targetStats, status) {
+	const targetKind = resolveProvidedTargetKind(targetStats);
+	const targetCount = normalizeOptionalCount(
+		targetStats.target_count ?? targetStats.targetCount,
+	);
+	const countsKnown = resolveProvidedCountsKnown(targetStats, status);
+	const issueTargetCount = normalizeOptionalCount(
+		targetStats.issue_target_count ?? targetStats.issueTargetCount,
+	);
+	const passedTargetCount = normalizeOptionalCount(
+		targetStats.passed_target_count ?? targetStats.passedTargetCount,
+	);
+
+	return {
+		countsKnown,
+		issueCount: normalizeOptionalCount(
+			targetStats.issue_count ?? targetStats.issueCount,
+		),
+		issueTargetCount: normalizeProvidedIssueTargetCount({
+			countsKnown,
+			issueTargetCount,
+			status,
+		}),
+		passedTargetCount: normalizeProvidedPassedTargetCount({
+			countsKnown,
+			passedTargetCount,
+			targetCount,
+		}),
+		targetCount,
+		targetKind,
+	};
+}
+
+function buildDerivedTargetStats({
 	checkedProjects,
 	linterConfig,
 	selectedFiles,
 	status,
-	targetStats,
 }) {
-	if (targetStats && typeof targetStats === "object") {
-		const targetKind =
-			targetStats.target_kind === "cargo-project" ||
-			targetStats.targetKind === "cargo-project"
-				? "cargo-project"
-				: "file";
-		const targetCount = normalizeOptionalCount(
-			targetStats.target_count ?? targetStats.targetCount,
-		);
-		const countsKnown =
-			typeof targetStats.counts_known === "boolean"
-				? targetStats.counts_known
-				: typeof targetStats.countsKnown === "boolean"
-					? targetStats.countsKnown
-					: status === "success" || status === "no_targets";
-		const issueTargetCount = normalizeOptionalCount(
-			targetStats.issue_target_count ?? targetStats.issueTargetCount,
-		);
-		const passedTargetCount = normalizeOptionalCount(
-			targetStats.passed_target_count ?? targetStats.passedTargetCount,
-		);
-
-		return {
-			countsKnown,
-			issueCount: normalizeOptionalCount(
-				targetStats.issue_count ?? targetStats.issueCount,
-			),
-			issueTargetCount:
-				countsKnown && issueTargetCount === null && status !== "infra_failure"
-					? 0
-					: issueTargetCount,
-			passedTargetCount:
-				countsKnown && passedTargetCount === null && targetCount !== null
-					? targetCount
-					: passedTargetCount,
-			targetCount,
-			targetKind,
-		};
-	}
-
 	const targetKind = readTargetKind(linterConfig);
 	const targetCount = deriveTargetCount({
 		checkedProjects,
@@ -428,6 +481,25 @@ function normalizeTargetStats({
 		targetCount,
 		targetKind,
 	};
+}
+
+function normalizeTargetStats({
+	checkedProjects,
+	linterConfig,
+	selectedFiles,
+	status,
+	targetStats,
+}) {
+	if (targetStats && typeof targetStats === "object") {
+		return normalizeProvidedTargetStats(targetStats, status);
+	}
+
+	return buildDerivedTargetStats({
+		checkedProjects,
+		linterConfig,
+		selectedFiles,
+		status,
+	});
 }
 
 function formatRatio(passed, total) {
