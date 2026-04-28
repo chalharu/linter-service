@@ -53,7 +53,9 @@ function shouldSkipHelmLintLine(line) {
 }
 
 function parseChartRoot(line) {
-	const chartMatch = /^==>\s+(?:helm lint|Linting)\s+(?<chartRoot>.+)$/u.exec(line);
+	const chartMatch = /^==>\s+(?:helm lint|Linting)\s+(?<chartRoot>.+)$/u.exec(
+		line,
+	);
 	return chartMatch?.groups?.chartRoot?.trim() || null;
 }
 
@@ -85,7 +87,9 @@ function buildHelmLintDiagnosticResult({
 		sourceRepositoryPath,
 		targetPaths,
 	});
-	const lineMatch = /\bline (?<line>\d+)\b/u.exec(diagnosticMatch.groups.message);
+	const lineMatch = /\bline (?<line>\d+)\b/u.exec(
+		diagnosticMatch.groups.message,
+	);
 
 	return createResult({
 		defaultLevel,

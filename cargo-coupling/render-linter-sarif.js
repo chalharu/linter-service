@@ -50,7 +50,12 @@ function buildRunResults({
 
 	return [
 		...buildIssueResults({ createResult, linterName, modulePaths, run }),
-		...buildCircularDependencyResults({ createResult, linterName, modulePaths, run }),
+		...buildCircularDependencyResults({
+			createResult,
+			linterName,
+			modulePaths,
+			run,
+		}),
 	];
 }
 
@@ -81,14 +86,18 @@ function buildCircularDependencyResults({
 	modulePaths,
 	run,
 }) {
-	const circularDependencies = Array.isArray(run?.json_output?.circular_dependencies)
+	const circularDependencies = Array.isArray(
+		run?.json_output?.circular_dependencies,
+	)
 		? run.json_output.circular_dependencies
 		: [];
 
 	return circularDependencies.map((cycle) => {
 		const firstModule = Array.isArray(cycle) ? cycle[0] : null;
 		const filePath =
-			typeof firstModule === "string" ? modulePaths.get(firstModule) || null : null;
+			typeof firstModule === "string"
+				? modulePaths.get(firstModule) || null
+				: null;
 		return createResult({
 			column: filePath ? 1 : null,
 			filePath,

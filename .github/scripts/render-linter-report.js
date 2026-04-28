@@ -37,21 +37,22 @@ function resolveReportStatus({
 		return "no_targets";
 	}
 
-	if (!hasStepFailure && exitCodeRaw === "0" && hasNonBlockingFindings(result)) {
+	if (
+		!hasStepFailure &&
+		exitCodeRaw === "0" &&
+		hasNonBlockingFindings(result)
+	) {
 		return "warning";
 	}
 
-	return !hasStepFailure &&
-		(selectedFiles.length === 0 || exitCodeRaw === "0")
+	return !hasStepFailure && (selectedFiles.length === 0 || exitCodeRaw === "0")
 		? "success"
 		: "failure";
 }
 
 function shouldRenderDetails(status) {
 	return (
-		status === "failure" ||
-		status === "warning" ||
-		status === "infra_failure"
+		status === "failure" || status === "warning" || status === "infra_failure"
 	);
 }
 

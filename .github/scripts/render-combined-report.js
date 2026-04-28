@@ -384,7 +384,8 @@ function buildResultLabel(status) {
 }
 
 function normalizeConclusion(summary) {
-	return typeof summary?.conclusion === "string" && summary.conclusion.length > 0
+	return typeof summary?.conclusion === "string" &&
+		summary.conclusion.length > 0
 		? summary.conclusion
 		: "failure";
 }
@@ -420,7 +421,11 @@ function normalizeIssueTargetCount(issueTargetCount, countsKnown) {
 	return issueTargetCount !== null ? issueTargetCount : countsKnown ? 0 : null;
 }
 
-function normalizePassedTargetCount(passedTargetCount, countsKnown, targetCount) {
+function normalizePassedTargetCount(
+	passedTargetCount,
+	countsKnown,
+	targetCount,
+) {
 	if (passedTargetCount !== null) {
 		return passedTargetCount;
 	}
