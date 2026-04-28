@@ -185,7 +185,7 @@ jobs:
           NODE
       - name: Get checker token
         id: get_checker_token
-        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
           owner: ${{ env.TARGET_REPOSITORY_OWNER }}
@@ -196,7 +196,7 @@ jobs:
       - name: Get source repository config token
         id: get_source_config_token
         continue-on-error: true
-        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
           owner: ${{ env.SOURCE_REPOSITORY_OWNER }}
@@ -589,7 +589,7 @@ jobs:
       - name: Get source repository checker token
         if: ${{ steps.collect.outputs.skip-reason == '' && steps.collect.outputs.selected-linters-json != '[]' }}
         id: get_source_token
-        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
           owner: ${{ steps.decode_source_context.outputs.source-owner }}
@@ -752,7 +752,7 @@ jobs:
             source_repo=source-repo
       - name: Get PR repository checker token
         id: get_pr_token
-        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
           owner: ${{ steps.decode_repository_context.outputs.pr-owner }}
@@ -763,7 +763,7 @@ jobs:
       - name: Get source repository checker token
         id: get_source_token
         if: ${{ needs.detect-targets.outputs.selected-linters-json != '[]' }}
-        uses: actions/create-github-app-token@f8d387b68d61c58ab83c6c016672934102569859 # v3.0.0
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
           owner: ${{ steps.decode_repository_context.outputs.source-owner }}
