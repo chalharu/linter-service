@@ -420,5 +420,6 @@ module.exports = {
 	isCargoDenyAdvisoryLikeDiagnostic,
 	isCargoDenyConfigLikeDiagnostic,
 	isIgnorableCargoDenyDiagnostic,
+	normalizeCargoDenyVulnerabilities,
 	parseJsonLines,
 };

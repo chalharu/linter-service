@@ -1,6 +1,7 @@
 const {
 	isCargoDenyAdvisoryLikeDiagnostic,
 	isCargoDenyConfigLikeDiagnostic,
+	normalizeCargoDenyVulnerabilities: normalizeCargoDenyResultVulnerabilities,
 } = require("./cargo-deny-result.js");
 const {
 	buildCargoDenyPackageLabel,
@@ -72,7 +73,7 @@ function normalizeCargoDenyAuditReports(run) {
 }
 
 function normalizeCargoDenyVulnerabilities(report) {
-	return Array.isArray(report?.vulnerabilities) ? report.vulnerabilities : [];
+	return normalizeCargoDenyResultVulnerabilities(report?.vulnerabilities);
 }
 
 function normalizeCargoDenyDiagnostics(run) {
