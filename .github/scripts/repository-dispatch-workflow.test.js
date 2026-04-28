@@ -10,6 +10,7 @@ const workflowPath = path.join(
 	"workflows",
 	"repository-dispatch.yml",
 );
+const expressionPrefix = "$" + "{{ ";
 
 function readWorkflow() {
 	return yaml.load(fs.readFileSync(workflowPath, "utf8"), {
@@ -24,12 +25,12 @@ test("publish-results is gated by a safe boolean output", () => {
 
 	assert.equal(
 		detectTargets.outputs["publish-results"],
-		"${{ steps.collect.outputs.publish-results }}",
+		`${expressionPrefix}steps.collect.outputs.publish-results }}`,
 	);
 	assert.equal(detectTargets.outputs["skip-reason"], undefined);
 	assert.equal(
 		publishResults.if,
-		"${{ always() && needs.detect-targets.outputs.publish-results == 'true' }}",
+		`${expressionPrefix}always() && needs.detect-targets.outputs.publish-results == 'true' }}`,
 	);
 	assert.doesNotMatch(
 		publishResults.if,
