@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const { execFileSync } = require("node:child_process");
+const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
@@ -66,6 +67,64 @@ test("branch cache keys stay compact and deterministic", () => {
 	assert.match(sanitized, /^[a-z0-9][a-z0-9._-]*$/u);
 	assert.ok(sanitized.length <= 48);
 	assert.equal(sanitizeCacheKeyComponent(branchName), sanitized);
+});
+
+test("Renovate min release age defaults off but keeps explicit overrides", () => {
+	const defaultOutput = execFileSync(
+		"bash",
+		[
+			"-lc",
+			[
+				"set -euo pipefail",
+				"source renovate/common.sh",
+				"renovate_npm_min_release_age_days",
+			].join("\n"),
+		],
+		{
+			cwd: repoRoot,
+			encoding: "utf8",
+			env: process.env,
+		},
+	);
+	const overrideOutput = execFileSync(
+		"bash",
+		[
+			"-lc",
+			[
+				"set -euo pipefail",
+				"source renovate/common.sh",
+				"renovate_npm_min_release_age_days",
+			].join("\n"),
+		],
+		{
+			cwd: repoRoot,
+			encoding: "utf8",
+			env: {
+				...process.env,
+				RENOVATE_NPM_MIN_RELEASE_AGE_DAYS: "3",
+			},
+		},
+	);
+
+	assert.equal(defaultOutput, "\n");
+	assert.equal(overrideOutput.trim(), "3");
+});
+
+test("Renovate Dockerfile only applies min release age when configured", () => {
+	const dockerfile = fs.readFileSync(
+		path.join(repoRoot, "renovate", "Dockerfile"),
+		"utf8",
+	);
+
+	assert.match(dockerfile, /^ARG RENOVATE_NPM_MIN_RELEASE_AGE_DAYS$/mu);
+	assert.match(
+		dockerfile,
+		/if \[ -n "\$\{RENOVATE_NPM_MIN_RELEASE_AGE_DAYS\}" \]; then/u,
+	);
+	assert.doesNotMatch(
+		dockerfile,
+		/--min-release-age=\$\{RENOVATE_NPM_MIN_RELEASE_AGE_DAYS\} \\/u,
+	);
 });
 
 test("prunes package versions that are not kept by active branch or PR cache tags", async () => {

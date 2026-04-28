@@ -224,7 +224,12 @@ renovate_container_bin() {
 }
 
 renovate_npm_min_release_age_days() {
-  local days="${RENOVATE_NPM_MIN_RELEASE_AGE_DAYS:-3}"
+  local days="${RENOVATE_NPM_MIN_RELEASE_AGE_DAYS-}"
+
+  if [ -z "$days" ]; then
+    printf '\n'
+    return 0
+  fi
 
   if [[ ! "$days" =~ ^[0-9]+$ ]]; then
     echo "RENOVATE_NPM_MIN_RELEASE_AGE_DAYS must be a non-negative integer" >&2
