@@ -1,0 +1,2 @@
+# Existing worker helpers that remain intentionally unsplit.
+worker/src/index.ts:getSourceInstallationId, pemBlockToDer
