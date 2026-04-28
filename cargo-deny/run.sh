@@ -25,12 +25,13 @@ rm -f "$manifest_list_file"
 
 workspace_root="$RUNNER_TEMP/cargo-deny-workspace"
 source_root="$workspace_root/source"
+rustup_root="$workspace_root/rustup-home"
 image_ref=$(cargo_deny_image_ref)
 user_id=$(id -u)
 group_id=$(id -g)
 
 rm -rf "$workspace_root"
-mkdir -p "$workspace_root"
+mkdir -p "$workspace_root" "$rustup_root"
 mkdir -p "$CARGO_HOME"
 linter_lib::copy_worktree_without_git "$source_root"
 
@@ -39,6 +40,57 @@ cleanup_workspace() {
 }
 
 trap cleanup_workspace EXIT
+
+seed_writable_rustup_home() {
+  if [ -f "$rustup_root/settings.toml" ]; then
+    return 0
+  fi
+
+  docker run \
+    --rm \
+    --cap-drop ALL \
+    --security-opt no-new-privileges \
+    --read-only \
+    --tmpfs /tmp \
+    --network=none \
+    --user "$user_id:$group_id" \
+    --mount "type=bind,src=$rustup_root,dst=/rustup-home" \
+    "$image_ref" \
+    sh -ceu 'tar -C /usr/local/rustup -cf - . | tar -xf - -C /rustup-home'
+}
+
+record_writable_rustup_seed() {
+  local setup_dir=$1
+  local run_exit
+
+  rm -rf "$setup_dir"
+  mkdir -p "$setup_dir"
+  printf 'docker run seed writable rustup home\n' > "$setup_dir/command.txt"
+  : > "$setup_dir/manifest_path.txt"
+  : > "$setup_dir/config_path.txt"
+  set +e
+  seed_writable_rustup_home >"$setup_dir/stdout.txt" 2>"$setup_dir/stderr.txt"
+  run_exit=$?
+  set -e
+  if [ "$run_exit" -ne 0 ]; then
+    if [ ! -s "$setup_dir/stderr.txt" ]; then
+      printf 'failed to seed writable rustup home\n' > "$setup_dir/stderr.txt"
+    fi
+    printf '%s\n' "$run_exit" > "$setup_dir/exit_code.txt"
+    return 1
+  fi
+
+  rm -rf "$setup_dir"
+}
+
+rm -rf "$run_entries_dir"
+mkdir -p "$run_entries_dir"
+if ! record_writable_rustup_seed "$run_entries_dir/0000"; then
+  node "$script_dir/cargo-deny-result.js" "$run_entries_dir" 1 > "$result_json_file"
+  cat "$result_json_file"
+  exit 0
+fi
+rm -rf "$run_entries_dir"
 
 # shellcheck disable=SC2034 # Used indirectly via local -n in cargo_deny_collect_run_targets.
 metadata_docker_run_common=(
@@ -51,6 +103,7 @@ metadata_docker_run_common=(
   --network=none
   --user "$user_id:$group_id"
   --mount "type=bind,src=$source_root,dst=/work"
+  --mount "type=bind,src=$rustup_root,dst=/usr/local/rustup"
   --env CARGO_TERM_COLOR=never
 )
 
@@ -67,6 +120,7 @@ docker_run_common=(
   --user "$user_id:$group_id"
   --mount "type=bind,src=$source_root,dst=/work"
   --mount "type=bind,src=$CARGO_HOME,dst=/cargo-home"
+  --mount "type=bind,src=$rustup_root,dst=/usr/local/rustup"
   --mount "type=bind,src=$run_entries_dir,dst=/run-entries"
   --env CARGO_HOME=/cargo-home
   --env CARGO_TERM_COLOR=never
