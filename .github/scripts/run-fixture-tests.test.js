@@ -6,6 +6,7 @@ const test = require("node:test");
 
 const {
 	applyWorkflowEnvironment,
+	normalizeFixtureAssertionValue,
 	normalizeFixtureResult,
 	normalizeSarif,
 	parseArgs,
@@ -409,6 +410,70 @@ test("normalizeFixtureResult canonicalizes embedded SARIF results", () => {
 									{ id: "a", name: "a" },
 									{ id: "b", name: "b" },
 								],
+							},
+							extensions: [
+								{
+									name: "demo-extension",
+									properties: {
+										config: {
+											version: "preserved",
+										},
+									},
+								},
+							],
+						},
+					},
+				],
+				version: "2.1.0",
+			},
+		},
+		selected_files: ["src/index.js"],
+	});
+});
+
+test("normalizeFixtureAssertionValue removes embedded SARIF tool versions", () => {
+	const actual = normalizeFixtureAssertionValue({
+		checked_projects: [],
+		result: {
+			exit_code: 1,
+			sarif: {
+				runs: [
+					{
+						tool: {
+							driver: {
+								name: "demo",
+								version: "1.2.3",
+							},
+							extensions: [
+								{
+									name: "demo-extension",
+									properties: {
+										config: {
+											version: "preserved",
+										},
+									},
+									version: "1.2.3",
+								},
+							],
+						},
+					},
+				],
+				version: "2.1.0",
+			},
+		},
+		selected_files: ["src/index.js"],
+	});
+
+	assert.deepEqual(actual, {
+		checked_projects: [],
+		result: {
+			exit_code: 1,
+			sarif: {
+				runs: [
+					{
+						tool: {
+							driver: {
+								name: "demo",
 							},
 							extensions: [
 								{

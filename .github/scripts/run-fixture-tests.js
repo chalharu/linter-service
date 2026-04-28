@@ -404,7 +404,11 @@ function isSarifToolExtensionVersionField(parentKey, pathParts) {
 
 function hasSarifRootPrefix(pathParts, tailLength) {
 	const prefix = pathParts.slice(0, -tailLength);
-	return prefix.length === 0 || (prefix.length === 1 && prefix[0] === "sarif");
+	return (
+		prefix.length === 0 ||
+		(prefix.length === 1 && prefix[0] === "sarif") ||
+		(prefix.length === 2 && prefix[0] === "result" && prefix[1] === "sarif")
+	);
 }
 
 function sanitizeFixtureString(value, repositoryPath) {
@@ -621,6 +625,7 @@ if (require.main === module) {
 module.exports = {
 	applyWorkflowEnvironment,
 	listFixtureNames,
+	normalizeFixtureAssertionValue,
 	normalizeFixtureResult,
 	normalizeSarif,
 	parseArgs,
