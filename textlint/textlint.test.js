@@ -289,13 +289,61 @@ test("textlint install builds a dedicated container image when missing", () => {
 			/FROM docker\.io\/library\/node:24-bookworm/u,
 		);
 		assert.match(fs.readFileSync(dockerfileCopy, "utf8"), /--ignore-scripts/u);
-		assert.match(
+		assert.doesNotMatch(
 			fs.readFileSync(dockerfileCopy, "utf8"),
-			/--min-release-age=3/u,
+			/--min-release-age=/u,
 		);
 		assert.match(
 			fs.readFileSync(dockerfileCopy, "utf8"),
 			new RegExp(`textlint@${version.replaceAll(".", "\\.")}`, "u"),
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("textlint install keeps explicit min release age overrides", () => {
+	const context = makeTempRepo("textlint-install-override-");
+	const dockerBuildArgsLog = path.join(
+		context.tempDir,
+		"docker-build-args.log",
+	);
+	const dockerImageInspectLog = path.join(
+		context.tempDir,
+		"docker-image-inspect.log",
+	);
+	const dockerRunArgsLog = path.join(context.tempDir, "docker-run-args.log");
+	const dockerNpmInstallLog = path.join(
+		context.tempDir,
+		"docker-npm-install.log",
+	);
+	const dockerTextlintArgsLog = path.join(
+		context.tempDir,
+		"docker-textlint-args.log",
+	);
+	const dockerfileCopy = path.join(context.tempDir, "Dockerfile.copy");
+
+	createDockerStub(context.binDir);
+
+	try {
+		execFileSync("bash", [installPath], {
+			cwd: context.repoDir,
+			encoding: "utf8",
+			env: createScriptEnv(context, {
+				DOCKER_BUILD_ARGS_LOG: dockerBuildArgsLog,
+				DOCKER_IMAGE_INSPECT_LOG: dockerImageInspectLog,
+				DOCKER_NPM_INSTALL_LOG: dockerNpmInstallLog,
+				DOCKER_RUN_ARGS_LOG: dockerRunArgsLog,
+				DOCKER_TEXTLINT_ARGS_LOG: dockerTextlintArgsLog,
+				DOCKERFILE_COPY: dockerfileCopy,
+				MISSING_IMAGE: "1",
+				TEXTLINT_NPM_MIN_RELEASE_AGE_DAYS: "3",
+			}),
+		});
+
+		assert.match(
+			fs.readFileSync(dockerfileCopy, "utf8"),
+			/--min-release-age=3/u,
 		);
 	} finally {
 		cleanupTempRepo(context.tempDir);

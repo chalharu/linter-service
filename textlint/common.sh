@@ -46,8 +46,13 @@ textlint_container_bin() {
   printf '%s\n' "$docker_bin"
 }
 
-textlint_npm_min_release_age_days() {
-  local days="${TEXTLINT_NPM_MIN_RELEASE_AGE_DAYS:-3}"
+textlint_validate_npm_min_release_age_days() {
+  local days="${1-}"
+
+  if [ -z "$days" ]; then
+    printf '\n'
+    return 0
+  fi
 
   if [[ ! "$days" =~ ^[0-9]+$ ]]; then
     echo "TEXTLINT_NPM_MIN_RELEASE_AGE_DAYS must be a non-negative integer" >&2
@@ -55,6 +60,14 @@ textlint_npm_min_release_age_days() {
   fi
 
   printf '%s\n' "$days"
+}
+
+textlint_npm_min_release_age_days() {
+  textlint_validate_npm_min_release_age_days "${TEXTLINT_NPM_MIN_RELEASE_AGE_DAYS:-3}"
+}
+
+textlint_install_npm_min_release_age_days() {
+  textlint_validate_npm_min_release_age_days "${TEXTLINT_NPM_MIN_RELEASE_AGE_DAYS-}"
 }
 
 textlint_require_docker() {
