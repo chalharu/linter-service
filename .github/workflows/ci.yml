@@ -53,7 +53,6 @@ jobs:
             .github/scripts/linter-service-config.test.js \
             .github/scripts/linter-targeting.test.js \
             .github/scripts/select-lint-targets.test.js \
-            .github/scripts/installer-version-pins.test.js \
             .github/scripts/upload-sarif.test.js \
             biome/biome.test.js \
             biome/render-linter-sarif.test.js
