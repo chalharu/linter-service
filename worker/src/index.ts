@@ -593,8 +593,8 @@ function normalizeStableJsonValue(value: unknown): unknown {
 
 	return Object.fromEntries(
 		Object.keys(value)
-		.sort()
-		.map((key) => [key, normalizeStableJsonValue(value[key])]),
+			.sort()
+			.map((key) => [key, normalizeStableJsonValue(value[key])]),
 	);
 }
 

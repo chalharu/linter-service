@@ -703,7 +703,6 @@ describe("github webhook proxy worker pull_request events", () => {
 		});
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
-
 });
 
 describe("github webhook proxy worker push events", () => {
