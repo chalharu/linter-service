@@ -15,11 +15,7 @@
 							"target_arch": [],
 							"target_os": []
 						},
-						"vulnerabilities": {
-							"count": 0,
-							"found": false,
-							"list": []
-						},
+						"vulnerabilities": [],
 						"warnings": {}
 					}
 				],
