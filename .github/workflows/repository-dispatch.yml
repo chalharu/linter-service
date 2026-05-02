@@ -758,6 +758,16 @@ jobs:
           app-id: ${{ secrets.CHECKER_APP_ID }}
           owner: ${{ steps.decode_repository_context.outputs.pr-owner }}
           permission-pull-requests: write
+          private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
+          repositories: ${{ steps.decode_repository_context.outputs.pr-repo }}
+      - name: Get PR repository SARIF token
+        id: get_sarif_token
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        with:
+          app-id: ${{ secrets.CHECKER_APP_ID }}
+          owner: ${{ steps.decode_repository_context.outputs.pr-owner }}
           permission-security-events: write
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ steps.decode_repository_context.outputs.pr-repo }}
@@ -870,7 +880,7 @@ jobs:
             await upsertPullRequestComment({ github, env: process.env });
       - name: Upload SARIF artifacts
         id: upload_sarif
-        if: ${{ always() }}
+        if: ${{ always() && steps.get_sarif_token.outcome == 'success' }}
         continue-on-error: true
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         env:
@@ -882,7 +892,7 @@ jobs:
           SARIF_REPO: ${{ steps.decode_repository_context.outputs.pr-repo }}
           SARIF_ROOT: ${{ runner.temp }}/linter-sarif-upload
         with:
-          github-token: ${{ steps.get_pr_token.outputs.token }}
+          github-token: ${{ steps.get_sarif_token.outputs.token }}
           script: |
             const uploadSarif = require(
               `${process.env.LINTER_SERVICE_PATH}/.github/scripts/upload-sarif.js`,
@@ -892,6 +902,7 @@ jobs:
         id: prepare_final_summary
         if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
         env:
+          GET_SARIF_TOKEN_OUTCOME: ${{ steps.get_sarif_token.outcome }}
           OVERALL_CONCLUSION: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_conclusion || 'failure' }}
           OVERALL_STATUS: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_status || 'failure' }}
           OVERALL_SUMMARY: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_summary || 'The linter-service workflow failed to generate a combined report.' }}
@@ -901,6 +912,7 @@ jobs:
           import os
           from pathlib import Path
 
+          get_sarif_token_outcome = os.environ.get("GET_SARIF_TOKEN_OUTCOME", "")
           overall_conclusion = os.environ["OVERALL_CONCLUSION"]
           overall_status = os.environ["OVERALL_STATUS"]
           overall_summary = os.environ["OVERALL_SUMMARY"]
@@ -919,6 +931,10 @@ jobs:
 
           if upload_sarif_outcome == "failure":
               summary = f"{overall_summary} Warning: SARIF upload failed; see the workflow logs."
+              if conclusion == "success":
+                  title = "linter-service completed with warnings"
+          elif upload_sarif_outcome == "skipped" and get_sarif_token_outcome == "failure":
+              summary = f"{overall_summary} Warning: SARIF upload skipped; security-events permission could not be obtained."
               if conclusion == "success":
                   title = "linter-service completed with warnings"
 
@@ -964,8 +980,12 @@ jobs:
         run: |
           echo "$SUMMARY" >&2
           exit 1
-      - name: Fail workflow when deselected SARIF upload fails
-        if: ${{ needs.detect-targets.outputs.selected-linters-json == '[]' && steps.upload_sarif.outcome == 'failure' }}
+      - name: Diagnose deselected SARIF permission errors
+        if: ${{ needs.detect-targets.outputs.selected-linters-json == '[]' && steps.upload_sarif.outcome == 'skipped' && steps.get_sarif_token.outcome == 'failure' }}
         run: |
-          echo "SARIF upload failed while clearing deselected linter results. See the workflow logs." >&2
+          echo "::error::Cannot clear deselected SARIF results because the GitHub App could not obtain security-events: write on this repository."
+      - name: Fail workflow when deselected SARIF upload fails
+        if: ${{ needs.detect-targets.outputs.selected-linters-json == '[]' && (steps.upload_sarif.outcome == 'failure' || steps.upload_sarif.outcome == 'skipped') }}
+        run: |
+          echo "SARIF upload could not be completed while clearing deselected linter results. See the workflow logs." >&2
           exit 1
