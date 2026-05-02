@@ -214,7 +214,7 @@ renovate_container_bin() {
   fi
 
   # The control-plane docker wrapper injects rootful-service defaults that break
-  # this networkless renovate invocation; the underlying podman binary does not.
+  # this renovate invocation; the underlying podman binary does not.
   if [ "$(basename "$resolved_bin")" = "control-plane-podman" ] && [ -x "$podman_bin" ]; then
     printf '%s\n' "$podman_bin"
     return 0

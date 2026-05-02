@@ -57,7 +57,8 @@ jobs:
             .github/scripts/select-lint-targets.test.js \
             .github/scripts/upload-sarif.test.js \
             biome/biome.test.js \
-            biome/render-linter-sarif.test.js
+            biome/render-linter-sarif.test.js \
+            renovate/renovate.test.js
       - name: Collect fixture test matrix
         id: collect
         run: |
