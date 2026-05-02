@@ -27,7 +27,8 @@ docker_run_common=(
   --security-opt no-new-privileges
   --read-only
   --tmpfs /tmp
-  --network=none
+  # Renovate needs outbound access for remote datasources such as git-refs,
+  # so we intentionally do not set --network=none here.
   --user "$user_id:$group_id"
   --workdir /work
   --mount "type=bind,src=$PWD,dst=/work,readonly"
