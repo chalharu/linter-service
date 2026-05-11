@@ -8,7 +8,7 @@ source "$script_dir/common.sh"
 
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
 # renovate: datasource=github-releases depName=suzuki-shunsuke/ghalint
-ghalint_version="v1.5.5"
+ghalint_version="v1.5.6"
 version_number="${ghalint_version#v}"
 asset="ghalint_${version_number}_linux_amd64.tar.gz"
 bin_dir="$RUNNER_TEMP/ghalint/bin"
