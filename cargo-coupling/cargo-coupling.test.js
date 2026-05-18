@@ -104,7 +104,10 @@ case "$command" in
     ;;
   run)
     work_mount_src=""
+    cargo_home_mount_src=""
+    rustup_mount_src=""
     container_workdir="/work"
+    entrypoint=""
     image_ref=""
     command_args=()
     option_with_value=""
@@ -117,17 +120,28 @@ case "$command" in
                 work_mount_src="\${arg#*src=}"
                 work_mount_src="\${work_mount_src%%,*}"
                 ;;
+              *"dst=/cargo-home"*|*"target=/cargo-home"*)
+                cargo_home_mount_src="\${arg#*src=}"
+                cargo_home_mount_src="\${cargo_home_mount_src%%,*}"
+                ;;
+              *"dst=/rustup-home"*|*"target=/rustup-home"*|*"dst=/usr/local/rustup"*|*"target=/usr/local/rustup"*)
+                rustup_mount_src="\${arg#*src=}"
+                rustup_mount_src="\${rustup_mount_src%%,*}"
+                ;;
             esac
             ;;
           --workdir)
             container_workdir="$arg"
+            ;;
+          --entrypoint)
+            entrypoint="$arg"
             ;;
         esac
         option_with_value=""
         continue
       fi
       case "$arg" in
-        --mount|--user|--workdir|--tmpfs|--security-opt|--cap-drop|--env|-e)
+        --mount|--user|--workdir|--tmpfs|--security-opt|--cap-drop|--env|-e|--entrypoint)
           option_with_value="$arg"
           continue
           ;;
@@ -141,17 +155,108 @@ case "$command" in
       fi
       command_args+=("$arg")
     done
+    if [ -n "$entrypoint" ]; then
+      command_args=("$entrypoint" "\${command_args[@]}")
+    fi
     printf '%s\\n' "$*" >> "$DOCKER_RUN_ARGS_LOG"
 
-    analysis_path="\${command_args[-1]}"
-    if [ -z "$work_mount_src" ]; then
-      echo "missing work mount" >&2
-      exit 1
+    if [ "\${command_args[0]-}" = "sh" ] && [ "\${command_args[1]-}" = "-ceu" ]; then
+      if [ -n "$rustup_mount_src" ]; then
+        mkdir -p "$rustup_mount_src"
+        cat <<'EOF' > "$rustup_mount_src/settings.toml"
+version = "12"
+default_toolchain = "stable-x86_64-unknown-linux-gnu"
+profile = "minimal"
+EOF
+      fi
+      exit 0
     fi
+
     host_workdir="$work_mount_src"
     if [ "$container_workdir" != "/work" ]; then
       host_workdir="$work_mount_src/\${container_workdir#/work/}"
     fi
+
+    if [ -z "$work_mount_src" ]; then
+      echo "missing work mount" >&2
+      exit 1
+    fi
+
+    if [ "\${command_args[0]-}" = "cargo" ] && [ "\${command_args[1]-}" = "metadata" ]; then
+      manifest=""
+      index=0
+      while [ "$index" -lt "\${#command_args[@]}" ]; do
+        if [ "\${command_args[$index]}" = "--manifest-path" ]; then
+          manifest="\${command_args[$((index + 1))]}"
+          break
+        fi
+        index=$((index + 1))
+      done
+      if [ -z "$manifest" ]; then
+        echo "missing metadata manifest" >&2
+        exit 1
+      fi
+
+      manifest_path=$(/usr/bin/python3 - "$host_workdir" "$manifest" <<'PY'
+import os
+import sys
+print(os.path.normpath(os.path.join(sys.argv[1], sys.argv[2])))
+PY
+      )
+      workspace_dir=$(dirname "$manifest_path")
+      search_dir="$workspace_dir"
+      while :; do
+        candidate="$search_dir/Cargo.toml"
+        if [ -f "$candidate" ] && grep -Eq '^\\[workspace\\]' "$candidate"; then
+          workspace_dir="$search_dir"
+          break
+        fi
+        if [ "$search_dir" = "$work_mount_src" ] || [ "$search_dir" = "/" ]; then
+          break
+        fi
+        search_dir=$(dirname "$search_dir")
+      done
+      node - "$work_mount_src" "$workspace_dir" <<'NODE'
+const path = require("node:path");
+const [sourceRoot, workspaceDir] = process.argv.slice(2);
+const relativeDir = path.relative(sourceRoot, workspaceDir);
+const workspaceRoot =
+  relativeDir.length === 0
+    ? "/work"
+    : path.posix.join("/work", ...relativeDir.split(path.sep));
+process.stdout.write(JSON.stringify({ workspace_root: workspaceRoot }));
+NODE
+      exit 0
+    fi
+
+    if [ "\${command_args[0]-}" = "cargo" ] && [ "\${command_args[1]-}" = "fetch" ]; then
+      manifest=""
+      index=0
+      while [ "$index" -lt "\${#command_args[@]}" ]; do
+        if [ "\${command_args[$index]}" = "--manifest-path" ]; then
+          manifest="\${command_args[$((index + 1))]}"
+          break
+        fi
+        index=$((index + 1))
+      done
+      if [ -z "$manifest" ]; then
+        echo "missing fetch manifest" >&2
+        exit 1
+      fi
+
+      printf '%s\\n' "$manifest" >> "$DOCKER_FETCH_MANIFEST_LOG"
+      if [ -n "$cargo_home_mount_src" ]; then
+        mkdir -p "$cargo_home_mount_src/registry/cache"
+        printf 'cached %s\\n' "$manifest" > "$cargo_home_mount_src/registry/cache/\${manifest//\\//_}.txt"
+      fi
+      if [ -n "\${FAIL_FETCH_MANIFEST:-}" ] && [ "$manifest" = "$FAIL_FETCH_MANIFEST" ]; then
+        echo "fetch failed for $manifest" >&2
+        exit 1
+      fi
+      exit 0
+    fi
+
+    analysis_path="\${command_args[-1]}"
     analysis_root="$host_workdir/$analysis_path"
     if [ -f "$analysis_root" ]; then
       search_dir=$(dirname "$analysis_root")
@@ -171,7 +276,7 @@ case "$command" in
       search_dir=$(dirname "$search_dir")
     done
 
-    manifest_rel=$(python - "$work_mount_src" "$manifest_path" <<'PY'
+    manifest_rel=$(/usr/bin/python3 - "$work_mount_src" "$manifest_path" <<'PY'
 import os
 import sys
 print(os.path.relpath(sys.argv[2], sys.argv[1]).replace(os.sep, "/"))
@@ -189,7 +294,7 @@ PY
       exit 1
     fi
 
-    package_name=$(python - "$manifest_path" <<'PY'
+    package_name=$(/usr/bin/python3 - "$manifest_path" <<'PY'
 import sys
 name = ""
 for line in open(sys.argv[1], encoding="utf-8"):
@@ -414,6 +519,10 @@ function setupTooling(context) {
 		cargoCouplingSourceArchiveSha256: cargoCouplingSourceArchive.archiveSha256,
 		curlLog: path.join(context.tempDir, "curl.log"),
 		dockerBuildLog: path.join(context.tempDir, "docker-build.log"),
+		dockerFetchManifestLog: path.join(
+			context.tempDir,
+			"docker-fetch-manifests.log",
+		),
 		dockerImageInspectLog: path.join(
 			context.tempDir,
 			"docker-image-inspect.log",
@@ -431,6 +540,7 @@ function setupTooling(context) {
 				cargoCouplingSourceArchive.archiveSha256,
 			CURL_LOG: tooling.curlLog,
 			DOCKER_BUILD_LOG: tooling.dockerBuildLog,
+			DOCKER_FETCH_MANIFEST_LOG: tooling.dockerFetchManifestLog,
 			DOCKER_IMAGE_INSPECT_LOG: tooling.dockerImageInspectLog,
 			DOCKER_MANIFEST_LOG: tooling.dockerManifestLog,
 			DOCKER_PULL_LOG: tooling.dockerPullLog,
@@ -561,12 +671,34 @@ defineCommonCargoManifestTests({
 
 		assert.equal(result.exit_code, 0);
 		assert.deepEqual(
+			fs
+				.readFileSync(tooling.dockerFetchManifestLog, "utf8")
+				.trim()
+				.split("\n"),
+			["Cargo.toml", "Cargo.toml"],
+		);
+		assert.deepEqual(
 			fs.readFileSync(tooling.dockerManifestLog, "utf8").trim().split("\n"),
 			["Cargo.toml", "crates/member/Cargo.toml"],
 		);
 		assert.match(runArgs, /--network=none/);
 		assert.match(runArgs, /--read-only/);
 		assert.match(runArgs, /--tmpfs \/tmp/);
+		assert.match(
+			runArgs,
+			/--network=none --entrypoint cargo [^\n]*metadata --format-version 1 --no-deps --manifest-path Cargo\.toml/,
+		);
+		assert.match(
+			runArgs,
+			/--entrypoint cargo [^\n]*fetch --manifest-path Cargo\.toml/,
+		);
+		assert.match(runArgs, /--entrypoint cargo/);
+		assert.match(runArgs, /--entrypoint sh/);
+		assert.match(runArgs, /dst=\/cargo-home/);
+		assert.match(runArgs, /dst=\/usr\/local\/rustup/);
+		assert.match(runArgs, /CARGO_HOME=\/cargo-home/);
+		assert.match(runArgs, /HOME=\/cargo-home/);
+		assert.match(runArgs, /CARGO_NET_OFFLINE=true/);
 		assert.doesNotMatch(runArgs, /dst=\/work,ro/);
 		assert.match(runArgs, /coupling --json --no-git src/);
 		assert.match(runArgs, /--workdir \/work\/crates\/member/);
@@ -583,6 +715,7 @@ defineCommonCargoManifestTests({
 			result.details,
 			new RegExp(pathValue.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
 		);
+		assert.equal(fs.existsSync(tooling.dockerFetchManifestLog), false);
 		assert.equal(fs.existsSync(tooling.dockerRunArgsLog), false);
 	},
 	continueFailureEnv: {
@@ -645,7 +778,18 @@ target-dir = "target/member"
 		const runArgs = fs.readFileSync(tooling.dockerRunArgsLog, "utf8");
 
 		assert.equal(result.exit_code, 0);
+		assert.deepEqual(
+			fs
+				.readFileSync(tooling.dockerFetchManifestLog, "utf8")
+				.trim()
+				.split("\n"),
+			["../../Cargo.toml"],
+		);
 		assert.match(runArgs, /--workdir \/work\/crates\/member/);
+		assert.match(
+			runArgs,
+			/--workdir \/work\/crates\/member [^\n]*fetch --manifest-path \.\.\/\.\.\/Cargo\.toml/,
+		);
 		assert.match(runArgs, /coupling --json --no-git src/);
 		assert.deepEqual(
 			fs.readFileSync(tooling.dockerManifestLog, "utf8").trim().split("\n"),
@@ -750,13 +894,142 @@ edition = "2021"
 		const runArgs = fs.readFileSync(tooling.dockerRunArgsLog, "utf8");
 
 		assert.equal(result.exit_code, 0);
+		assert.deepEqual(
+			fs
+				.readFileSync(tooling.dockerFetchManifestLog, "utf8")
+				.trim()
+				.split("\n"),
+			["../../Cargo.toml"],
+		);
 		assert.doesNotMatch(runArgs, /dst=\/work,ro/u);
+		assert.match(
+			runArgs,
+			/--workdir \/work\/crates\/member [^\n]*fetch --manifest-path \.\.\/\.\.\/Cargo\.toml/u,
+		);
 		assert.match(runArgs, /--workdir \/work\/crates\/member/u);
 		assert.match(runArgs, /coupling --json --no-git src/u);
 		assert.deepEqual(
 			fs.readFileSync(tooling.dockerManifestLog, "utf8").trim().split("\n"),
 			["crates/member/Cargo.toml"],
 		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("cargo-coupling skips only the manifest whose cargo fetch fails and continues later runs", () => {
+	const context = makeTempRepo("cargo-coupling-fetch-failure-");
+	const tooling = setupTooling(context);
+
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		`[package]
+name = "root"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+members = ["crates/member"]
+`,
+	);
+	writeFile(path.join(context.repoDir, "src/lib.rs"), "pub fn root_lib() {}\n");
+	writeFile(
+		path.join(context.repoDir, "crates/member/Cargo.toml"),
+		`[package]
+name = "member"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+	writeFile(
+		path.join(context.repoDir, "crates/member/src/lib.rs"),
+		"pub fn member_lib() {}\n",
+	);
+
+	try {
+		const output = execFileSync(
+			"bash",
+			[runPath, "src/lib.rs", "crates/member/src/lib.rs"],
+			{
+				cwd: context.repoDir,
+				encoding: "utf8",
+				env: {
+					...process.env,
+					...tooling.env,
+					FAIL_FETCH_MANIFEST: "Cargo.toml",
+					PATH: `${context.binDir}:${process.env.PATH}`,
+					RUNNER_TEMP: context.runnerTemp,
+				},
+			},
+		);
+		const result = JSON.parse(output);
+
+		assert.equal(result.exit_code, 1);
+		assert.match(result.details, /fetch failed for Cargo\.toml/u);
+		assert.match(
+			result.details,
+			/skip cargo-coupling --manifest-path Cargo\.toml because cargo fetch failed/u,
+		);
+		assert.deepEqual(
+			fs
+				.readFileSync(tooling.dockerFetchManifestLog, "utf8")
+				.trim()
+				.split("\n"),
+			["Cargo.toml", "../../Cargo.toml"],
+		);
+		assert.deepEqual(
+			fs.readFileSync(tooling.dockerManifestLog, "utf8").trim().split("\n"),
+			["crates/member/Cargo.toml"],
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("cargo-coupling rejects unsafe repo-local Cargo config before cargo fetch", () => {
+	const context = makeTempRepo("cargo-coupling-unsafe-config-");
+	const tooling = setupTooling(context);
+
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		`[package]
+name = "root"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+	writeFile(path.join(context.repoDir, "src/lib.rs"), "pub fn root_lib() {}\n");
+	writeFile(
+		path.join(context.repoDir, ".cargo/config.toml"),
+		`[registries.crates-io]
+protocol = "sparse"
+`,
+	);
+
+	try {
+		const output = execFileSync("bash", [runPath, "src/lib.rs"], {
+			cwd: context.repoDir,
+			encoding: "utf8",
+			env: {
+				...process.env,
+				...tooling.env,
+				PATH: `${context.binDir}:${process.env.PATH}`,
+				RUNNER_TEMP: context.runnerTemp,
+			},
+		});
+		const result = JSON.parse(output);
+
+		assert.equal(result.exit_code, 1);
+		assert.match(
+			result.details,
+			/reject cargo fetch --manifest-path Cargo\.toml/u,
+		);
+		assert.match(
+			result.details,
+			/skip cargo-coupling --manifest-path Cargo\.toml because cargo fetch safety checks failed/u,
+		);
+		assert.equal(fs.existsSync(tooling.dockerFetchManifestLog), false);
+		assert.equal(fs.existsSync(tooling.dockerManifestLog), false);
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}
