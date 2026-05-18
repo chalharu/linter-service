@@ -100,8 +100,9 @@ seed_writable_rustup_home() {
     --tmpfs /tmp \
     --user "$user_id:$group_id" \
     --mount "type=bind,src=$rustup_root,dst=/rustup-home" \
+    --entrypoint sh \
     "$image_ref" \
-    sh -ceu 'tar -C /usr/local/rustup -cf - . | tar -xf - -C /rustup-home'
+    -ceu 'tar -C /usr/local/rustup -cf - . | tar -xf - -C /rustup-home'
 }
 
 cargo_coupling_resolve_workspace_manifest() {
@@ -112,7 +113,7 @@ cargo_coupling_resolve_workspace_manifest() {
   workdir=$(cargo_coupling_workdir_for_manifest "$manifest_path")
 
   linter_lib::resolve_cargo_workspace_manifest /work "$manifest_arg" \
-    "$container_bin" run "${metadata_container_run_common[@]}" --network=none --workdir "$workdir" "$image_ref" cargo
+    "$container_bin" run "${metadata_container_run_common[@]}" --network=none --entrypoint cargo --workdir "$workdir" "$image_ref"
 }
 
 run_cargo_coupling() {
@@ -157,10 +158,11 @@ run_cargo_coupling() {
       continue
     fi
 
-    fetch_command=(cargo fetch --manifest-path "$fetch_manifest_arg")
+    fetch_command=(fetch --manifest-path "$fetch_manifest_arg")
     set +e
     "$container_bin" run \
       "${container_run_common[@]}" \
+      --entrypoint cargo \
       --workdir "$workdir" \
       "$image_ref" \
       "${fetch_command[@]}" >"$fetch_stdout_file" 2>"$fetch_stderr_file"

@@ -107,6 +107,7 @@ case "$command" in
     cargo_home_mount_src=""
     rustup_mount_src=""
     container_workdir="/work"
+    entrypoint=""
     image_ref=""
     command_args=()
     option_with_value=""
@@ -132,12 +133,15 @@ case "$command" in
           --workdir)
             container_workdir="$arg"
             ;;
+          --entrypoint)
+            entrypoint="$arg"
+            ;;
         esac
         option_with_value=""
         continue
       fi
       case "$arg" in
-        --mount|--user|--workdir|--tmpfs|--security-opt|--cap-drop|--env|-e)
+        --mount|--user|--workdir|--tmpfs|--security-opt|--cap-drop|--env|-e|--entrypoint)
           option_with_value="$arg"
           continue
           ;;
@@ -151,6 +155,9 @@ case "$command" in
       fi
       command_args+=("$arg")
     done
+    if [ -n "$entrypoint" ]; then
+      command_args=("$entrypoint" "\${command_args[@]}")
+    fi
     printf '%s\\n' "$*" >> "$DOCKER_RUN_ARGS_LOG"
 
     if [ "\${command_args[0]-}" = "sh" ] && [ "\${command_args[1]-}" = "-ceu" ]; then
@@ -677,7 +684,16 @@ defineCommonCargoManifestTests({
 		assert.match(runArgs, /--network=none/);
 		assert.match(runArgs, /--read-only/);
 		assert.match(runArgs, /--tmpfs \/tmp/);
-		assert.match(runArgs, /cargo fetch --manifest-path Cargo\.toml/);
+		assert.match(
+			runArgs,
+			/--network=none --entrypoint cargo [^\n]*metadata --format-version 1 --no-deps --manifest-path Cargo\.toml/,
+		);
+		assert.match(
+			runArgs,
+			/--entrypoint cargo [^\n]*fetch --manifest-path Cargo\.toml/,
+		);
+		assert.match(runArgs, /--entrypoint cargo/);
+		assert.match(runArgs, /--entrypoint sh/);
 		assert.match(runArgs, /dst=\/cargo-home/);
 		assert.match(runArgs, /dst=\/usr\/local\/rustup/);
 		assert.match(runArgs, /CARGO_HOME=\/cargo-home/);
@@ -772,7 +788,7 @@ target-dir = "target/member"
 		assert.match(runArgs, /--workdir \/work\/crates\/member/);
 		assert.match(
 			runArgs,
-			/--workdir \/work\/crates\/member [^\n]*cargo fetch --manifest-path \.\.\/\.\.\/Cargo\.toml/,
+			/--workdir \/work\/crates\/member [^\n]*fetch --manifest-path \.\.\/\.\.\/Cargo\.toml/,
 		);
 		assert.match(runArgs, /coupling --json --no-git src/);
 		assert.deepEqual(
@@ -888,7 +904,7 @@ edition = "2021"
 		assert.doesNotMatch(runArgs, /dst=\/work,ro/u);
 		assert.match(
 			runArgs,
-			/--workdir \/work\/crates\/member [^\n]*cargo fetch --manifest-path \.\.\/\.\.\/Cargo\.toml/u,
+			/--workdir \/work\/crates\/member [^\n]*fetch --manifest-path \.\.\/\.\.\/Cargo\.toml/u,
 		);
 		assert.match(runArgs, /--workdir \/work\/crates\/member/u);
 		assert.match(runArgs, /coupling --json --no-git src/u);
