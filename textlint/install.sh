@@ -15,7 +15,7 @@ base_image=$(textlint_base_image)
 min_release_age_days=$(textlint_install_npm_min_release_age_days)
 build_context="$RUNNER_TEMP/textlint-image"
 # renovate: datasource=npm depName=textlint
-textlint_version="15.7.0"
+textlint_version="15.7.1"
 
 if "$container_bin" image inspect "$image_ref" >/dev/null 2>&1; then
   exit 0
