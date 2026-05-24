@@ -8,5 +8,5 @@ source "$script_dir/common.sh"
 
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
 # renovate: datasource=pypi depName=ruff
-ruff_version="0.15.13"
+ruff_version="0.15.14"
 linter_lib::install_python_tools "$RUNNER_TEMP/ruff-venv" "ruff==$ruff_version"
