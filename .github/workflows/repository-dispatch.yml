@@ -87,7 +87,7 @@ jobs:
             echo "::add-mask::$SOURCE_HEAD_SHA"
           fi
       - name: Check out linter-service repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           path: linter-service
           persist-credentials: false
@@ -205,7 +205,7 @@ jobs:
           repositories: ${{ env.SOURCE_REPOSITORY_NAME }}
       - name: Check out source repository for lint targeting
         if: ${{ steps.get_source_config_token.outcome == 'success' && env.SOURCE_HEAD_SHA != '' }}
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           path: source-routing-repo
           persist-credentials: false
@@ -670,7 +670,7 @@ jobs:
           name: detect-targets-context
           path: ${{ runner.temp }}/detect-targets-context
       - name: Check out linter-service repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           path: linter-service
           persist-credentials: false
