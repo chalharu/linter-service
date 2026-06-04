@@ -10,7 +10,7 @@ source "$script_dir/common.sh"
 renovate_require_container_runtime
 
 # renovate: datasource=npm depName=renovate
-renovate_version="43.205.3"
+renovate_version="43.206.1"
 container_bin=$(renovate_container_bin)
 base_image=$(renovate_base_image)
 image_repository=$(renovate_image_repository)
