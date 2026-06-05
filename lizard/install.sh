@@ -8,5 +8,5 @@ source "$script_dir/common.sh"
 
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
 # renovate: datasource=pypi depName=lizard
-lizard_version="1.22.2"
+lizard_version="1.23.0"
 linter_lib::install_python_tools "$RUNNER_TEMP/lizard-venv" "lizard==$lizard_version"
