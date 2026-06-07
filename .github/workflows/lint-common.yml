@@ -49,18 +49,18 @@ jobs:
       SOURCE_REPOSITORY_PATH: ${{ github.workspace }}/source-repo
     steps:
       - name: Download dispatch context artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: detect-targets-context
           path: ${{ runner.temp }}/detect-targets-context
       - name: Check out linter-service repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           path: linter-service
           persist-credentials: false
           ref: ${{ github.sha }}
       - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           cache: npm
           cache-dependency-path: linter-service/package-lock.json
@@ -123,7 +123,7 @@ jobs:
           private-key: ${{ secrets.CHECKER_PRIVATE_KEY }}
           repositories: ${{ steps.decode_context.outputs.source-repo }}
       - name: Check out source repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           path: source-repo
           persist-credentials: false
@@ -166,7 +166,7 @@ jobs:
           exit "$failures"
       - name: Upload linter summary artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: linter-summary-${{ inputs.artifact-name }}
           path: ${{ runner.temp }}/linter-summary-*.json.enc
@@ -200,7 +200,7 @@ jobs:
           exit "$failures"
       - name: Upload linter SARIF artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: linter-sarif-${{ inputs.artifact-name }}
           path: ${{ runner.temp }}/linter-sarif-*.sarif.enc
