@@ -27,11 +27,11 @@ jobs:
       fixture-assignments-json: ${{ steps.collect.outputs.fixture-assignments-json || '[]' }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
       - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           cache: npm
           cache-dependency-path: |
@@ -110,7 +110,7 @@ jobs:
         assignment: ${{ fromJSON(needs.validate-worker.outputs.fixture-assignments-json) }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
       - name: Log in to GHCR for Renovate image cache
@@ -122,7 +122,7 @@ jobs:
         run: |
           echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
       - name: Set up Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           cache: npm
           cache-dependency-path: package-lock.json
@@ -200,7 +200,7 @@ jobs:
           done
       - name: Upload recorded fixture outputs
         if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.fixture-mode == 'write' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: fixture-record-${{ matrix.assignment.artifact_name }}
           path: ${{ runner.temp }}/fixture-record-${{ matrix.assignment.artifact_name }}
