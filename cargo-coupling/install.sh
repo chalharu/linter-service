@@ -11,7 +11,7 @@ cargo_coupling_require_container_runtime
 
 container_bin=$(cargo_coupling_container_bin)
 # renovate: datasource=github-tags depName=nwiizo/cargo-coupling
-cargo_coupling_version="v0.3.2"
+cargo_coupling_version="v0.3.3"
 cargo_coupling_source_archive_sha256="0bbfe05d0302fd6752b5e4b512226820e13e52498dc3bc1ce03e172e19cbd556"
 image_ref=$(cargo_coupling_image_ref)
 build_root="$RUNNER_TEMP/cargo-coupling-image"
