@@ -11,7 +11,7 @@ cargo_deny_prepare_env
 # renovate: datasource=rust depName=rust versioning=semver
 rust_toolchain_version="1.94.1"
 # renovate: datasource=github-releases depName=EmbarkStudios/cargo-deny
-cargo_deny_version="0.19.8"
+cargo_deny_version="0.19.9"
 
 cargo_deny_install_binary() {
   local source_path=$1
