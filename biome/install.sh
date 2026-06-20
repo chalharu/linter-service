@@ -8,5 +8,5 @@ source "$script_dir/common.sh"
 
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
 # renovate: datasource=npm depName=@biomejs/biome
-biome_version="2.4.16"
+biome_version="2.5.0"
 linter_lib::install_node_tools "$RUNNER_TEMP/biome/npm-global" "@biomejs/biome@$biome_version"
