@@ -16,6 +16,25 @@ const {
 const installPath = path.join(__dirname, "install.sh");
 const commonPath = path.join(__dirname, "common.sh");
 const runPath = path.join(__dirname, "run.sh");
+const cargoCouplingVersion = readInstallAssignment("cargo_coupling_version");
+const cargoCouplingSemver = cargoCouplingVersion.replace(/^v/u, "");
+
+function readInstallAssignment(variableName) {
+	const source = fs.readFileSync(installPath, "utf8");
+	const match = source.match(
+		new RegExp(`^${variableName}="([^"\\n]+)"$`, "mu"),
+	);
+
+	if (!match) {
+		throw new Error(`failed to read ${variableName} from ${installPath}`);
+	}
+
+	return match[1];
+}
+
+function escapeRegExp(value) {
+	return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
 
 function createCargoStub(binDir) {
 	writeExecutable(
@@ -438,7 +457,7 @@ function createCargoCouplingSourceArchive(context) {
 		path.join(archiveRoot, "Cargo.toml"),
 		`[package]
 name = "cargo-coupling"
-version = "0.3.2"
+version = "${cargoCouplingSemver}"
 edition = "2021"
 `,
 	);
@@ -570,15 +589,24 @@ test("cargo-coupling install builds the pinned local container image when missin
 
 		assert.match(
 			fs.readFileSync(tooling.dockerImageInspectLog, "utf8"),
-			/localhost\/linter-service-cargo-coupling:0\.3\.2-[a-f0-9]{12}/,
+			new RegExp(
+				`localhost/linter-service-cargo-coupling:${escapeRegExp(cargoCouplingSemver)}-[a-f0-9]{12}`,
+				"u",
+			),
 		);
 		assert.match(
 			fs.readFileSync(tooling.curlLog, "utf8"),
-			/github\.com\/nwiizo\/cargo-coupling\/archive\/refs\/tags\/v0\.3\.2\.tar\.gz/,
+			new RegExp(
+				`github\\.com/nwiizo/cargo-coupling/archive/refs/tags/${escapeRegExp(cargoCouplingVersion)}\\.tar\\.gz`,
+				"u",
+			),
 		);
 		assert.match(
 			fs.readFileSync(tooling.dockerBuildLog, "utf8"),
-			/--tag localhost\/linter-service-cargo-coupling:0\.3\.2-[a-f0-9]{12}/,
+			new RegExp(
+				`--tag localhost/linter-service-cargo-coupling:${escapeRegExp(cargoCouplingSemver)}-[a-f0-9]{12}`,
+				"u",
+			),
 		);
 		assert.match(
 			fs.readFileSync(tooling.dockerBuildLog, "utf8"),
@@ -593,7 +621,7 @@ test("cargo-coupling install builds the pinned local container image when missin
 test("cargo-coupling image ref changes when build inputs change", () => {
 	const defaultEnv = {
 		...process.env,
-		CARGO_COUPLING_VERSION: "v0.3.2",
+		CARGO_COUPLING_VERSION: cargoCouplingVersion,
 		CARGO_COUPLING_SOURCE_ARCHIVE_SHA256:
 			"1111111111111111111111111111111111111111111111111111111111111111",
 	};
@@ -624,7 +652,10 @@ test("cargo-coupling image ref changes when build inputs change", () => {
 	assert.notEqual(defaultImageRef, alternateImageRef);
 	assert.match(
 		defaultImageRef,
-		/^localhost\/linter-service-cargo-coupling:0\.3\.2-[a-f0-9]{12}$/u,
+		new RegExp(
+			`^localhost/linter-service-cargo-coupling:${escapeRegExp(cargoCouplingSemver)}-[a-f0-9]{12}$`,
+			"u",
+		),
 	);
 });
 
