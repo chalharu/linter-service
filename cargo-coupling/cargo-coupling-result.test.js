@@ -204,16 +204,21 @@ test("buildCargoCouplingResult normalizes unstable cargo-coupling ordering and /
 				stderr:
 					"Analyzing project at 'src'...\nAnalysis complete: 3 files, 3 modules\n",
 				stdout: JSON.stringify({
+					extra_top_level_field: {
+						version: "0.3.3",
+					},
 					circular_dependencies: [
 						["fixture-fail::query", "fixture-fail::handler"],
 					],
 					hotspots: [
 						{
+							diagnostics: ["ignore me"],
 							file_path: "/work/src/query.rs",
 							in_cycle: true,
 							issues: [
 								{
 									description: "Part of a circular dependency cycle",
+									extra: true,
 									issue_type: "CircularDependency",
 									severity: "Critical",
 								},
@@ -231,6 +236,7 @@ test("buildCargoCouplingResult normalizes unstable cargo-coupling ordering and /
 									description: "Part of a circular dependency cycle",
 									issue_type: "CircularDependency",
 									severity: "Critical",
+									version: "new",
 								},
 							],
 							module: "fixture-fail::handler",
@@ -239,7 +245,22 @@ test("buildCargoCouplingResult normalizes unstable cargo-coupling ordering and /
 								"Break circular dependency by extracting shared types or inverting with traits",
 						},
 					],
-					issues: [],
+					issues: [
+						{
+							balance_score: 0.24,
+							description:
+								"Intrusive coupling across a distant module boundary",
+							issue_type: "Global Complexity",
+							metadata: {
+								threshold: "new",
+							},
+							severity: "Critical",
+							source: "fixture-fail::handler",
+							suggestion:
+								"Break the direct dependency by introducing an abstraction.",
+							target: "fixture-fail::query",
+						},
+					],
 					modules: [
 						{
 							balance_score: 1,
@@ -247,6 +268,7 @@ test("buildCargoCouplingResult normalizes unstable cargo-coupling ordering and /
 							couplings_out: 0,
 							file_path: "/work/src/query.rs",
 							in_cycle: false,
+							item_count: 3,
 							name: "query",
 						},
 						{
@@ -273,7 +295,11 @@ test("buildCargoCouplingResult normalizes unstable cargo-coupling ordering and /
 						health_score: 0.75,
 						high_issues: 0,
 						internal_couplings: 2,
+						low_issues: 4,
 						medium_issues: 0,
+						subdomains: {
+							core: 1,
+						},
 						total_couplings: 2,
 						total_modules: 3,
 					},
@@ -303,6 +329,33 @@ test("buildCargoCouplingResult normalizes unstable cargo-coupling ordering and /
 			(entry) => entry.file_path,
 		),
 		["src/handler.rs", "src/query.rs"],
+	);
+	assert.deepEqual(result.cargo_coupling_runs[0].json_output.issues, [
+		{
+			balance_score: 0.24,
+			description: "Intrusive coupling across a distant module boundary",
+			issue_type: "Global Complexity",
+			severity: "Critical",
+			source: "fixture-fail::handler",
+			suggestion: "Break the direct dependency by introducing an abstraction.",
+			target: "fixture-fail::query",
+		},
+	]);
+	assert.equal(
+		"extra_top_level_field" in result.cargo_coupling_runs[0].json_output,
+		false,
+	);
+	assert.equal(
+		"low_issues" in result.cargo_coupling_runs[0].json_output.summary,
+		false,
+	);
+	assert.equal(
+		"item_count" in result.cargo_coupling_runs[0].json_output.modules[0],
+		false,
+	);
+	assert.equal(
+		"diagnostics" in result.cargo_coupling_runs[0].json_output.hotspots[0],
+		false,
 	);
 	assert.match(
 		result.details,

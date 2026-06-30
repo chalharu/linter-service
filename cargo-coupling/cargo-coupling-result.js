@@ -112,8 +112,12 @@ function normalizeCargoCouplingJsonOutput(jsonOutput) {
 		return jsonOutput;
 	}
 
-	return {
-		...jsonOutput,
+	const normalized = {
+		...(Object.hasOwn(jsonOutput, "summary")
+			? {
+					summary: normalizeCargoCouplingSummary(jsonOutput.summary),
+				}
+			: {}),
 		...(Array.isArray(jsonOutput.circular_dependencies)
 			? {
 					circular_dependencies: [...jsonOutput.circular_dependencies]
@@ -130,7 +134,9 @@ function normalizeCargoCouplingJsonOutput(jsonOutput) {
 			: {}),
 		...(Array.isArray(jsonOutput.issues)
 			? {
-					issues: [...jsonOutput.issues].sort(compareCargoCouplingIssues),
+					issues: [...jsonOutput.issues]
+						.map((issue) => normalizeCargoCouplingIssue(issue))
+						.sort(compareCargoCouplingIssues),
 				}
 			: {}),
 		...(Array.isArray(jsonOutput.modules)
@@ -141,6 +147,8 @@ function normalizeCargoCouplingJsonOutput(jsonOutput) {
 				}
 			: {}),
 	};
+
+	return normalized;
 }
 
 function canonicalizeCargoCouplingCycle(cycle) {
@@ -175,17 +183,114 @@ function normalizeCargoCouplingHotspot(hotspot) {
 	}
 
 	return {
-		...hotspot,
 		...(Object.hasOwn(hotspot, "file_path")
 			? {
 					file_path: normalizeCargoCouplingPath(hotspot.file_path),
 				}
 			: {}),
-		...(Array.isArray(hotspot.issues)
+		...(Object.hasOwn(hotspot, "in_cycle")
 			? {
-					issues: [...hotspot.issues].sort(compareCargoCouplingHotspotIssues),
+					in_cycle: hotspot.in_cycle,
 				}
 			: {}),
+		...(Object.hasOwn(hotspot, "module")
+			? {
+					module: hotspot.module,
+				}
+			: {}),
+		...(Object.hasOwn(hotspot, "score")
+			? {
+					score: hotspot.score,
+				}
+			: {}),
+		...(Object.hasOwn(hotspot, "suggestion")
+			? {
+					suggestion: hotspot.suggestion,
+				}
+			: {}),
+		...(Array.isArray(hotspot.issues)
+			? {
+					issues: [...hotspot.issues]
+						.map((issue) => normalizeCargoCouplingHotspotIssue(issue))
+						.sort(compareCargoCouplingHotspotIssues),
+				}
+			: {}),
+	};
+}
+
+function normalizeCargoCouplingSummary(summary) {
+	if (!summary || typeof summary !== "object" || Array.isArray(summary)) {
+		return summary;
+	}
+
+	return {
+		...(Object.hasOwn(summary, "critical_issues")
+			? { critical_issues: summary.critical_issues }
+			: {}),
+		...(Object.hasOwn(summary, "external_couplings")
+			? { external_couplings: summary.external_couplings }
+			: {}),
+		...(Object.hasOwn(summary, "health_grade")
+			? { health_grade: summary.health_grade }
+			: {}),
+		...(Object.hasOwn(summary, "health_score")
+			? { health_score: summary.health_score }
+			: {}),
+		...(Object.hasOwn(summary, "high_issues")
+			? { high_issues: summary.high_issues }
+			: {}),
+		...(Object.hasOwn(summary, "internal_couplings")
+			? { internal_couplings: summary.internal_couplings }
+			: {}),
+		...(Object.hasOwn(summary, "medium_issues")
+			? { medium_issues: summary.medium_issues }
+			: {}),
+		...(Object.hasOwn(summary, "total_couplings")
+			? { total_couplings: summary.total_couplings }
+			: {}),
+		...(Object.hasOwn(summary, "total_modules")
+			? { total_modules: summary.total_modules }
+			: {}),
+	};
+}
+
+function normalizeCargoCouplingIssue(issue) {
+	if (!issue || typeof issue !== "object" || Array.isArray(issue)) {
+		return issue;
+	}
+
+	return {
+		...(Object.hasOwn(issue, "balance_score")
+			? { balance_score: issue.balance_score }
+			: {}),
+		...(Object.hasOwn(issue, "description")
+			? { description: issue.description }
+			: {}),
+		...(Object.hasOwn(issue, "issue_type")
+			? { issue_type: issue.issue_type }
+			: {}),
+		...(Object.hasOwn(issue, "severity") ? { severity: issue.severity } : {}),
+		...(Object.hasOwn(issue, "source") ? { source: issue.source } : {}),
+		...(Object.hasOwn(issue, "suggestion")
+			? { suggestion: issue.suggestion }
+			: {}),
+		...(Object.hasOwn(issue, "target") ? { target: issue.target } : {}),
+	};
+}
+
+function normalizeCargoCouplingHotspotIssue(issue) {
+	if (!issue || typeof issue !== "object" || Array.isArray(issue)) {
+		return issue;
+	}
+
+	return {
+		...(Object.hasOwn(issue, "description")
+			? { description: issue.description }
+			: {}),
+		...(Object.hasOwn(issue, "issue_type")
+			? { issue_type: issue.issue_type }
+			: {}),
+		...(Object.hasOwn(issue, "severity") ? { severity: issue.severity } : {}),
 	};
 }
 
@@ -195,12 +300,22 @@ function normalizeCargoCouplingModule(module) {
 	}
 
 	return {
-		...module,
+		...(Object.hasOwn(module, "balance_score")
+			? { balance_score: module.balance_score }
+			: {}),
+		...(Object.hasOwn(module, "couplings_in")
+			? { couplings_in: module.couplings_in }
+			: {}),
+		...(Object.hasOwn(module, "couplings_out")
+			? { couplings_out: module.couplings_out }
+			: {}),
 		...(Object.hasOwn(module, "file_path")
 			? {
 					file_path: normalizeCargoCouplingPath(module.file_path),
 				}
 			: {}),
+		...(Object.hasOwn(module, "in_cycle") ? { in_cycle: module.in_cycle } : {}),
+		...(Object.hasOwn(module, "name") ? { name: module.name } : {}),
 	};
 }
 
