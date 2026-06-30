@@ -345,7 +345,8 @@ function sanitizeFixtureValue(value, repositoryPath, pathParts = []) {
 
 	return Object.fromEntries(
 		Object.entries(value).flatMap(([key, entry]) =>
-			isSarifToolVersionField(key, pathParts)
+			isSarifToolVersionField(key, pathParts) ||
+			isObsoleteSarifLocalPrefixField(key, entry, pathParts)
 				? []
 				: [
 						[
@@ -355,6 +356,19 @@ function sanitizeFixtureValue(value, repositoryPath, pathParts = []) {
 					],
 		),
 	);
+}
+
+function isObsoleteSarifLocalPrefixField(key, entry, pathParts) {
+	if (key !== "prefix" || entry !== null) {
+		return false;
+	}
+
+	const parentKey = pathParts[pathParts.length - 1];
+	if (parentKey !== "Local") {
+		return false;
+	}
+
+	return hasSarifRootPrefix(pathParts, pathParts.length);
 }
 
 function isSarifToolVersionField(key, pathParts) {
@@ -503,11 +517,15 @@ function normalizeSarif(sarif, repositoryPath) {
 }
 
 function normalizeSarifResult({ result, toolName }) {
-	if (toolName === "zizmor") {
+	if (isZizmorSarifTool(toolName)) {
 		normalizeZizmorResultMessage(result);
 	}
 
 	return result;
+}
+
+function isZizmorSarifTool(toolName) {
+	return toolName === "zizmor" || toolName.endsWith("/zizmor");
 }
 
 function normalizeZizmorResultMessage(result) {

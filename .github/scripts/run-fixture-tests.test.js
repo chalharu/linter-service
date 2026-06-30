@@ -495,6 +495,73 @@ test("normalizeFixtureAssertionValue removes embedded SARIF tool versions", () =
 	});
 });
 
+test("normalizeFixtureAssertionValue removes obsolete zizmor local prefixes", () => {
+	const actual = normalizeFixtureAssertionValue({
+		result: {
+			sarif: {
+				runs: [
+					{
+						results: [
+							{
+								locations: [
+									{
+										logicalLocations: [
+											{
+												properties: {
+													symbolic: {
+														key: {
+															Local: {
+																given_path: ".github/workflows/workflow.yml",
+																prefix: null,
+															},
+														},
+													},
+												},
+											},
+										],
+									},
+								],
+							},
+						],
+					},
+				],
+			},
+		},
+	});
+
+	assert.deepEqual(actual, {
+		result: {
+			sarif: {
+				runs: [
+					{
+						results: [
+							{
+								locations: [
+									{
+										logicalLocations: [
+											{
+												properties: {
+													symbolic: {
+														key: {
+															Local: {
+																given_path: ".github/workflows/workflow.yml",
+															},
+														},
+													},
+												},
+											},
+										],
+									},
+								],
+							},
+						],
+					},
+				],
+			},
+		},
+	});
+});
+
 test("normalizeFixtureResult preserves non-SARIF tool version fields", () => {
 	const actual = normalizeFixtureResult({
 		report: {
@@ -703,6 +770,82 @@ test("normalizeSarif stabilizes zizmor result messages across versions", () => {
 				tool: {
 					driver: {
 						name: "zizmor",
+					},
+				},
+			},
+		],
+		version: "2.1.0",
+	});
+});
+
+test("normalizeSarif stabilizes wrapped zizmor result messages across versions", () => {
+	const actual = normalizeSarif(
+		{
+			$schema: "https://json.schemastore.org/sarif-2.1.0.json",
+			runs: [
+				{
+					results: [
+						{
+							level: "warning",
+							locations: [
+								{
+									message: {
+										text: "default permissions used due to no permissions: block",
+									},
+									physicalLocation: {
+										artifactLocation: {
+											uri: "/tmp/fixture-run/repo/.github/workflows/ci.yml",
+										},
+									},
+								},
+							],
+							message: {
+								text: "overly broad permissions: default permissions used due to no permissions: block",
+							},
+							ruleId: "zizmor/excessive-permissions",
+						},
+					],
+					tool: {
+						driver: {
+							name: "linter-service/zizmor",
+							version: "1.26.1",
+						},
+					},
+				},
+			],
+			version: "2.1.0",
+		},
+		"/tmp/fixture-run/repo",
+	);
+
+	assert.deepEqual(actual, {
+		$schema: "https://json.schemastore.org/sarif-2.1.0.json",
+		runs: [
+			{
+				results: [
+					{
+						level: "warning",
+						locations: [
+							{
+								message: {
+									text: "default permissions used due to no permissions: block",
+								},
+								physicalLocation: {
+									artifactLocation: {
+										uri: ".github/workflows/ci.yml",
+									},
+								},
+							},
+						],
+						message: {
+							text: "overly broad permissions",
+						},
+						ruleId: "zizmor/excessive-permissions",
+					},
+				],
+				tool: {
+					driver: {
+						name: "linter-service/zizmor",
 					},
 				},
 			},
