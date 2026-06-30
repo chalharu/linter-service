@@ -345,7 +345,8 @@ function sanitizeFixtureValue(value, repositoryPath, pathParts = []) {
 
 	return Object.fromEntries(
 		Object.entries(value).flatMap(([key, entry]) =>
-			isSarifToolVersionField(key, pathParts)
+			isSarifToolVersionField(key, pathParts) ||
+			isObsoleteSarifLocalPrefixField(key, entry, pathParts)
 				? []
 				: [
 						[
@@ -355,6 +356,19 @@ function sanitizeFixtureValue(value, repositoryPath, pathParts = []) {
 					],
 		),
 	);
+}
+
+function isObsoleteSarifLocalPrefixField(key, entry, pathParts) {
+	if (key !== "prefix" || entry !== null) {
+		return false;
+	}
+
+	const parentKey = pathParts[pathParts.length - 1];
+	if (parentKey !== "Local") {
+		return false;
+	}
+
+	return hasSarifRootPrefix(pathParts, pathParts.length);
 }
 
 function isSarifToolVersionField(key, pathParts) {
@@ -474,10 +488,15 @@ function normalizeSarif(sarif, repositoryPath) {
 
 	if (Array.isArray(normalized.runs)) {
 		normalized.runs = normalized.runs.map((run) => {
+			const toolName =
+				typeof run.tool?.driver?.name === "string" ? run.tool.driver.name : "";
 			if (Array.isArray(run.results)) {
 				run.results = [...run.results]
 					.map((result) => {
-						const sanitizedResult = { ...result };
+						const sanitizedResult = normalizeSarifResult({
+							result: { ...result },
+							toolName,
+						});
 						delete sanitizedResult.partialFingerprints;
 						return sortKeysDeep(sanitizedResult);
 					})
@@ -495,6 +514,40 @@ function normalizeSarif(sarif, repositoryPath) {
 	}
 
 	return sortKeysDeep(normalized);
+}
+
+function normalizeSarifResult({ result, toolName }) {
+	if (isZizmorSarifTool(toolName)) {
+		normalizeZizmorResultMessage(result);
+	}
+
+	return result;
+}
+
+function isZizmorSarifTool(toolName) {
+	return toolName === "zizmor" || toolName.endsWith("/zizmor");
+}
+
+function normalizeZizmorResultMessage(result) {
+	const resultMessageText =
+		typeof result?.message?.text === "string" ? result.message.text.trim() : "";
+	const locationMessageText =
+		typeof result?.locations?.[0]?.message?.text === "string"
+			? result.locations[0].message.text.trim()
+			: "";
+
+	if (
+		resultMessageText.length === 0 ||
+		locationMessageText.length === 0 ||
+		!resultMessageText.endsWith(`: ${locationMessageText}`)
+	) {
+		return;
+	}
+
+	result.message = {
+		...result.message,
+		text: resultMessageText.slice(0, -`: ${locationMessageText}`.length),
+	};
 }
 
 function compareSarifResults(left, right) {
