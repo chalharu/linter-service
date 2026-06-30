@@ -42,19 +42,14 @@ cargo_coupling_source_version() {
   printf '%s\n' "${CARGO_COUPLING_VERSION:-$(cargo_coupling::read_install_assignment cargo_coupling_version)}"
 }
 
-cargo_coupling_source_archive_sha256() {
-  printf '%s\n' "${CARGO_COUPLING_SOURCE_ARCHIVE_SHA256:-$(cargo_coupling::read_install_assignment cargo_coupling_source_archive_sha256)}"
-}
-
 cargo_coupling_image_tag() {
-  local source_version source_archive_sha256 dockerfile_contents build_hash
+  local source_version dockerfile_contents build_hash
 
   source_version=$(cargo_coupling_source_version)
-  source_archive_sha256=$(cargo_coupling_source_archive_sha256)
   dockerfile_contents=$(cat "$script_dir/Dockerfile.full")
   build_hash=$(
     cargo_coupling::sha256_prefix \
-      "$(printf '%s\n%s\n%s' "$source_version" "$source_archive_sha256" "$dockerfile_contents")" \
+      "$(printf '%s\n%s' "$source_version" "$dockerfile_contents")" \
       12
   )
 
