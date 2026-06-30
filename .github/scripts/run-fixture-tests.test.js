@@ -635,6 +635,82 @@ test("normalizeSarif removes volatile timestamps and partial fingerprints", () =
 	});
 });
 
+test("normalizeSarif stabilizes zizmor result messages across versions", () => {
+	const actual = normalizeSarif(
+		{
+			$schema: "https://json.schemastore.org/sarif-2.1.0.json",
+			runs: [
+				{
+					results: [
+						{
+							level: "warning",
+							locations: [
+								{
+									message: {
+										text: "does not set persist-credentials: false",
+									},
+									physicalLocation: {
+										artifactLocation: {
+											uri: "/tmp/fixture-run/repo/.github/workflows/ci.yml",
+										},
+									},
+								},
+							],
+							message: {
+								text: "credential persistence through GitHub Actions artifacts: does not set persist-credentials: false",
+							},
+							ruleId: "zizmor/artipacked",
+						},
+					],
+					tool: {
+						driver: {
+							name: "zizmor",
+							version: "1.25.2",
+						},
+					},
+				},
+			],
+			version: "2.1.0",
+		},
+		"/tmp/fixture-run/repo",
+	);
+
+	assert.deepEqual(actual, {
+		$schema: "https://json.schemastore.org/sarif-2.1.0.json",
+		runs: [
+			{
+				results: [
+					{
+						level: "warning",
+						locations: [
+							{
+								message: {
+									text: "does not set persist-credentials: false",
+								},
+								physicalLocation: {
+									artifactLocation: {
+										uri: ".github/workflows/ci.yml",
+									},
+								},
+							},
+						],
+						message: {
+							text: "credential persistence through GitHub Actions artifacts",
+						},
+						ruleId: "zizmor/artipacked",
+					},
+				],
+				tool: {
+					driver: {
+						name: "zizmor",
+					},
+				},
+			},
+		],
+		version: "2.1.0",
+	});
+});
+
 test("runFixtureTests can write and then verify fake linter fixtures", () => {
 	const context = makeTempRepo();
 	scaffoldFakeLinterRepo(context.repoDir);
