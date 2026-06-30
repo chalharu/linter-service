@@ -1,6 +1,5 @@
 const test = require("node:test");
 const { execFileSync } = require("node:child_process");
-const { createHash } = require("node:crypto");
 
 const {
 	assert,
@@ -481,9 +480,6 @@ edition = "2021"
 
 	return {
 		archivePath,
-		archiveSha256: createHash("sha256")
-			.update(fs.readFileSync(archivePath))
-			.digest("hex"),
 	};
 }
 
@@ -535,7 +531,6 @@ function setupTooling(context) {
 
 	const tooling = {
 		cargoCouplingSourceArchivePath: cargoCouplingSourceArchive.archivePath,
-		cargoCouplingSourceArchiveSha256: cargoCouplingSourceArchive.archiveSha256,
 		curlLog: path.join(context.tempDir, "curl.log"),
 		dockerBuildLog: path.join(context.tempDir, "docker-build.log"),
 		dockerFetchManifestLog: path.join(
@@ -555,8 +550,6 @@ function setupTooling(context) {
 	return {
 		...tooling,
 		env: {
-			CARGO_COUPLING_SOURCE_ARCHIVE_SHA256:
-				cargoCouplingSourceArchive.archiveSha256,
 			CURL_LOG: tooling.curlLog,
 			DOCKER_BUILD_LOG: tooling.dockerBuildLog,
 			DOCKER_FETCH_MANIFEST_LOG: tooling.dockerFetchManifestLog,
@@ -622,13 +615,10 @@ test("cargo-coupling image ref changes when build inputs change", () => {
 	const defaultEnv = {
 		...process.env,
 		CARGO_COUPLING_VERSION: cargoCouplingVersion,
-		CARGO_COUPLING_SOURCE_ARCHIVE_SHA256:
-			"1111111111111111111111111111111111111111111111111111111111111111",
 	};
 	const alternateEnv = {
 		...defaultEnv,
-		CARGO_COUPLING_SOURCE_ARCHIVE_SHA256:
-			"2222222222222222222222222222222222222222222222222222222222222222",
+		CARGO_COUPLING_VERSION: "v9.9.9",
 	};
 	const defaultImageRef = execFileSync(
 		"bash",
@@ -659,34 +649,29 @@ test("cargo-coupling image ref changes when build inputs change", () => {
 	);
 });
 
-test("cargo-coupling install rejects an unexpected source archive checksum", () => {
-	const context = makeTempRepo("cargo-coupling-install-checksum-");
+test("cargo-coupling install does not require a source archive checksum override", () => {
+	const context = makeTempRepo("cargo-coupling-install-no-checksum-");
 	const tooling = setupTooling(context);
 
 	try {
-		let error;
-		assert.throws(() => {
-			try {
-				execFileSync("bash", [installPath], {
-					cwd: context.repoDir,
-					encoding: "utf8",
-					env: {
-						...process.env,
-						...tooling.env,
-						CARGO_COUPLING_SOURCE_ARCHIVE_SHA256: "deadbeef",
-						MISSING_IMAGE: "1",
-						PATH: `${context.binDir}:${process.env.PATH}`,
-						RUNNER_TEMP: context.runnerTemp,
-					},
-				});
-			} catch (e) {
-				error = e;
-				throw e;
-			}
+		execFileSync("bash", [installPath], {
+			cwd: context.repoDir,
+			encoding: "utf8",
+			env: {
+				...process.env,
+				...tooling.env,
+				MISSING_IMAGE: "1",
+				PATH: `${context.binDir}:${process.env.PATH}`,
+				RUNNER_TEMP: context.runnerTemp,
+			},
 		});
-
-		assert.match(error.stderr, /source archive checksum mismatch/u);
-		assert.equal(fs.existsSync(tooling.dockerBuildLog), false);
+		assert.match(
+			fs.readFileSync(tooling.dockerBuildLog, "utf8"),
+			new RegExp(
+				`--tag localhost/linter-service-cargo-coupling:${escapeRegExp(cargoCouplingSemver)}-[a-f0-9]{12}`,
+				"u",
+			),
+		);
 	} finally {
 		cleanupTempRepo(context.tempDir);
 	}
