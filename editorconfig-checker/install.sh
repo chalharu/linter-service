@@ -13,7 +13,7 @@ if command -v editorconfig-checker >/dev/null 2>&1 && editorconfig-checker -vers
 fi
 
 # renovate: datasource=github-releases depName=editorconfig-checker/editorconfig-checker
-editorconfig_checker_version="v3.7.0"
+editorconfig_checker_version="v3.8.0"
 asset="ec-linux-amd64.tar.gz"
 archive_path="$RUNNER_TEMP/$asset"
 extract_dir="$RUNNER_TEMP/editorconfig-checker-extract"
