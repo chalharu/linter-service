@@ -13,7 +13,7 @@
 					"high_count": 0,
 					"medium_count": 0,
 					"passed": false,
-					"score": 0.75
+					"score": 1
 				},
 				"exit_code": 0,
 				"json_output": {
@@ -81,7 +81,7 @@
 						"critical_issues": 0,
 						"external_couplings": 0,
 						"health_grade": "B",
-						"health_score": 0.75,
+						"health_score": 1,
 						"high_issues": 0,
 						"internal_couplings": 2,
 						"medium_issues": 0,
