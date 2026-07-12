@@ -92,7 +92,7 @@
 				"manifest_path": "Cargo.toml"
 			}
 		],
-		"details": "==> docker run cargo-coupling coupling --json --no-git src\nGrade: B | Score: 75% | Quality gate: FAILED\nThresholds: min_grade=B, max_critical=0, max_circular=0\nModules: 3 | Couplings: 2 | Critical: 0 | High: 0 | Medium: 0 | Circular: 1\nBlocking issues:\n - 1 circular dependencies (max: 0)\nCircular dependencies:\n - fixture-fail::handler -> fixture-fail::query\nAnalyzing project at 'src'...\nAnalysis complete: 3 files, 3 modules",
+		"details": "==> docker run cargo-coupling coupling --json --no-git src\nGrade: B | Score: 100% | Quality gate: FAILED\nThresholds: min_grade=B, max_critical=0, max_circular=0\nModules: 3 | Couplings: 2 | Critical: 0 | High: 0 | Medium: 0 | Circular: 1\nBlocking issues:\n - 1 circular dependencies (max: 0)\nCircular dependencies:\n - fixture-fail::handler -> fixture-fail::query\nAnalyzing project at 'src'...\nAnalysis complete: 3 files, 3 modules",
 		"exit_code": 1
 	},
 	"selected_files": ["src/handler.rs", "src/lib.rs", "src/query.rs"]
