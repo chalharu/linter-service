@@ -8,5 +8,5 @@ source "$script_dir/common.sh"
 
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
 # renovate: datasource=npm depName=@stoplight/spectral-cli
-spectral_version="6.16.1"
+spectral_version="6.16.2"
 linter_lib::install_node_tools "$RUNNER_TEMP/spectral/npm-global" "@stoplight/spectral-cli@$spectral_version"
