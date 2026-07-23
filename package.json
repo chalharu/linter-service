@@ -2,7 +2,7 @@
   "name": "linter-service",
   "private": true,
   "dependencies": {
-    "js-yaml": "5.2.1"
+    "js-yaml": "5.2.2"
   },
   "devDependencies": {
     "ajv": "8.20.0"
