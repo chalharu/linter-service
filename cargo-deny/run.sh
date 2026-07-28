@@ -160,12 +160,11 @@ run_cargo_deny() {
       --log-level warn
       --all-features
       --manifest-path "$current_manifest_arg"
-      check
-      --audit-compatible-output
     )
     if [ -n "$config_arg" ]; then
-      cargo_command+=(-- --config "$config_arg")
+      cargo_command+=(--config "$config_arg")
     fi
+    cargo_command+=(check --audit-compatible-output)
     cargo_display_command=(
       cargo
       deny
@@ -174,12 +173,11 @@ run_cargo_deny() {
       --log-level warn
       --all-features
       --manifest-path "$current_manifest"
-      check
-      --audit-compatible-output
     )
     if [ -n "$config_path" ]; then
-      cargo_display_command+=(-- --config "$config_path")
+      cargo_display_command+=(--config "$config_path")
     fi
+    cargo_display_command+=(check --audit-compatible-output)
     command_line="${cargo_display_command[*]}"
     printf '%s\n' "$command_line" > "$run_dir/command.txt"
     printf '%s\n' "$current_manifest" > "$run_dir/manifest_path.txt"
