@@ -164,7 +164,7 @@ run_cargo_deny() {
       --audit-compatible-output
     )
     if [ -n "$config_arg" ]; then
-      cargo_command+=(--config "$config_arg")
+      cargo_command+=(-- --config "$config_arg")
     fi
     cargo_display_command=(
       cargo
@@ -178,7 +178,7 @@ run_cargo_deny() {
       --audit-compatible-output
     )
     if [ -n "$config_path" ]; then
-      cargo_display_command+=(--config "$config_path")
+      cargo_display_command+=(-- --config "$config_path")
     fi
     command_line="${cargo_display_command[*]}"
     printf '%s\n' "$command_line" > "$run_dir/command.txt"
