@@ -13,7 +13,7 @@ if command -v hadolint >/dev/null 2>&1 && hadolint --version >/dev/null 2>&1; th
 fi
 
 # renovate: datasource=github-releases depName=hadolint/hadolint
-hadolint_version="v2.14.0"
+hadolint_version="v2.15.1"
 asset="hadolint-linux-x86_64"
 bin_dir="$RUNNER_TEMP/hadolint/bin"
 
