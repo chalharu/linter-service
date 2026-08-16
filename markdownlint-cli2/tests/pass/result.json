@@ -1,7 +1,7 @@
 {
   "checked_projects": [],
   "result": {
-    "details": "markdownlint-cli2 v0.22.0 (markdownlint v0.40.0)\nFinding: :README.md\nLinting: 1 file(s)\nSummary: 0 error(s)",
+    "details": "markdownlint-cli2 v0.23.2 (markdownlint v0.41.1)\nFinding: :README.md\nLinting: 1 file\nSummary: 0 issues in 0 files",
     "exit_code": 0
   },
   "selected_files": [
