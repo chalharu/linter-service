@@ -140,7 +140,7 @@ describe("github webhook proxy worker pull_request events", () => {
 		);
 
 		const dispatchBody = JSON.parse(
-			(fetchMock.mock.calls[6]?.[1] as RequestInit).body as string,
+			(fetchMock.mock.calls[6][1] as RequestInit).body as string,
 		) as {
 			client_payload: {
 				event_name: string;
@@ -170,7 +170,7 @@ describe("github webhook proxy worker pull_request events", () => {
 		expectValidDispatchSignature(dispatchBody.client_payload);
 
 		const queuedCheckBody = JSON.parse(
-			(fetchMock.mock.calls[5]?.[1] as RequestInit).body as string,
+			(fetchMock.mock.calls[5][1] as RequestInit).body as string,
 		) as {
 			details_url: string;
 			external_id: string;
@@ -524,7 +524,7 @@ describe("github webhook proxy worker pull_request events", () => {
 		expect(fetchMock.mock.calls[5]?.[0]).toBe(
 			"https://api.github.com/repos/acme/source-repo/check-runs/73",
 		);
-		expect((fetchMock.mock.calls[5]?.[1] as RequestInit).method).toBe("PATCH");
+		expect((fetchMock.mock.calls[5][1] as RequestInit).method).toBe("PATCH");
 	});
 
 	it("scans multiple check-run pages before deciding to create a queued check", async () => {
@@ -767,7 +767,7 @@ describe("github webhook proxy worker push events", () => {
 		expect(fetchMock).toHaveBeenCalledTimes(3);
 
 		const dispatchBody = JSON.parse(
-			(fetchMock.mock.calls[2]?.[1] as RequestInit).body as string,
+			(fetchMock.mock.calls[2][1] as RequestInit).body as string,
 		) as {
 			client_payload: {
 				event_name: string;
@@ -822,7 +822,7 @@ describe("github webhook proxy worker push events", () => {
 			GITHUB_CHECKER_APP_PRIVATE_KEY: TEST_PRIVATE_KEY_ESCAPED,
 		});
 		const dispatchBody = JSON.parse(
-			(fetchMock.mock.calls[2]?.[1] as RequestInit).body as string,
+			(fetchMock.mock.calls[2][1] as RequestInit).body as string,
 		) as {
 			client_payload: {
 				signature: string;
