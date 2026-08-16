@@ -4,14 +4,14 @@
 		"cargo_deny_runs": [
 			{
 				"audit_reports": [],
-				"command": "cargo deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output --config deny.toml",
+				"command": "cargo deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml --config deny.toml check --audit-compatible-output",
 				"config_path": "deny.toml",
 				"diagnostics": [],
 				"exit_code": 1,
 				"manifest_path": "Cargo.toml"
 			}
 		],
-		"details": "==> cargo deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml check --audit-compatible-output --config deny.toml",
+		"details": "==> cargo deny --format json --color never --log-level warn --all-features --manifest-path Cargo.toml --config deny.toml check --audit-compatible-output",
 		"exit_code": 1
 	},
 	"selected_files": ["Cargo.lock", "Cargo.toml", "deny.toml"]
