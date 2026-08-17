@@ -29,7 +29,7 @@ LIBRARY_TARGET_KINDS = {
 
 
 def strip_work_prefix(value: str) -> str:
-    return value[len(WORK_PREFIX) :] if value.startswith(WORK_PREFIX) else value
+    return value.removeprefix(WORK_PREFIX)
 
 
 def run_cargo_metadata(manifest_path: str) -> dict | None:
@@ -47,6 +47,7 @@ def run_cargo_metadata(manifest_path: str) -> dict | None:
         encoding="utf-8",
         errors="replace",
         text=True,
+        check=False,
     )
     if result.returncode != 0:
         print(
@@ -213,6 +214,7 @@ def scan_manifest(manifest_path: str, run_index_state: list[int]) -> bool:
             encoding="utf-8",
             errors="replace",
             text=True,
+            check=False,
         )
         (run_dir / "exit_code.txt").write_text(
             str(compile.returncode) + "\n",
@@ -242,6 +244,7 @@ def scan_manifest(manifest_path: str, run_index_state: list[int]) -> bool:
             encoding="utf-8",
             errors="replace",
             text=True,
+            check=False,
         )
 
         if nm.returncode != 0:
