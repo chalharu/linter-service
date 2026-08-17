@@ -61,6 +61,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=builder /bin/server /app/cargo-coupling
 
+# hadolint ignore=DL3066
 USER appuser
 WORKDIR /workspace
 HEALTHCHECK --interval=5m --timeout=3s --start-period=5s --retries=1 CMD ["/app/cargo-coupling", "--help"]
