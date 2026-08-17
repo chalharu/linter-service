@@ -29,8 +29,7 @@
                                     "feature_kind": "Normal",
                                     "key": {
                                       "Local": {
-                                        "given_path": ".github/workflows/workflow.yml",
-                                        "prefix": null
+                                        "verbatim_path": ".github/workflows/workflow.yml"
                                       }
                                     },
                                     "kind": "Primary",
@@ -91,8 +90,7 @@
                           "feature_kind": "Normal",
                           "key": {
                             "Local": {
-                              "given_path": ".github/workflows/workflow.yml",
-                              "prefix": null
+                              "verbatim_path": ".github/workflows/workflow.yml"
                             }
                           },
                           "kind": "Primary",
@@ -167,9 +165,7 @@
                     ]
                   }
                 }
-              ],
-              "semanticVersion": "1.24.1",
-              "version": "1.24.1"
+              ]
             }
           }
         }
