@@ -28,5 +28,6 @@ RUN apt-get update \
       "renovate@${RENOVATE_VERSION}"; \
   fi
 
+# hadolint ignore=DL3066
 USER node
 HEALTHCHECK NONE
