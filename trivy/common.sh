@@ -68,10 +68,13 @@ trivy_copy_root_support_files() {
   local target_root=$1
 
   linter_lib::copy_first_existing_path "$target_root" trivy.yaml trivy.yml || true
-
-  if [ -f .trivyignore ]; then
-    local destination="$target_root/.trivyignore"
-    mkdir -p "$(dirname "$destination")"
-    cp .trivyignore "$destination"
-  fi
+  
+  local ignore_file
+  for ignore_file in .trivyignore .trivyignore.yaml .trivyignore.yml; do
+    if [ -f "$ignore_file" ]; then
+      local destination="$target_root/$ignore_file"
+      mkdir -p "$(dirname "$destination")"
+      cp "$ignore_file" "$destination"
+    fi
+  done
 }
