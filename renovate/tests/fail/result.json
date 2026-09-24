@@ -1,7 +1,7 @@
 {
   "checked_projects": [],
   "result": {
-    "details": "FATAL: Could not parse config file\n       \"error\": \"SyntaxError: JSON5: invalid end of input at 4:1\nconfig: .github/renovate.json5",
+    "details": "FATAL: Could not parse config file\n       \"err\": {\n         \"lineNumber\": 4,\n         \"columnNumber\": 1,\n         \"message\": \"JSON5: invalid end of input at 4:1\"\n       }\n       SyntaxError: JSON5: invalid end of input at 4:1\nconfig: .github/renovate.json5",
     "exit_code": 1
   },
   "selected_files": [

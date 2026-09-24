@@ -72,7 +72,8 @@ const source = fs.existsSync(inputPath)
 const lines = source
   .split(/\r?\n/u)
   .map((line) => line.replace(/\\n\s+at .*$/u, ""))
-  .filter((line) => !line.trimStart().startsWith('"stack":'));
+  .filter((line) => !line.trimStart().startsWith('"stack":'))
+  .filter((line) => !/^\s*at\s+.+$/u.test(line));
 
 for (let index = 0; index < lines.length - 1; index += 1) {
   if (lines[index].trimEnd().endsWith(",") && lines[index + 1].trim() === "}") {
