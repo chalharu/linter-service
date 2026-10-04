@@ -1,7 +1,7 @@
 {
   "checked_projects": [],
   "result": {
-    "details": "src/main.rs:\n\t2: Wrong indent style found (tabs instead of spaces)\n\n1 errors found",
+    "details": "src/main.rs:\n\t2: wrong indent style found (tabs instead of spaces)\n\n1 errors found",
     "exit_code": 1
   },
   "selected_files": [
