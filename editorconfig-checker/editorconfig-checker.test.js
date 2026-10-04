@@ -238,7 +238,7 @@ test("editorconfig-checker.sh merges repo config, copies relevant .editorconfig 
 
 		assert.equal(result.exit_code, 0);
 		assert.match(log, /cwd=.*editorconfig-checker-repo/);
-		assert.match(log, /args=-config \.editorconfig-checker\.shared\.json/);
+		assert.match(log, /args=-format default -config \.editorconfig-checker\.shared\.json/);
 		assert.deepEqual(mergedConfig.PassedFiles, ["services/api/app.js"]);
 		assert.equal(mergedConfig.NoColor, true);
 		assert.equal(mergedConfig.IgnoreDefaults, true);

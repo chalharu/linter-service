@@ -33,7 +33,7 @@ fi
 run_editorconfig_checker() {
   editorconfig_write_temp_config "$temp_config" "$base_config" "${files[@]}"
   cd "$temp_repo" || exit 1
-  editorconfig-checker -config .editorconfig-checker.shared.json
+  editorconfig-checker -format default -config .editorconfig-checker.shared.json
 }
 
 linter_lib::run_and_emit_json "$output_file" run_editorconfig_checker
