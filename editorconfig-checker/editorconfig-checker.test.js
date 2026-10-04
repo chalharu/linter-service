@@ -78,12 +78,12 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 printf '%s\\n' "$archive_path" >> "$TAR_ARCHIVE_LOG"
-mkdir -p "$extract_dir/bin"
-cat > "$extract_dir/bin/ec-linux-amd64" <<'EOF'
+mkdir -p "$extract_dir"
+cat > "$extract_dir/editorconfig-checker" <<'EOF'
 #!/usr/bin/env bash
 exit 0
 EOF
-chmod +x "$extract_dir/bin/ec-linux-amd64"
+chmod +x "$extract_dir/editorconfig-checker"
 `,
 	);
 }
@@ -168,11 +168,11 @@ test("editorconfig-checker.sh install downloads the pinned Linux amd64 release a
 		});
 
 		assert.deepEqual(fs.readFileSync(curlUrlLog, "utf8").trim().split("\n"), [
-			`https://github.com/editorconfig-checker/editorconfig-checker/releases/download/${version}/ec-linux-amd64.tar.gz`,
+			`https://github.com/editorconfig-checker/editorconfig-checker/releases/download/${version}/editorconfig-checker-linux-amd64.tar.gz`,
 		]);
 		assert.equal(
 			fs.readFileSync(tarArchiveLog, "utf8").trim(),
-			path.join(context.runnerTemp, "ec-linux-amd64.tar.gz"),
+			path.join(context.runnerTemp, "editorconfig-checker-linux-amd64.tar.gz"),
 		);
 		assert.equal(
 			fs.existsSync(

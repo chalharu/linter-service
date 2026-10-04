@@ -14,7 +14,7 @@ fi
 
 # renovate: datasource=github-releases depName=editorconfig-checker/editorconfig-checker
 editorconfig_checker_version="v4.0.2"
-asset="ec-linux-amd64.tar.gz"
+asset="editorconfig-checker-linux-amd64.tar.gz"
 archive_path="$RUNNER_TEMP/$asset"
 extract_dir="$RUNNER_TEMP/editorconfig-checker-extract"
 bin_dir="$RUNNER_TEMP/editorconfig-checker/bin"
@@ -24,6 +24,6 @@ mkdir -p "$extract_dir" "$bin_dir"
 
 curl -fsSL "https://github.com/editorconfig-checker/editorconfig-checker/releases/download/$editorconfig_checker_version/$asset" -o "$archive_path"
 tar -xzf "$archive_path" -C "$extract_dir"
-cp "$extract_dir/bin/ec-linux-amd64" "$bin_dir/editorconfig-checker"
+cp "$extract_dir/editorconfig-checker" "$bin_dir/editorconfig-checker"
 chmod +x "$bin_dir/editorconfig-checker"
 linter_lib::add_path "$bin_dir"
