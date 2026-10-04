@@ -22,7 +22,7 @@
 					],
 					"hotspots": [
 						{
-							"file_path": null,
+							"file_path": "src/handler.rs",
 							"in_cycle": true,
 							"issues": [
 								{
@@ -31,12 +31,12 @@
 									"severity": "Critical"
 								}
 							],
-							"module": "fixture-fail::handler",
+							"module": "handler",
 							"score": 40,
 							"suggestion": "Break circular dependency by extracting shared types or inverting with traits"
 						},
 						{
-							"file_path": null,
+							"file_path": "src/query.rs",
 							"in_cycle": true,
 							"issues": [
 								{
@@ -45,7 +45,7 @@
 									"severity": "Critical"
 								}
 							],
-							"module": "fixture-fail::query",
+							"module": "query",
 							"score": 40,
 							"suggestion": "Break circular dependency by extracting shared types or inverting with traits"
 						}
@@ -54,10 +54,10 @@
 					"modules": [
 						{
 							"balance_score": 1,
-							"couplings_in": 0,
-							"couplings_out": 0,
+							"couplings_in": 1,
+							"couplings_out": 1,
 							"file_path": "src/handler.rs",
-							"in_cycle": false,
+							"in_cycle": true,
 							"name": "handler"
 						},
 						{
@@ -70,10 +70,10 @@
 						},
 						{
 							"balance_score": 1,
-							"couplings_in": 0,
-							"couplings_out": 0,
+							"couplings_in": 1,
+							"couplings_out": 1,
 							"file_path": "src/query.rs",
-							"in_cycle": false,
+							"in_cycle": true,
 							"name": "query"
 						}
 					],
