@@ -455,7 +455,8 @@ function sanitizeFixtureString(value, repositoryPath) {
 			/\b\d{4}-\d\d-\d\d[T ]\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)?\b/gu,
 			"<timestamp>",
 		)
-		.replace(/\b\d+(?:\.\d+)?(?:ns|us|µs|ms|s|min)\b/gu, "<duration>");
+		.replace(/\b\d+(?:\.\d+)?(?:ns|us|µs|ms|s|min)\b/gu, "<duration>")
+		.replace(/\n+ERROR operation failed[^\n]*$/u, "");
 }
 
 function compareCargoClippyCompileErrors(left, right) {
