@@ -256,6 +256,36 @@ test("normalizeFixtureResult removes linter tool versions", () => {
 	});
 });
 
+test("normalizeFixtureResult stabilizes taplo trailing error summary", () => {
+	const buildActual = (details) =>
+		normalizeFixtureResult({
+			report: {
+				checkedProjects: [],
+				selectedFiles: ["config.toml"],
+			},
+			repositoryPath: "/tmp/fixture-run/repo",
+			result: {
+				details,
+				exit_code: 1,
+			},
+		});
+
+	const withSummary = buildActual(
+		'INFO taplo:format_files:collect_files: found files total=1 excluded=0 files=["config.toml"] cwd="."\n' +
+			"error: invalid TOML\n" +
+			'  │ ╰^ expected "]"\n' +
+			"\n" +
+			"ERROR operation failed error=some files were not formatted due to syntax errors",
+	);
+	const withoutSummary = buildActual(
+		'INFO taplo:format_files:collect_files: found files total=1 excluded=0 files=["config.toml"] cwd="."\n' +
+			"error: invalid TOML\n" +
+			'  │ ╰^ expected "]"',
+	);
+
+	assert.deepEqual(withSummary, withoutSummary);
+});
+
 test("normalizeFixtureResult stabilizes cargo-clippy compile error ordering", () => {
 	const actual = normalizeFixtureResult({
 		report: {
