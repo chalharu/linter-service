@@ -643,7 +643,7 @@ jobs:
       fail-fast: false
       matrix:
         assignment: ${{ fromJSON(needs.detect-targets.outputs.selected-linter-jobs-json) }}
-    uses: ./.github/workflows/lint-common.yml
+    uses: ./.github/workflows/lint-common.yml # zizmor: ignore[self-repository] -- actionlint v1.7.12 does not support $/ syntax yet
     with:
       artifact-name: ${{ matrix.assignment.artifact_name }}
       cache-branch-name: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
