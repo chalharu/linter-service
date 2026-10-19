@@ -8,5 +8,5 @@ source "$script_dir/common.sh"
 
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
 # renovate: datasource=pypi depName=zizmor
-zizmor_version="1.30.1"
+zizmor_version="1.31.1"
 linter_lib::install_python_tools "$RUNNER_TEMP/zizmor-venv" "zizmor==$zizmor_version"
