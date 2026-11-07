@@ -4,9 +4,9 @@
 ARG APP_NAME=cargo-coupling
 
 # renovate: datasource=docker depName=library/rust versioning=docker
-ARG CARGO_COUPLING_BUILD_BASE_IMAGE=docker.io/library/rust:slim-bookworm@sha256:24707e70a4f1e23d9a7b25202ec43126d28a52294b96aad5c670df1fd1f1d400
+ARG CARGO_COUPLING_BUILD_BASE_IMAGE=docker.io/library/rust:slim-bookworm@sha256:f2c004e3d2d8b547e8cf7ffbc29205385f4e71d23e53e4e383065db5e9f822cd
 # renovate: datasource=docker depName=library/rust versioning=docker
-ARG CARGO_COUPLING_RUNTIME_BASE_IMAGE=docker.io/library/rust:slim-bookworm@sha256:24707e70a4f1e23d9a7b25202ec43126d28a52294b96aad5c670df1fd1f1d400
+ARG CARGO_COUPLING_RUNTIME_BASE_IMAGE=docker.io/library/rust:slim-bookworm@sha256:f2c004e3d2d8b547e8cf7ffbc29205385f4e71d23e53e4e383065db5e9f822cd
 
 # Build stage with a digest-pinned Rust toolchain
 FROM ${CARGO_COUPLING_BUILD_BASE_IMAGE} AS chef
