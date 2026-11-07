@@ -1,5 +1,5 @@
 # renovate: datasource=docker depName=library/node versioning=docker
-ARG RENOVATE_BASE_IMAGE=docker.io/library/node:24.22.1-bookworm-slim@sha256:be8204d4bd327363357f532187b752ff62759c31bedf98e9e18fc08c9cbd605c
+ARG RENOVATE_BASE_IMAGE=docker.io/library/node:26.13.0-bookworm-slim@sha256:add5c17c14752c54d2f3d519ec46a3815684d41c33f198bcb09fb998f7dcbf68
 FROM ${RENOVATE_BASE_IMAGE}
 
 ARG RENOVATE_NPM_MIN_RELEASE_AGE_DAYS
