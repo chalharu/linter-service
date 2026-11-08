@@ -227,6 +227,7 @@ test("accepts cargo-symbol-length max_symbol_length threshold", () => {
 			disabled: false,
 			disabled_explicit: false,
 			exclude_paths: [],
+			apt_packages: [],
 			max_symbol_length: 512,
 		});
 	} finally {

@@ -963,3 +963,99 @@ edition = "2021"
 		cleanupTempRepo(context.tempDir);
 	}
 });
+
+test("cargo-clippy.sh install builds derived image for validated apt_packages", () => {
+	const context = makeTempRepo("cargo-clippy-install-apt-");
+	const tooling = setupDockerTooling(context);
+
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		`[package]
+name = "root"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+	writeFile(path.join(context.repoDir, "src/lib.rs"), "pub fn root_lib() {}\n");
+	writeFile(
+		path.join(context.repoDir, ".github/linter-service.yaml"),
+		`linters:
+  cargo-clippy:
+    apt_packages:
+      - libgtk-4-dev
+`,
+	);
+
+	try {
+		execFileSync("bash", [installPath], {
+			cwd: context.repoDir,
+			encoding: "utf8",
+			env: {
+				...process.env,
+				...tooling.env,
+				CARGO_CLIPPY_BASE_IMAGE: "docker.io/library/rust:1-bookworm",
+				CARGO_CLIPPY_IMAGE_REF: "localhost/test/cargo-clippy-apt:latest",
+				MISSING_IMAGE: "1",
+				PATH: `${context.binDir}:${process.env.PATH}`,
+				RUNNER_TEMP: context.runnerTemp,
+				SOURCE_REPOSITORY_PATH: context.repoDir,
+			},
+		});
+
+		const dockerfile = fs.readFileSync(tooling.dockerfileCopy, "utf8");
+		assert.match(dockerfile, /FROM localhost\/test\/cargo-clippy-apt:latest/);
+		assert.match(
+			dockerfile,
+			/apt-get install -y --no-install-recommends -- libgtk-4-dev/,
+		);
+		assert.match(
+			fs.readFileSync(tooling.dockerImageInspectLog, "utf8"),
+			/localhost\/test\/cargo-clippy-apt:latest-apt-[0-9a-f]{12}/,
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("cargo-clippy.sh rejects invalid apt_packages without running cargo", () => {
+	const context = makeTempRepo("cargo-clippy-invalid-apt-");
+	const tooling = setupDockerTooling(context);
+
+	writeFile(
+		path.join(context.repoDir, "Cargo.toml"),
+		`[package]
+name = "root"
+version = "0.1.0"
+edition = "2021"
+`,
+	);
+	writeFile(path.join(context.repoDir, "src/lib.rs"), "pub fn root_lib() {}\n");
+	writeFile(
+		path.join(context.repoDir, ".github/linter-service.yaml"),
+		`linters:
+  cargo-clippy:
+    apt_packages:
+      - "libgtk-4-dev; rm -rf /"
+`,
+	);
+
+	try {
+		const output = execFileSync("bash", [runPath, "src/lib.rs"], {
+			cwd: context.repoDir,
+			encoding: "utf8",
+			env: {
+				...process.env,
+				...tooling.env,
+				PATH: `${context.binDir}:${process.env.PATH}`,
+				RUNNER_TEMP: context.runnerTemp,
+			},
+		});
+		const result = JSON.parse(output);
+
+		assert.equal(result.exit_code, 1);
+		assert.match(result.details, /invalid linters\.cargo-clippy\.apt_packages/);
+		assert.equal(fs.existsSync(tooling.dockerFetchManifestLog), false);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});

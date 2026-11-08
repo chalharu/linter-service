@@ -801,6 +801,7 @@ test("supports cargo-symbol-length max_symbol_length threshold", () => {
 			disabled: false,
 			disabled_explicit: false,
 			exclude_paths: [],
+			apt_packages: [],
 			max_symbol_length: 512,
 		});
 	} finally {
@@ -1137,4 +1138,55 @@ test("rejects invalid config shapes", () => {
 test("normalizes directory globs by appending **", () => {
 	assert.equal(normalizeGlobPattern("fixtures/"), "fixtures/**");
 	assert.equal(normalizeGlobPattern("./fixtures/"), "fixtures/**");
+});
+
+test("supports cargo-clippy apt_packages", () => {
+	const context = makeTempRepo();
+
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			"cargo-clippy": {
+				apt_packages: ["libgtk-4-dev"],
+			},
+		},
+	});
+
+	try {
+		const config = loadLinterServiceConfig({
+			repositoryPath: context.repoDir,
+		});
+
+		assert.deepEqual(getLinterConfig(config, "cargo-clippy"), {
+			disabled: false,
+			disabled_explicit: false,
+			exclude_paths: [],
+			apt_packages: ["libgtk-4-dev"],
+		});
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
+});
+
+test("rejects invalid cargo-clippy apt_packages", () => {
+	const context = makeTempRepo();
+
+	writeLinterServiceConfig(context.repoDir, {
+		linters: {
+			"cargo-clippy": {
+				apt_packages: ["libgtk-4-dev; rm -rf /"],
+			},
+		},
+	});
+
+	try {
+		assert.throws(
+			() =>
+				loadLinterServiceConfig({
+					repositoryPath: context.repoDir,
+				}),
+			/must match/u,
+		);
+	} finally {
+		cleanupTempRepo(context.tempDir);
+	}
 });

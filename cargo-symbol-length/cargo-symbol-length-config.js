@@ -1,3 +1,7 @@
+const {
+	normalizeAptPackages,
+} = require("../.github/scripts/cargo-apt-packages.js");
+
 const DEFAULT_MAX_SYMBOL_LENGTH = 1024;
 
 function normalizeCargoSymbolLengthConfig({
@@ -13,6 +17,7 @@ function normalizeCargoSymbolLengthConfig({
 	}
 
 	return {
+		apt_packages: normalizeAptPackages({ currentConfig, label }),
 		max_symbol_length: normalizePositiveInteger(
 			currentConfig.max_symbol_length,
 			`${label}.max_symbol_length`,
