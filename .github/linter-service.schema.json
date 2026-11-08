@@ -25,6 +25,9 @@
 				"textlint": {
 					"$ref": "#/$defs/textlintLinterConfig"
 				},
+				"cargo-clippy": {
+					"$ref": "#/$defs/cargoClippyLinterConfig"
+				},
 				"cargo-coupling": {
 					"$ref": "#/$defs/cargoCouplingLinterConfig"
 				},
@@ -264,6 +267,34 @@
 				}
 			}
 		},
+		"aptPackageName": {
+			"type": "string",
+			"pattern": "^[a-z0-9][a-z0-9+.\\-]*$",
+			"maxLength": 64
+		},
+		"aptPackages": {
+			"type": "array",
+			"maxItems": 20,
+			"uniqueItems": true,
+			"items": {
+				"$ref": "#/$defs/aptPackageName"
+			}
+		},
+		"cargoClippyLinterConfig": {
+			"type": "object",
+			"additionalProperties": false,
+			"properties": {
+				"disabled": {
+					"type": "boolean"
+				},
+				"exclude_paths": {
+					"$ref": "#/$defs/nonEmptyStringArray"
+				},
+				"apt_packages": {
+					"$ref": "#/$defs/aptPackages"
+				}
+			}
+		},
 		"cargoSymbolLengthLinterConfig": {
 			"type": "object",
 			"additionalProperties": false,
@@ -277,6 +308,9 @@
 				"max_symbol_length": {
 					"type": "integer",
 					"minimum": 1
+				},
+				"apt_packages": {
+					"$ref": "#/$defs/aptPackages"
 				}
 			}
 		}

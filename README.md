@@ -92,10 +92,10 @@ GitHub App Webhook を Cloudflare Worker が受け、この repository へ
 
 | linter | 実行メモ |
 | --- | --- |
-| `cargo-clippy` | Cargo workspace manifest を正規化した上で対象 manifest directory を workdir にして実行し、repo-local `.cargo/config*` は Cargo の通常探索で拾う。共有 runner で network が必要な `cargo fetch` 前には repo-local config を検査し、network / source / registry / credential 系と、実行バイナリ差し替えにつながる unsafe setting を reject する。 |
+| `cargo-clippy` | Cargo workspace manifest を正規化した上で対象 manifest directory を workdir にして実行し、repo-local `.cargo/config*` は Cargo の通常探索で拾う。共有 runner で network が必要な `cargo fetch` 前には repo-local config を検査し、network / source / registry / credential 系と、実行バイナリ差し替えにつながる unsafe setting を reject する。system library が必要な crate 向けに `linters.cargo-clippy.apt_packages` で Ubuntu 公式 package 名のみ追加できる。base image は digest pin し、package list の hash を含む派生 tag で build する。 |
 | `cargo-coupling` | checksum-verified な upstream source tarball と repo 同梱の `Dockerfile.full` から local image を build して `--json --no-git` 実行し、quality gate は `linters.cargo-coupling.*` で `min_grade=B`, `max_critical=0`, `max_circular=0` を上書きできる。Cargo 呼び出しは対象 manifest directory を workdir にして repo-local `.cargo/config*` を尊重し、共有 runner では `cargo fetch` 前に `cargo-clippy` / `cargo-symbol-length` と同じ safety gate で config を検査した上で cache を warm し、本番の coupling 解析は prepared Cargo/Rustup state を mount した `--network=none` で実行する。 |
 | `cargo-deny` | Cargo workspace manifest を正規化しつつ元の manifest directory を workdir にして `cargo deny` を実行し、member-local `.cargo/config*` と最寄り `deny.toml` を自然な探索順で使う。共有 runner で networked resolution を伴うため、repo-local `.cargo/config*` は `cargo-clippy` と同じ safety gate を通した safe subset だけ許可する。 |
-| `cargo-symbol-length` | Cargo workspace manifest を正規化した上で対象 manifest directory を workdir にし、`cargo fetch` と `cargo rustc -- --emit=obj` を実行する。network が必要な `cargo fetch` 前には repo-local `.cargo/config*` を `cargo-clippy` と同じ safety gate で検査し、safe subset 以外は reject する。scan run-entry は既存 directory の続き番号を使って上書きを防ぐ。 |
+| `cargo-symbol-length` | Cargo workspace manifest を正規化した上で対象 manifest directory を workdir にし、`cargo fetch` と `cargo rustc -- --emit=obj` を実行する。network が必要な `cargo fetch` 前には repo-local `.cargo/config*` を `cargo-clippy` と同じ safety gate で検査し、safe subset 以外は reject する。system library が必要な crate 向けに `linters.cargo-symbol-length.apt_packages` で Ubuntu 公式 package 名のみ追加できる。base image は digest pin し、package list の hash を含む派生 tag で build する。scan run-entry は既存 directory の続き番号を使って上書きを防ぐ。 |
 | `dotenv-linter` | changed `.env` file への upstream default checks 直接適用、`--schema` と ignore-checks 注入は未対応。 |
 | `editorconfig-checker` | `PassedFiles` 制限、`NoColor` 強制。 |
 | `helmlint` | changed file から親方向の `Chart.yaml` を解決し、chart directory ごとに重複排除して `helm lint` 実行。 |
@@ -142,10 +142,17 @@ linters:
   textlint:
     preset_packages:
       - "textlint-rule-preset-ja-technical-writing@12.0.2"
+  cargo-clippy:
+    apt_packages:
+      - libgtk-4-dev
+      - libasound2-dev
   cargo-coupling:
     min_grade: B
     max_critical: 0
     max_circular: 0
+  cargo-symbol-length:
+    apt_packages:
+      - libgtk-4-dev
   zizmor:
     disabled: true
 ```
@@ -159,6 +166,8 @@ linters:
 | `linters.cargo-coupling.max_critical` | `cargo-coupling` | quality gate で許容する critical issue 数。既定値は `0`。 |
 | `linters.cargo-coupling.max_circular` | `cargo-coupling` | quality gate で許容する circular dependency 数。既定値は `0`。 |
 | `linters.cargo-symbol-length.max_symbol_length` | `cargo-symbol-length` | シンボル名長の上限しきい値（文字数）。このしきい値以上のシンボルを検出する。既定値は `1024`。 |
+| `linters.cargo-clippy.apt_packages` | `cargo-clippy` | system library 依存 crate 用の Ubuntu 公式 apt package 名配列。`^[a-z0-9][a-z0-9+.\-]*$` のみ許可、最大 20 件、version pin 不可。例: `libgtk-4-dev`。base image に加えて package list hash 付き派生 image を build する。 |
+| `linters.cargo-symbol-length.apt_packages` | `cargo-symbol-length` | system library 依存 crate 用の Ubuntu 公式 apt package 名配列。制約は `cargo-clippy` と同じ。 |
 | `linters.lizard.languages` | `lizard` | `lizard` opt-in 時の対象言語一覧。`disabled: false` と併用する。 |
 | `linters.textlint.preset_packages` | `textlint` | exact version 付き npm package spec の配列。`.textlintrc` と併せて `textlint` 自動選択時の必須項目。 |
 

@@ -26,7 +26,24 @@ source_root="$workspace_root/source"
 cargo_home="$workspace_root/cargo-home"
 rustup_root="$workspace_root/rustup-home"
 target_root="$workspace_root/cargo-target"
-image_ref=$(cargo_clippy_image_ref)
+apt_config_error_file="$RUNNER_TEMP/cargo-clippy-apt-config-error.txt"
+if ! image_ref=$(cargo_clippy_resolved_image_ref 2>"$apt_config_error_file"); then
+  {
+    printf 'invalid linters.cargo-clippy.apt_packages:\n'
+    cat "$apt_config_error_file"
+    printf '\nOnly Ubuntu official package names matching ^[a-z0-9][a-z0-9+.\\-]*$ are allowed (max 20, no version pinning).\n'
+  } > "$output_file"
+  linter_lib::emit_json_result 1 "$output_file"
+  exit 0
+fi
+if ! docker image inspect "$image_ref" >/dev/null 2>&1; then
+  {
+    printf 'cargo-clippy container image is missing: %s\n' "$image_ref"
+    printf 'Run cargo-clippy/install.sh first (it builds the base image plus validated apt_packages).\n'
+  } > "$output_file"
+  linter_lib::emit_json_result 1 "$output_file"
+  exit 0
+fi
 user_id=$(id -u)
 group_id=$(id -g)
 

@@ -44,6 +44,7 @@ jobs:
         run: |
           node --test \
             .github/scripts/aggregate-sarif.test.js \
+            .github/scripts/cargo-apt-packages.test.js \
             .github/scripts/render-combined-report.test.js \
             .github/scripts/render-linter-report.test.js \
             .github/scripts/run-linter-batch.test.js \

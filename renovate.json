@@ -56,6 +56,7 @@
 			"description": "Update pinned linter installer versions and Renovate base image pins",
 			"managerFilePatterns": [
 				"/(^|/)[^/]+/install\\.sh$/",
+				"/(^|/)[^/]+/common\\.sh$/",
 				"/(^|/)renovate/Dockerfile$/",
 				"/(^|/)cargo-coupling/Dockerfile\\.full$/"
 			],
