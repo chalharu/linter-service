@@ -773,7 +773,7 @@ jobs:
           repositories: ${{ steps.decode_repository_context.outputs.pr-repo }}
       - name: Get source repository checker token
         id: get_source_token
-        if: ${{ needs.detect-targets.outputs.selected-linters-json != '[]' }}
+        if: ${{ always() && (needs.detect-targets.outputs.selected-linters-json != '[]' || steps.decode_repository_context.outputs.comment-enabled == 'true') }}
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           app-id: ${{ secrets.CHECKER_APP_ID }}
@@ -900,15 +900,17 @@ jobs:
             await uploadSarif({ github, env: process.env });
       - name: Prepare final processing summary
         id: prepare_final_summary
-        if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
+        if: ${{ always() && (needs.detect-targets.outputs.selected-linters-json != '[]' || steps.decode_repository_context.outputs.comment-enabled == 'true') }}
         env:
           GET_SARIF_TOKEN_OUTCOME: ${{ steps.get_sarif_token.outcome }}
           OVERALL_CONCLUSION: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_conclusion || 'failure' }}
           OVERALL_STATUS: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_status || 'failure' }}
           OVERALL_SUMMARY: ${{ steps.prepare_report.outcome == 'success' && steps.prepare_report.outputs.overall_summary || 'The linter-service workflow failed to generate a combined report.' }}
+          SELECTED_LINTERS_JSON: ${{ needs.detect-targets.outputs.selected-linters-json }}
           UPLOAD_SARIF_OUTCOME: ${{ steps.upload_sarif.outcome }}
         run: |
           python3 - <<'PY'
+          import json
           import os
           from pathlib import Path
 
@@ -917,6 +919,28 @@ jobs:
           overall_status = os.environ["OVERALL_STATUS"]
           overall_summary = os.environ["OVERALL_SUMMARY"]
           upload_sarif_outcome = os.environ.get("UPLOAD_SARIF_OUTCOME", "")
+
+          try:
+              selected_linters = json.loads(os.environ.get("SELECTED_LINTERS_JSON", "[]"))
+          except json.JSONDecodeError:
+              selected_linters = None
+
+          if isinstance(selected_linters, list) and len(selected_linters) == 0:
+              conclusion = "success"
+              summary = "No configured linters matched the selected target files. Nothing to check."
+              title = "linter-service: no linters selected"
+              if upload_sarif_outcome == "failure" or (
+                  upload_sarif_outcome == "skipped" and get_sarif_token_outcome == "failure"
+              ):
+                  conclusion = "failure"
+                  summary = f"{summary} Warning: SARIF upload failed; see the workflow logs."
+                  title = "linter-service found issues"
+              output_path = Path(os.environ["GITHUB_OUTPUT"])
+              with output_path.open("a", encoding="utf-8") as fh:
+                  fh.write(f"conclusion={conclusion}\n")
+                  fh.write(f"summary={summary}\n")
+                  fh.write(f"title={title}\n")
+              raise SystemExit(0)
 
           conclusion = overall_conclusion
           summary = overall_summary
@@ -945,7 +969,7 @@ jobs:
               fh.write(f"title={title}\n")
           PY
       - name: Finalize processing check run
-        if: ${{ always() && needs.detect-targets.outputs.selected-linters-json != '[]' }}
+        if: ${{ always() && (needs.detect-targets.outputs.selected-linters-json != '[]' || steps.decode_repository_context.outputs.comment-enabled == 'true') }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           CHECK_RUN_CONCLUSION: ${{ steps.prepare_final_summary.outputs.conclusion || 'failure' }}
