@@ -13,6 +13,8 @@ rm -rf "$temp_repo"
 mkdir -p "$temp_repo"
 linter_lib::copy_paths_to_root "$temp_repo" "$@"
 linter_lib::copy_first_existing_path "$temp_repo" \
+  .github/workflows/actions.lock || true
+linter_lib::copy_first_existing_path "$temp_repo" \
   .ghalint.yaml \
   .ghalint.yml \
   ghalint.yaml \
