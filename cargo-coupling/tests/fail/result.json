@@ -20,36 +20,7 @@
 					"circular_dependencies": [
 						["fixture-fail::handler", "fixture-fail::query"]
 					],
-					"hotspots": [
-						{
-							"file_path": "src/handler.rs",
-							"in_cycle": true,
-							"issues": [
-								{
-									"description": "Part of a circular dependency cycle",
-									"issue_type": "CircularDependency",
-									"severity": "Critical"
-								}
-							],
-							"module": "handler",
-							"score": 40,
-							"suggestion": "Break circular dependency by extracting shared types or inverting with traits"
-						},
-						{
-							"file_path": "src/query.rs",
-							"in_cycle": true,
-							"issues": [
-								{
-									"description": "Part of a circular dependency cycle",
-									"issue_type": "CircularDependency",
-									"severity": "Critical"
-								}
-							],
-							"module": "query",
-							"score": 40,
-							"suggestion": "Break circular dependency by extracting shared types or inverting with traits"
-						}
-					],
+					"hotspots": [],
 					"issues": [],
 					"modules": [
 						{
