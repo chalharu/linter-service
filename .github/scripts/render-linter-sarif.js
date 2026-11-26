@@ -1383,61 +1383,104 @@ function truncate(text, maxLength) {
 	return `${text.slice(0, maxLength - 16)}... truncated ...`;
 }
 
-function normalizeReportedPath(
-	sourceRepositoryPath,
-	reportedPath,
-	targetPaths,
-	reportedPathRoots = [],
-) {
-	const absolutePathRoots =
-		reportedPathRoots.length > 0
-			? reportedPathRoots
-			: [path.resolve(sourceRepositoryPath)];
-	const normalized = normalizePath(String(reportedPath || "").trim()).replace(
+function resolveAbsolutePathRoots(sourceRepositoryPath, reportedPathRoots) {
+	if (Array.isArray(reportedPathRoots) && reportedPathRoots.length > 0) {
+		return reportedPathRoots;
+	}
+
+	return [path.resolve(sourceRepositoryPath)];
+}
+
+function normalizeReportedInput(reportedPath) {
+	return normalizePath(String(reportedPath || "").trim()).replace(
 		/^\.\//u,
 		"",
 	);
+}
 
-	if (normalized.length === 0) {
-		return null;
-	}
-
+function matchTargetPath(normalized, targetPaths) {
 	const candidatePaths = [...targetPaths].sort(
 		(left, right) => right.length - left.length,
 	);
+
 	for (const candidate of candidatePaths) {
 		if (normalized === candidate || normalized.endsWith(`/${candidate}`)) {
 			return candidate;
 		}
 	}
 
-	if (path.isAbsolute(reportedPath)) {
-		for (const rootPath of absolutePathRoots) {
-			const relative = path.relative(rootPath, reportedPath);
-			const repoResolved = path.resolve(sourceRepositoryPath, relative);
+	return null;
+}
 
-			if (
-				!relative.startsWith("..") &&
-				!path.isAbsolute(relative) &&
-				fs.existsSync(repoResolved)
-			) {
-				return normalizePath(relative);
-			}
+function isSafeRelativePath(relative) {
+	return (
+		!relative.startsWith("..") &&
+		!path.isAbsolute(relative)
+	);
+}
+
+function tryResolveAbsoluteReportedPath({
+	absolutePathRoots,
+	reportedPath,
+	sourceRepositoryPath,
+}) {
+	for (const rootPath of absolutePathRoots) {
+		const relative = path.relative(rootPath, reportedPath);
+		const repoResolved = path.resolve(sourceRepositoryPath, relative);
+
+		if (isSafeRelativePath(relative) && fs.existsSync(repoResolved)) {
+			return normalizePath(relative);
 		}
 	}
 
-	const resolved = path.resolve(sourceRepositoryPath, normalized);
-	const relative = path.relative(path.resolve(sourceRepositoryPath), resolved);
+	return null;
+}
 
-	if (
-		!relative.startsWith("..") &&
-		!path.isAbsolute(relative) &&
-		fs.existsSync(resolved)
-	) {
+function tryResolveNormalizedReportedPath({ normalized, sourceRepositoryPath }) {
+	const sourceRoot = path.resolve(sourceRepositoryPath);
+	const resolved = path.resolve(sourceRepositoryPath, normalized);
+	const relative = path.relative(sourceRoot, resolved);
+
+	if (isSafeRelativePath(relative) && fs.existsSync(resolved)) {
 		return normalizePath(relative);
 	}
 
 	return null;
+}
+
+function normalizeReportedPath(
+	sourceRepositoryPath,
+	reportedPath,
+	targetPaths,
+	reportedPathRoots = [],
+) {
+	const absolutePathRoots = resolveAbsolutePathRoots(
+		sourceRepositoryPath,
+		reportedPathRoots,
+	);
+	const normalized = normalizeReportedInput(reportedPath);
+
+	if (normalized.length === 0) {
+		return null;
+	}
+
+	const matched = matchTargetPath(normalized, targetPaths);
+	if (matched !== null) {
+		return matched;
+	}
+
+	if (typeof reportedPath === "string" && path.isAbsolute(reportedPath)) {
+		const resolved = tryResolveAbsoluteReportedPath({
+			absolutePathRoots,
+			reportedPath,
+			sourceRepositoryPath,
+		});
+		if (resolved !== null) {
+			return resolved;
+		}
+	}
+
+	return tryResolveNormalizedReportedPath({ normalized, sourceRepositoryPath });
 }
 
 function normalizePath(filePath) {

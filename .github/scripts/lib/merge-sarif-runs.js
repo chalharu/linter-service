@@ -1,51 +1,81 @@
-function mergeSarifRuns(documents) {
-	const runs = (Array.isArray(documents) ? documents : []).flatMap(
-		(document) => (Array.isArray(document?.runs) ? document.runs : []),
+function collectSarifRuns(documents) {
+	const source = Array.isArray(documents) ? documents : [];
+	return source.flatMap((document) =>
+		Array.isArray(document?.runs) ? document.runs : [],
 	);
-	const firstRun = runs.find((run) => run && typeof run === "object");
+}
 
-	if (!firstRun) {
-		return {
-			$schema: "https://json.schemastore.org/sarif-2.1.0.json",
-			runs: [],
-			version: "2.1.0",
-		};
-	}
+function isRecord(value) {
+	return Boolean(value) && typeof value === "object";
+}
 
+function createEmptySarifDocument() {
+	return {
+		$schema: "https://json.schemastore.org/sarif-2.1.0.json",
+		runs: [],
+		version: "2.1.0",
+	};
+}
+
+function createMergedRunSkeleton(firstRun) {
 	const mergedRun = structuredClone(firstRun);
-	const seenResults = new Set();
-	const rulesById = new Map();
+	const tool =
+		mergedRun.tool && typeof mergedRun.tool === "object"
+			? mergedRun.tool
+			: {};
+	const driver =
+		mergedRun?.tool?.driver && typeof mergedRun.tool.driver === "object"
+			? mergedRun.tool.driver
+			: {};
 
 	mergedRun.results = [];
 	mergedRun.tool = {
-		...(mergedRun.tool && typeof mergedRun.tool === "object"
-			? mergedRun.tool
-			: {}),
+		...tool,
 		driver: {
-			...(mergedRun?.tool?.driver && typeof mergedRun.tool.driver === "object"
-				? mergedRun.tool.driver
-				: {}),
+			...driver,
 			rules: [],
 		},
 	};
 
+	return mergedRun;
+}
+
+function collectSarifResults(runs) {
+	const seenResults = new Set();
+	const results = [];
+
 	for (const run of runs) {
-		for (const result of Array.isArray(run?.results) ? run.results : []) {
+		const entries = Array.isArray(run?.results) ? run.results : [];
+		for (const result of entries) {
 			const key = JSON.stringify(result);
 			if (seenResults.has(key)) {
 				continue;
 			}
 			seenResults.add(key);
-			mergedRun.results.push(structuredClone(result));
+			results.push(structuredClone(result));
 		}
+	}
 
-		for (const rule of Array.isArray(run?.tool?.driver?.rules)
+	return results;
+}
+
+function getSarifRuleKey(rule) {
+	if (typeof rule?.id === "string" && rule.id.length > 0) {
+		return rule.id;
+	}
+
+	return JSON.stringify(rule);
+}
+
+function collectSarifRules(runs) {
+	const rulesById = new Map();
+
+	for (const run of runs) {
+		const entries = Array.isArray(run?.tool?.driver?.rules)
 			? run.tool.driver.rules
-			: []) {
-			const key =
-				typeof rule?.id === "string" && rule.id.length > 0
-					? rule.id
-					: JSON.stringify(rule);
+			: [];
+		for (const rule of entries) {
+			const key = getSarifRuleKey(rule);
 			if (rulesById.has(key)) {
 				continue;
 			}
@@ -53,7 +83,21 @@ function mergeSarifRuns(documents) {
 		}
 	}
 
-	mergedRun.tool.driver.rules = [...rulesById.values()];
+	return [...rulesById.values()];
+}
+
+function mergeSarifRuns(documents) {
+	const runs = collectSarifRuns(documents);
+	const firstRun = runs.find(isRecord);
+
+	if (!firstRun) {
+		return createEmptySarifDocument();
+	}
+
+	const mergedRun = createMergedRunSkeleton(firstRun);
+
+	mergedRun.results = collectSarifResults(runs);
+	mergedRun.tool.driver.rules = collectSarifRules(runs);
 
 	return {
 		$schema: "https://json.schemastore.org/sarif-2.1.0.json",
