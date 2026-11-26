@@ -236,38 +236,83 @@ function resolveCargoClippyPrimarySpan(message) {
 	);
 }
 
+function hasNonEmptyRendered(value) {
+	return typeof value === "string" && value.length > 0;
+}
+
+function resolveCargoClippyCodeSuffix(message) {
+	if (
+		typeof message?.code?.code === "string" &&
+		message.code.code.length > 0
+	) {
+		return `[${message.code.code}]`;
+	}
+
+	return "";
+}
+
+function buildCargoClippyHeaderLine(message) {
+	const level =
+		typeof message?.level === "string" && message.level.length > 0
+			? message.level
+			: "error";
+	const text =
+		typeof message?.message === "string" && message.message.length > 0
+			? message.message
+			: DEFAULT_CARGO_CLIPPY_MESSAGE;
+
+	return `${level}${resolveCargoClippyCodeSuffix(message)}: ${text}`;
+}
+
+function buildCargoClippyLocationLine(span) {
+	if (!span?.file_name) {
+		return null;
+	}
+
+	return ` --> ${span.file_name}:${span.line_start || 1}:${span.column_start || 1}`;
+}
+
+function formatCargoClippyChild(child) {
+	if (hasNonEmptyRendered(child?.rendered)) {
+		return child.rendered;
+	}
+
+	if (typeof child?.message === "string" && child.message.length > 0) {
+		return `${child.level || "note"}: ${child.message}`;
+	}
+
+	return null;
+}
+
+function collectCargoClippyChildLines(message) {
+	const children = Array.isArray(message?.children) ? message.children : [];
+	const lines = [];
+
+	for (const child of children) {
+		const formatted = formatCargoClippyChild(child);
+		if (formatted !== null) {
+			lines.push(formatted);
+		}
+	}
+
+	return lines;
+}
+
 function formatCargoClippyDiagnostic(message) {
-	if (typeof message?.rendered === "string" && message.rendered.length > 0) {
+	if (hasNonEmptyRendered(message?.rendered)) {
 		return message.rendered;
 	}
 
-	const span = resolveCargoClippyPrimarySpan(message);
-	const code =
-		typeof message?.code?.code === "string" && message.code.code.length > 0
-			? `[${message.code.code}]`
-			: "";
-	const lines = [
-		`${message?.level || "error"}${code}: ${message?.message || DEFAULT_CARGO_CLIPPY_MESSAGE}`,
-	];
+	const lines = [buildCargoClippyHeaderLine(message)];
+	const locationLine = buildCargoClippyLocationLine(
+		resolveCargoClippyPrimarySpan(message),
+	);
 
-	if (span?.file_name) {
-		lines.push(
-			` --> ${span.file_name}:${span.line_start || 1}:${span.column_start || 1}`,
-		);
+	if (locationLine !== null) {
+		lines.push(locationLine);
 	}
 
-	for (const child of Array.isArray(message?.children)
-		? message.children
-		: []) {
-		if (typeof child?.rendered === "string" && child.rendered.length > 0) {
-			lines.push(child.rendered);
-			continue;
-		}
-
-		if (typeof child?.message === "string" && child.message.length > 0) {
-			lines.push(`${child.level || "note"}: ${child.message}`);
-		}
-	}
+	lines.push(...collectCargoClippyChildLines(message));
 
 	return lines.join("\n");
 }

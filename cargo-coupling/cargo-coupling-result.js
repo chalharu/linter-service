@@ -335,6 +335,62 @@ function normalizeExitCode(value) {
 		: Number.parseInt(String(value || "0"), 10) || 0;
 }
 
+function normalizeCargoCouplingRuns(runs, entriesDir, resolvedConfig) {
+	const sourceRuns = runs || readCargoCouplingRunEntries(entriesDir);
+	return sourceRuns.map((run) => normalizeCargoCouplingRun(run, resolvedConfig));
+}
+
+function buildCargoCouplingDetails(normalizedRuns, resolvedConfig) {
+	return normalizedRuns
+		.map((run) => renderCargoCouplingRunDetails(run, resolvedConfig))
+		.filter(Boolean)
+		.join("\n\n")
+		.trim();
+}
+
+function getCargoCouplingRunFailures(run) {
+	if (run.exit_code !== 0) {
+		return [run.command || run.manifest_path || "cargo-coupling run"];
+	}
+
+	if (!run.json_output) {
+		return [run.command || run.manifest_path || "cargo-coupling JSON output"];
+	}
+
+	if (run.json_error) {
+		return [run.json_error];
+	}
+
+	if (run.check_result?.passed === false) {
+		return [...run.check_result.failures];
+	}
+
+	return [];
+}
+
+function collectCargoCouplingFailures(normalizedRuns) {
+	return normalizedRuns.flatMap(getCargoCouplingRunFailures);
+}
+
+function resolveCargoCouplingExitCode(commandExitCode, failures) {
+	if (normalizeExitCode(commandExitCode) !== 0) {
+		return 1;
+	}
+
+	return failures.length > 0 ? 1 : 0;
+}
+
+function buildCargoCouplingRunPayload(run) {
+	return {
+		...(run.analysis_path ? { analysis_path: run.analysis_path } : {}),
+		command: run.command,
+		...(run.check_result ? { check_result: run.check_result } : {}),
+		exit_code: run.exit_code,
+		...(run.json_output ? { json_output: run.json_output } : {}),
+		manifest_path: run.manifest_path,
+	};
+}
+
 function buildCargoCouplingResult({
 	commandExitCode = 0,
 	config = {},
@@ -345,53 +401,18 @@ function buildCargoCouplingResult({
 		currentConfig: config,
 		label: "linters.cargo-coupling",
 	});
-	const normalizedRuns = (runs || readCargoCouplingRunEntries(entriesDir)).map(
-		(run) => normalizeCargoCouplingRun(run, resolvedConfig),
+	const normalizedRuns = normalizeCargoCouplingRuns(
+		runs,
+		entriesDir,
+		resolvedConfig,
 	);
-	const failures = [];
-	const details = normalizedRuns
-		.map((run) => renderCargoCouplingRunDetails(run, resolvedConfig))
-		.filter(Boolean)
-		.join("\n\n")
-		.trim();
-
-	for (const run of normalizedRuns) {
-		if (run.exit_code !== 0) {
-			failures.push(run.command || run.manifest_path || "cargo-coupling run");
-			continue;
-		}
-
-		if (!run.json_output) {
-			failures.push(
-				run.command || run.manifest_path || "cargo-coupling JSON output",
-			);
-			continue;
-		}
-
-		if (run.json_error) {
-			failures.push(run.json_error);
-			continue;
-		}
-
-		if (run.check_result?.passed === false) {
-			failures.push(...run.check_result.failures);
-		}
-	}
-
-	const exit_code =
-		normalizeExitCode(commandExitCode) !== 0 || failures.length > 0 ? 1 : 0;
+	const failures = collectCargoCouplingFailures(normalizedRuns);
+	const details = buildCargoCouplingDetails(normalizedRuns, resolvedConfig);
 
 	return {
-		cargo_coupling_runs: normalizedRuns.map((run) => ({
-			...(run.analysis_path ? { analysis_path: run.analysis_path } : {}),
-			command: run.command,
-			...(run.check_result ? { check_result: run.check_result } : {}),
-			exit_code: run.exit_code,
-			...(run.json_output ? { json_output: run.json_output } : {}),
-			manifest_path: run.manifest_path,
-		})),
+		cargo_coupling_runs: normalizedRuns.map(buildCargoCouplingRunPayload),
 		details,
-		exit_code,
+		exit_code: resolveCargoCouplingExitCode(commandExitCode, failures),
 	};
 }
 
